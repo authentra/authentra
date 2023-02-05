@@ -1,0 +1,808 @@
+{
+  "db": "PostgreSQL",
+  "00d42eaf448eb69fe023a7b262c9fedbf0c962ab928b38fd14e0e8b31742abc4": {
+    "describe": {
+      "columns": [
+        {
+          "name": "mode: PgConsentMode",
+          "ordinal": 0,
+          "type_info": {
+            "Custom": {
+              "kind": {
+                "Enum": [
+                  "always",
+                  "once",
+                  "until"
+                ]
+              },
+              "name": "consent_mode"
+            }
+          }
+        },
+        {
+          "name": "until",
+          "ordinal": 1,
+          "type_info": "Int8"
+        }
+      ],
+      "nullable": [
+        false,
+        true
+      ],
+      "parameters": {
+        "Left": [
+          "Int4"
+        ]
+      }
+    },
+    "query": "select mode as \"mode: PgConsentMode\", until from consent_stages where uid = $1"
+  },
+  "0489c2dcbedf25f7624192a37dbf034601e313e1fc7f705857bd22faf09ae89b": {
+    "describe": {
+      "columns": [
+        {
+          "name": "uid",
+          "ordinal": 0,
+          "type_info": "Int4"
+        },
+        {
+          "name": "stage",
+          "ordinal": 1,
+          "type_info": "Int4"
+        },
+        {
+          "name": "ordering",
+          "ordinal": 2,
+          "type_info": "Int2"
+        }
+      ],
+      "nullable": [
+        false,
+        false,
+        false
+      ],
+      "parameters": {
+        "Left": [
+          "Int4"
+        ]
+      }
+    },
+    "query": "select uid,stage,ordering from flow_entries where flow = $1"
+  },
+  "0927ebb25d00327b105e271f2d4662b2d26b5e92972b71604891624fabba3b30": {
+    "describe": {
+      "columns": [
+        {
+          "name": "uid",
+          "ordinal": 0,
+          "type_info": "Int4"
+        },
+        {
+          "name": "slug",
+          "ordinal": 1,
+          "type_info": "Varchar"
+        },
+        {
+          "name": "kind: PgPolicyKind",
+          "ordinal": 2,
+          "type_info": {
+            "Custom": {
+              "kind": {
+                "Enum": [
+                  "password_expiry",
+                  "password_strength",
+                  "expression"
+                ]
+              },
+              "name": "policy_kind"
+            }
+          }
+        },
+        {
+          "name": "password_expiration",
+          "ordinal": 3,
+          "type_info": "Int4"
+        },
+        {
+          "name": "password_strength",
+          "ordinal": 4,
+          "type_info": "Int4"
+        },
+        {
+          "name": "expression",
+          "ordinal": 5,
+          "type_info": "Int4"
+        }
+      ],
+      "nullable": [
+        false,
+        false,
+        false,
+        true,
+        true,
+        true
+      ],
+      "parameters": {
+        "Left": [
+          "Int4"
+        ]
+      }
+    },
+    "query": "select uid, slug,kind as \"kind: PgPolicyKind\",password_expiration,password_strength,expression from policies where uid = $1"
+  },
+  "0be548625791102fabdc46c019d1e9de8ca2bac0ee59d73ebd099c5c22b55f75": {
+    "describe": {
+      "columns": [
+        {
+          "name": "user_binding",
+          "ordinal": 0,
+          "type_info": "Uuid"
+        },
+        {
+          "name": "enabled",
+          "ordinal": 1,
+          "type_info": "Bool"
+        },
+        {
+          "name": "negate_result",
+          "ordinal": 2,
+          "type_info": "Bool"
+        },
+        {
+          "name": "ordering",
+          "ordinal": 3,
+          "type_info": "Int2"
+        }
+      ],
+      "nullable": [
+        true,
+        false,
+        false,
+        false
+      ],
+      "parameters": {
+        "Left": [
+          "Int4"
+        ]
+      }
+    },
+    "query": "select user_binding,enabled,negate_result,ordering from flow_bindings where flow = $1 and user_binding is not null"
+  },
+  "12b5588f54cdf0e3778b4993e970748901104f939603cce853e1300ab9503b14": {
+    "describe": {
+      "columns": [
+        {
+          "name": "uid",
+          "ordinal": 0,
+          "type_info": "Uuid"
+        },
+        {
+          "name": "password",
+          "ordinal": 1,
+          "type_info": "Varchar"
+        }
+      ],
+      "nullable": [
+        false,
+        false
+      ],
+      "parameters": {
+        "Left": [
+          "Text"
+        ]
+      }
+    },
+    "query": "select uid,password from users where name = $1"
+  },
+  "171ab3c1250913c28d6d543d05caa0bac92211a9c419a0595ef8507bd01d0e90": {
+    "describe": {
+      "columns": [
+        {
+          "name": "user_id?: Uuid",
+          "ordinal": 0,
+          "type_info": "Uuid"
+        }
+      ],
+      "nullable": [
+        false
+      ],
+      "parameters": {
+        "Left": [
+          "Bpchar"
+        ]
+      }
+    },
+    "query": "select user_id as \"user_id?: Uuid\" from sessions where uid = $1"
+  },
+  "175c750287bf0e52019714b1bcf48e1ac8cf7abd743c903b4329b049cded9276": {
+    "describe": {
+      "columns": [
+        {
+          "name": "policy",
+          "ordinal": 0,
+          "type_info": "Int4"
+        },
+        {
+          "name": "enabled",
+          "ordinal": 1,
+          "type_info": "Bool"
+        },
+        {
+          "name": "negate_result",
+          "ordinal": 2,
+          "type_info": "Bool"
+        },
+        {
+          "name": "ordering",
+          "ordinal": 3,
+          "type_info": "Int2"
+        }
+      ],
+      "nullable": [
+        false,
+        false,
+        false,
+        false
+      ],
+      "parameters": {
+        "Left": [
+          "Int4"
+        ]
+      }
+    },
+    "query": "select policy,enabled,negate_result,ordering from flow_bindings where flow = $1"
+  },
+  "1c7fae9004cf6f61cf476ef69578fdb8fd7971b91043cbcec87896340ef3420f": {
+    "describe": {
+      "columns": [
+        {
+          "name": "policy",
+          "ordinal": 0,
+          "type_info": "Int4"
+        },
+        {
+          "name": "enabled",
+          "ordinal": 1,
+          "type_info": "Bool"
+        },
+        {
+          "name": "negate_result",
+          "ordinal": 2,
+          "type_info": "Bool"
+        },
+        {
+          "name": "ordering",
+          "ordinal": 3,
+          "type_info": "Int2"
+        }
+      ],
+      "nullable": [
+        false,
+        false,
+        false,
+        false
+      ],
+      "parameters": {
+        "Left": [
+          "Int4"
+        ]
+      }
+    },
+    "query": "select policy,enabled,negate_result,ordering from flow_bindings where entry = $1"
+  },
+  "365ae4c12a0106ac6aa3254f3b00244a95704ff4f36dda78058b6d176355c1cd": {
+    "describe": {
+      "columns": [
+        {
+          "name": "uid",
+          "ordinal": 0,
+          "type_info": "Int4"
+        },
+        {
+          "name": "slug",
+          "ordinal": 1,
+          "type_info": "Varchar"
+        },
+        {
+          "name": "title",
+          "ordinal": 2,
+          "type_info": "Varchar"
+        },
+        {
+          "name": "authentication: AuthenticationRequirement",
+          "ordinal": 3,
+          "type_info": {
+            "Custom": {
+              "kind": {
+                "Enum": [
+                  "required",
+                  "none",
+                  "superuser",
+                  "ignored"
+                ]
+              },
+              "name": "authentication_requirement"
+            }
+          }
+        },
+        {
+          "name": "designation: FlowDesignation",
+          "ordinal": 4,
+          "type_info": {
+            "Custom": {
+              "kind": {
+                "Enum": [
+                  "authentication"
+                ]
+              },
+              "name": "flow_designation"
+            }
+          }
+        }
+      ],
+      "nullable": [
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "parameters": {
+        "Left": [
+          "Text"
+        ]
+      }
+    },
+    "query": "select uid, slug, title, authentication as \"authentication: AuthenticationRequirement\", designation as \"designation: FlowDesignation\" from flows where slug = $1"
+  },
+  "38c0d34d6b31daf12bfa8a88846b74dd316aaea61cccb19ffe7aaa4efde9100e": {
+    "describe": {
+      "columns": [],
+      "nullable": [],
+      "parameters": {
+        "Left": [
+          "Bpchar"
+        ]
+      }
+    },
+    "query": "delete from sessions where uid = $1"
+  },
+  "3d5c974482c7c8718280b5d7ea4464f91f8ac33f8dfce1f7545d8affb2246cb9": {
+    "describe": {
+      "columns": [
+        {
+          "name": "uid",
+          "ordinal": 0,
+          "type_info": "Uuid"
+        }
+      ],
+      "nullable": [
+        false
+      ],
+      "parameters": {
+        "Left": [
+          "Varchar",
+          "Varchar"
+        ]
+      }
+    },
+    "query": "insert into users(name, password) values($1, $2) returning uid"
+  },
+  "6556d8dbc0597fb2d46ae91df4110cfd268af9dcdc338bd6def1b5460e949b86": {
+    "describe": {
+      "columns": [
+        {
+          "name": "uid",
+          "ordinal": 0,
+          "type_info": "Int4"
+        },
+        {
+          "name": "slug",
+          "ordinal": 1,
+          "type_info": "Varchar"
+        },
+        {
+          "name": "kind: PgStageKind",
+          "ordinal": 2,
+          "type_info": {
+            "Custom": {
+              "kind": {
+                "Enum": [
+                  "deny",
+                  "prompt",
+                  "identification",
+                  "user_login",
+                  "user_logout",
+                  "user_write",
+                  "password",
+                  "consent"
+                ]
+              },
+              "name": "stage_kind"
+            }
+          }
+        },
+        {
+          "name": "timeout",
+          "ordinal": 3,
+          "type_info": "Int8"
+        },
+        {
+          "name": "identification_password_stage",
+          "ordinal": 4,
+          "type_info": "Int4"
+        },
+        {
+          "name": "consent_stage",
+          "ordinal": 5,
+          "type_info": "Int4"
+        }
+      ],
+      "nullable": [
+        false,
+        false,
+        false,
+        false,
+        true,
+        true
+      ],
+      "parameters": {
+        "Left": [
+          "Int4"
+        ]
+      }
+    },
+    "query": "select uid, slug, kind as \"kind: PgStageKind\", timeout, identification_password_stage, consent_stage from stages where uid = $1"
+  },
+  "7ed3d5bd9f1acf2a78dd3f5c40dd446a6ea58d1ce26a0324bfecaf5e3201d370": {
+    "describe": {
+      "columns": [],
+      "nullable": [],
+      "parameters": {
+        "Left": [
+          "Bpchar",
+          "Uuid"
+        ]
+      }
+    },
+    "query": "insert into sessions(uid, user_id) values ($1, $2)"
+  },
+  "9058c5bbba06e7c485fd7b44222a30d403cf7819028c1dce2fb64fb659ede714": {
+    "describe": {
+      "columns": [
+        {
+          "name": "user_binding",
+          "ordinal": 0,
+          "type_info": "Uuid"
+        },
+        {
+          "name": "enabled",
+          "ordinal": 1,
+          "type_info": "Bool"
+        },
+        {
+          "name": "negate_result",
+          "ordinal": 2,
+          "type_info": "Bool"
+        },
+        {
+          "name": "ordering",
+          "ordinal": 3,
+          "type_info": "Int2"
+        }
+      ],
+      "nullable": [
+        true,
+        false,
+        false,
+        false
+      ],
+      "parameters": {
+        "Left": [
+          "Int4"
+        ]
+      }
+    },
+    "query": "select user_binding,enabled,negate_result,ordering from flow_bindings where entry = $1 and user_binding is not null"
+  },
+  "b2602a229690527f30aaf88fd76974eef0e6d6d749b5221df1e6bedaa45dba29": {
+    "describe": {
+      "columns": [
+        {
+          "name": "uid",
+          "ordinal": 0,
+          "type_info": "Int4"
+        },
+        {
+          "name": "slug",
+          "ordinal": 1,
+          "type_info": "Varchar"
+        },
+        {
+          "name": "title",
+          "ordinal": 2,
+          "type_info": "Varchar"
+        },
+        {
+          "name": "authentication: AuthenticationRequirement",
+          "ordinal": 3,
+          "type_info": {
+            "Custom": {
+              "kind": {
+                "Enum": [
+                  "required",
+                  "none",
+                  "superuser",
+                  "ignored"
+                ]
+              },
+              "name": "authentication_requirement"
+            }
+          }
+        },
+        {
+          "name": "designation: FlowDesignation",
+          "ordinal": 4,
+          "type_info": {
+            "Custom": {
+              "kind": {
+                "Enum": [
+                  "authentication"
+                ]
+              },
+              "name": "flow_designation"
+            }
+          }
+        }
+      ],
+      "nullable": [
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "parameters": {
+        "Left": [
+          "Int4"
+        ]
+      }
+    },
+    "query": "select uid, slug, title, authentication as \"authentication: AuthenticationRequirement\", designation as \"designation: FlowDesignation\" from flows where uid = $1"
+  },
+  "b4fd7ad394f6b4f2875a51b9423caf646ef4e3a35719c6981a7706c32dfd7050": {
+    "describe": {
+      "columns": [
+        {
+          "name": "group_binding",
+          "ordinal": 0,
+          "type_info": "Uuid"
+        },
+        {
+          "name": "enabled",
+          "ordinal": 1,
+          "type_info": "Bool"
+        },
+        {
+          "name": "negate_result",
+          "ordinal": 2,
+          "type_info": "Bool"
+        },
+        {
+          "name": "ordering",
+          "ordinal": 3,
+          "type_info": "Int2"
+        }
+      ],
+      "nullable": [
+        true,
+        false,
+        false,
+        false
+      ],
+      "parameters": {
+        "Left": [
+          "Int4"
+        ]
+      }
+    },
+    "query": "select group_binding,enabled,negate_result,ordering from flow_bindings where entry = $1 and group_binding is not null"
+  },
+  "c83916020416397f58c417151797ccbfd538798cd01a2aaef26b1ef1700b068b": {
+    "describe": {
+      "columns": [
+        {
+          "name": "max_age",
+          "ordinal": 0,
+          "type_info": "Int8"
+        }
+      ],
+      "nullable": [
+        false
+      ],
+      "parameters": {
+        "Left": [
+          "Int4"
+        ]
+      }
+    },
+    "query": "select max_age from password_expiration_policies where uid = $1"
+  },
+  "cf756ae76c27adee237c03b1d7466f1570ea500f3485626a979042adaf063048": {
+    "describe": {
+      "columns": [
+        {
+          "name": "uid",
+          "ordinal": 0,
+          "type_info": "Int4"
+        },
+        {
+          "name": "slug",
+          "ordinal": 1,
+          "type_info": "Varchar"
+        },
+        {
+          "name": "kind: PgPolicyKind",
+          "ordinal": 2,
+          "type_info": {
+            "Custom": {
+              "kind": {
+                "Enum": [
+                  "password_expiry",
+                  "password_strength",
+                  "expression"
+                ]
+              },
+              "name": "policy_kind"
+            }
+          }
+        },
+        {
+          "name": "password_expiration",
+          "ordinal": 3,
+          "type_info": "Int4"
+        },
+        {
+          "name": "password_strength",
+          "ordinal": 4,
+          "type_info": "Int4"
+        },
+        {
+          "name": "expression",
+          "ordinal": 5,
+          "type_info": "Int4"
+        }
+      ],
+      "nullable": [
+        false,
+        false,
+        false,
+        true,
+        true,
+        true
+      ],
+      "parameters": {
+        "Left": [
+          "Text"
+        ]
+      }
+    },
+    "query": "select uid, slug,kind as \"kind: PgPolicyKind\",password_expiration,password_strength,expression from policies where slug = $1"
+  },
+  "d93119344d8b99202778518f50066615cef3507e748d4af7c34db7b02e94f804": {
+    "describe": {
+      "columns": [
+        {
+          "name": "uid",
+          "ordinal": 0,
+          "type_info": "Int4"
+        },
+        {
+          "name": "field_key",
+          "ordinal": 1,
+          "type_info": "Varchar"
+        },
+        {
+          "name": "label",
+          "ordinal": 2,
+          "type_info": "Varchar"
+        },
+        {
+          "name": "kind: PgPromptKind",
+          "ordinal": 3,
+          "type_info": {
+            "Custom": {
+              "kind": {
+                "Enum": [
+                  "username",
+                  "email",
+                  "password",
+                  "text",
+                  "text_read_only",
+                  "signed_number",
+                  "unsigned_number",
+                  "checkbox",
+                  "switch",
+                  "date",
+                  "date_time",
+                  "seperator",
+                  "static",
+                  "locale"
+                ]
+              },
+              "name": "prompt_kind"
+            }
+          }
+        },
+        {
+          "name": "placeholder",
+          "ordinal": 4,
+          "type_info": "Varchar"
+        },
+        {
+          "name": "required",
+          "ordinal": 5,
+          "type_info": "Bool"
+        },
+        {
+          "name": "help_text",
+          "ordinal": 6,
+          "type_info": "Varchar"
+        }
+      ],
+      "nullable": [
+        false,
+        false,
+        false,
+        false,
+        true,
+        false,
+        true
+      ],
+      "parameters": {
+        "Left": [
+          "Int4"
+        ]
+      }
+    },
+    "query": "select uid, field_key, label, kind as \"kind: PgPromptKind\", placeholder, required, help_text from prompts where uid = $1"
+  },
+  "ff6cb8695f6c314ac6f524975e1c5220430b32439fabf4d429267c0af6c91489": {
+    "describe": {
+      "columns": [
+        {
+          "name": "group_binding",
+          "ordinal": 0,
+          "type_info": "Uuid"
+        },
+        {
+          "name": "enabled",
+          "ordinal": 1,
+          "type_info": "Bool"
+        },
+        {
+          "name": "negate_result",
+          "ordinal": 2,
+          "type_info": "Bool"
+        },
+        {
+          "name": "ordering",
+          "ordinal": 3,
+          "type_info": "Int2"
+        }
+      ],
+      "nullable": [
+        true,
+        false,
+        false,
+        false
+      ],
+      "parameters": {
+        "Left": [
+          "Int4"
+        ]
+      }
+    },
+    "query": "select group_binding,enabled,negate_result,ordering from flow_bindings where flow = $1 and group_binding is not null"
+  }
+}

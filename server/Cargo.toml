@@ -1,0 +1,35 @@
+[package]
+name = "server"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+serde = { workspace = true, features = ["derive"] }
+config = { workspace = true }
+dotenvy = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+once_cell = { workspace = true }
+tracing = { workspace = true, features = ["log"] }
+tracing-subscriber = { workspace = true, features = ["env-filter"] }
+sqlx = { workspace = true, features = ["runtime-tokio-rustls", "postgres", "uuid", "time", "offline"] }
+http = "0.2.8"
+uuid = { version = "1.2.2", features = ["serde"] }
+time = { version = "0.3.17", features = ["serde"] }
+concat-idents = "1.1.4"
+parking_lot = { version = "0.12.1", features = ["send_guard"] }
+jsonwebtoken = "8.2.0"
+rand = "0.8.5"
+futures-util = "0.3.25"
+# Wait for tower-cookies to update to new version
+async-trait = "0.1.63"
+argon2 = "0.4.1"
+poem = { version = "1.3.52", features = ["cookie", "prometheus", "sse", "tokio-metrics"] }
+derive_more = { git = "https://github.com/JelteF/derive_more", features = ["error", "display", "from"] }
+tracing-error = "0.2.0"
+moka = "0.9.6"
+handlebars = "4.3.6"
+impl-tools = "0.6.2"
+# parking_lot = { workspace = true }
+

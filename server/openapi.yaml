@@ -1,0 +1,20 @@
+openapi:  3.1.0
+servers: 
+  - url: http://127.0.0.1:8080
+    description: Local Test server
+info: 
+  title: Authust API V1
+  version: '1.0'
+paths:
+  "/":
+    get: 
+      summary: Test
+      description: This is a test operation which needs at least 30 chars
+      operationId: test
+      security: 
+        - auth: []
+components: 
+  securitySchemes:
+    auth:
+      type: http
+      scheme: bearer
