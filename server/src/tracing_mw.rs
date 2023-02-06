@@ -3,11 +3,12 @@ use std::{backtrace::Backtrace, time::Instant};
 use async_trait::async_trait;
 use tracing::{Instrument, Level};
 
-use crate::api::V1ApiError;
 use poem::{
     error::ResponseError, web::RealIp, Endpoint, FromRequest, IntoResponse, Middleware, Request,
     Response, Result,
 };
+
+use crate::api::ApiError;
 
 /// Middleware for [`tracing`](https://crates.io/crates/tracing).
 #[derive(Default)]
@@ -64,7 +65,7 @@ impl<E: Endpoint> Endpoint for TracingEndpoint<E> {
                     Ok(resp)
                 }
                 Err(err) => {
-                    if let Some(err) = err.downcast_ref::<V1ApiError>() {
+                    if let Some(err) = err.downcast_ref::<ApiError>() {
                         tracing::error!(status = %err.status(), duration = ?duration, error = %err, error.spantrace = ?err.st, "error")
                     } else {
                         tracing::info!(

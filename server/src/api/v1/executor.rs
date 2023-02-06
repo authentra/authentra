@@ -1,20 +1,26 @@
 use async_trait::async_trait;
 use poem::{
     get, handler,
-    web::{Data, Json, Path},
+    web::{Data, Form, Json, Path},
     FromRequest, Request, RequestBody, Route,
 };
 use serde::Deserialize;
 
 use crate::{
-    api::{v1::ApiError, v1::ApiErrorKind},
+    api::{ApiError, ApiErrorKind, Redirect},
     auth::Session,
     executor::{data::FlowData, FlowExecutor},
     model::{Flow, Reference},
 };
 
+use super::ping_handler;
+
 pub fn setup_executor_router() -> Route {
-    Route::new().at("/:flow_slug", get(get_flow))
+    Route::new()
+        .at("/ping", get(ping_handler))
+        .at("/executor", get(ping_handler))
+    // .at("/executor", setup_executor_router())
+    // .at("/:flow_slug", get(get_flow))
 }
 
 #[derive(Deserialize)]
@@ -39,11 +45,29 @@ async fn get_flow(
 ) -> Result<Json<FlowData>, ApiError> {
     let key = executor
         .get_key(&session, flow)
-        .ok_or(ApiErrorKind::NotFound.into_api())?;
+        .ok_or(ApiErrorKind::MiscInternal.into_api())?;
     let execution = executor
-        .get_execution(&key)
+        .get_execution(&key, true)
         .await
         .ok_or(ApiErrorKind::NotFound.into_api())?;
     let data = execution.data().await;
     Ok(Json(data))
+}
+#[handler]
+async fn post_flow(
+    session: Session,
+    flow: Reference<Flow>,
+    Data(executor): Data<&FlowExecutor>,
+    Form(form): Form<serde_json::Value>,
+    req: &Request,
+) -> Result<Redirect, ApiError> {
+    let key = executor
+        .get_key(&session, flow)
+        .ok_or(ApiErrorKind::NotFound.into_api())?;
+    let execution = executor
+        .get_execution(&key, false)
+        .await
+        .ok_or(ApiErrorKind::NotFound.into_api())?;
+    tracing::info!("{form:#?}");
+    Ok(Redirect::found(req.uri().path()))
 }

@@ -3,11 +3,7 @@ use poem::{handler, web::cookie::CookieJar, IntoResponse, Response};
 use sqlx::{query, Postgres};
 use tracing::instrument;
 
-use crate::api::{
-    sql_tx::Tx,
-    v1::auth::Session,
-    v1::{auth::SESSION_COOKIE_NAME, ApiError},
-};
+use crate::api::{sql_tx::Tx, v1::auth::Session, v1::auth::SESSION_COOKIE_NAME, ApiError};
 
 #[handler]
 #[instrument(skip(tx, session, cookies))]

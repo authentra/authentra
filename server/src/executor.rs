@@ -7,9 +7,11 @@ use std::{
 use derive_more::Display;
 use moka::sync::Cache;
 use parking_lot::Mutex;
+use poem::{Request, Response};
 use uuid::Uuid;
 
 use crate::{
+    api::{ApiError, ApiErrorKind},
     auth::Session,
     flow_storage::{FlowStorage, FreezedStorage, ReferenceLookup, ReverseLookup},
     model::{Flow, Reference, ReferenceKind},
@@ -82,13 +84,17 @@ impl FlowExecutor {
         Some(key)
     }
 
-    pub async fn get_execution(&self, key: &FlowKey) -> Option<FlowExecution> {
+    pub async fn get_execution(&self, key: &FlowKey, start: bool) -> Option<FlowExecution> {
         let execution = self.internal.executions.get(key);
         if execution.is_some() {
             return execution;
         }
 
-        self.start(key).await
+        if start {
+            self.start(key).await
+        } else {
+            None
+        }
     }
 
     pub async fn start(&self, key: &FlowKey) -> Option<FlowExecution> {

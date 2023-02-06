@@ -18,10 +18,8 @@ use tracing::instrument;
 
 use crate::api::{
     sql_tx::Tx,
-    v1::{
-        auth::{AuthServiceData, Claims, SESSION_COOKIE_NAME},
-        ApiError,
-    },
+    v1::auth::{AuthServiceData, Claims, SESSION_COOKIE_NAME},
+    ApiError,
 };
 
 #[derive(Deserialize)]

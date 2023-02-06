@@ -3,7 +3,11 @@ use std::sync::{
     Arc,
 };
 
+use http::StatusCode;
+use poem::{IntoResponse, Request, Response};
+
 use crate::{
+    api::{ApiError, Redirect},
     flow_storage::ReferenceLookup,
     model::{Flow, FlowEntry, Reference, Stage},
 };
@@ -44,7 +48,9 @@ impl FlowExecution {
         }
     }
 
-    pub fn next(&self) {}
+    pub async fn next(&self, request: &Request) -> poem::Result<Response, ApiError> {
+        Ok(Redirect::found(request.uri().path()).into_response())
+    }
 }
 
 pub(super) struct FlowExecutionInternal {

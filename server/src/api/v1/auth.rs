@@ -1,6 +1,7 @@
-use std::fmt::Debug;
+use std::{convert::Infallible, fmt::Debug, pin::Pin};
 
 use async_trait::async_trait;
+use futures_util::Future;
 use http::StatusCode;
 use jsonwebtoken::{DecodingKey, EncodingKey, TokenData, Validation};
 use once_cell::sync::Lazy;
@@ -10,6 +11,7 @@ use poem::{
 };
 use serde::{Deserialize, Serialize};
 use sqlx::{query, Postgres};
+use tower::Service;
 use uuid::Uuid;
 
 use crate::{api::sql_tx::Tx, auth::Session};
@@ -52,6 +54,33 @@ impl<E: Endpoint> Middleware<E> for AuthLayer {
             data: self.data.clone(),
             inner: ep,
         }
+    }
+}
+
+pub struct AuthService<S> {
+    data: AuthServiceData,
+    inner: S,
+}
+
+impl<S, ReqBody> Service<http::Request<ReqBody>> for AuthService<S>
+where
+    S: Service<http::Request<ReqBody>>,
+{
+    type Response = S::Response;
+
+    type Error = Infallible;
+
+    type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>>>>;
+
+    fn poll_ready(
+        &mut self,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Result<(), Self::Error>> {
+        todo!()
+    }
+
+    fn call(&mut self, req: http::Request<ReqBody>) -> Self::Future {
+        todo!()
     }
 }
 
