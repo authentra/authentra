@@ -3,7 +3,7 @@ use std::{collections::HashMap, ops::Deref, sync::Arc};
 use async_trait::async_trait;
 use futures_util::future::join_all;
 use parking_lot::{Mutex, RwLock};
-use serde::{Deserialize, Serialize};
+
 use sqlx::{query, query_as, FromRow, PgPool};
 
 use crate::model::{

@@ -3,19 +3,21 @@
 use std::path::Path;
 use std::time::Duration;
 
-use crate::api::{setup_api_v1, CSRF_HEADER};
+use crate::api::setup_api_v1;
 use crate::config::PostgresConfiguration;
 use crate::config::{AuthustConfiguration, InternalAuthustConfiguration};
 use crate::executor::FlowExecutor;
 use crate::flow_storage::FlowStorage;
-use crate::tracing_mw::Tracing;
-use axum::Router;
+use api::AuthServiceData;
+
+use axum::extract::FromRef;
+use axum::routing::get;
+use axum::{Extension, Router};
 use handlebars::Handlebars;
-use http::header::AUTHORIZATION;
-use poem::listener::TcpListener;
-use poem::middleware::{AddData, SensitiveHeader};
-use poem::{handler, EndpointExt, Route, Server};
+
+use jsonwebtoken::{DecodingKey, EncodingKey};
 use sqlx::{migrate::Migrator, postgres::PgConnectOptions, ConnectOptions, PgPool};
+use tower_http::trace::TraceLayer;
 use tracing::info;
 use tracing_error::ErrorLayer;
 use tracing_subscriber::{prelude::*, EnvFilter};
@@ -26,7 +28,6 @@ pub mod config;
 pub mod executor;
 pub mod flow_storage;
 pub mod model;
-pub mod tracing_mw;
 
 #[tokio::main]
 async fn main() {
@@ -92,28 +93,44 @@ fn setup_handlebars<'reg>() -> Handlebars<'reg> {
     handlebars
 }
 
+#[derive(Clone)]
+pub struct AppState {
+    auth_data: AuthServiceData,
+}
+
+impl FromRef<AppState> for AuthServiceData {
+    fn from_ref(input: &AppState) -> Self {
+        input.auth_data.clone()
+    }
+}
+
 async fn start_server(config: InternalAuthustConfiguration, pool: PgPool) {
-    let listener = TcpListener::bind(&config.listen.http);
     let storage = FlowStorage::new(pool.clone());
     let executor = FlowExecutor::new(storage);
-    let handlebars = setup_handlebars();
-    let app = Route::new()
-        .at("/test", poem::get(hello_world))
-        .nest("/api/v1", setup_api_v1(&config.secret, pool).await)
-        .with(AddData::new(executor))
-        .with(AddData::new(handlebars))
-        .with(
-            SensitiveHeader::new()
-                .header(AUTHORIZATION)
-                .header(CSRF_HEADER),
+    let _handlebars = setup_handlebars();
+    let state = AppState {
+        auth_data: AuthServiceData {
+            encoding_key: EncodingKey::from_secret(config.secret.as_bytes()),
+            decoding_key: DecodingKey::from_secret(config.secret.as_bytes()),
+        },
+    };
+    let router = Router::new()
+        .route("/test", get(hello_world))
+        .nest(
+            "/api/v1",
+            setup_api_v1(&config.secret, state.clone(), pool).await,
         )
-        .with(Tracing);
-    let server = Server::new(listener).run(app).await.unwrap();
+        .layer(Extension(executor))
+        .layer(Extension(state.auth_data.clone()))
+        .layer(TraceLayer::new_for_http());
+    let bind = axum::Server::bind(&config.listen.http);
     info!("Listening on {}...", config.listen.http);
+    bind.serve(router.into_make_service())
+        .await
+        .expect("Server crashed");
     // server.await.expect("Server crashed");
 }
 
-#[handler]
 async fn hello_world() -> &'static str {
     "Hello, World!"
 }

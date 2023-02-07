@@ -1,20 +1,27 @@
-use std::{convert::Infallible, fmt::Debug, pin::Pin};
+use std::fmt::Debug;
 
 use async_trait::async_trait;
-use futures_util::Future;
-use http::StatusCode;
-use jsonwebtoken::{DecodingKey, EncodingKey, TokenData, Validation};
-use once_cell::sync::Lazy;
-use poem::{
-    get, handler, post, Endpoint, FromRequest, IntoResponse, Middleware, Request, RequestBody,
-    Response, Route,
+use axum::{
+    extract::FromRequestParts,
+    response::{IntoResponse, Response},
+    routing::{get, post},
+    Router,
 };
+use axum_extra::extract::CookieJar;
+use futures::future::BoxFuture;
+
+use http::{request::Parts, Request, StatusCode};
+use jsonwebtoken::Validation;
+use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use sqlx::{query, Postgres};
-use tower::Service;
+use tower::{Layer, Service};
 use uuid::Uuid;
 
-use crate::{api::sql_tx::Tx, auth::Session};
+use crate::{
+    api::{sql_tx::Tx, AuthServiceData},
+    auth::Session,
+};
 
 mod login;
 mod logout;
@@ -22,15 +29,14 @@ mod register;
 
 const SESSION_COOKIE_NAME: &str = "session";
 
-pub(super) fn setup_auth_router() -> Route {
-    Route::new()
-        .at("/login", post(login::login))
-        .at("/logout", post(logout::logout))
-        .at("/register", register::register)
-        .at("/", get(test))
+pub(super) fn setup_auth_router() -> Router {
+    Router::new()
+        .route("/login", post(login::login))
+        .route("/logout", post(logout::logout))
+        .route("/register", post(register::register))
+        .route("/", get(test))
 }
 
-#[handler]
 pub async fn test(_session: Session) -> Response {
     StatusCode::OK.into_response()
 }
@@ -46,41 +52,50 @@ impl AuthLayer {
     }
 }
 
-impl<E: Endpoint> Middleware<E> for AuthLayer {
-    type Output = AuthEndpoint<E>;
+impl<S> Layer<S> for AuthLayer {
+    type Service = AuthService<S>;
 
-    fn transform(&self, ep: E) -> Self::Output {
-        AuthEndpoint {
+    fn layer(&self, inner: S) -> Self::Service {
+        AuthService {
             data: self.data.clone(),
-            inner: ep,
+            inner,
         }
     }
 }
 
+#[derive(Clone)]
 pub struct AuthService<S> {
     data: AuthServiceData,
     inner: S,
 }
-
-impl<S, ReqBody> Service<http::Request<ReqBody>> for AuthService<S>
+impl<S, ReqBody: Send + 'static> Service<Request<ReqBody>> for AuthService<S>
 where
-    S: Service<http::Request<ReqBody>>,
+    S: Service<Request<ReqBody>> + Send + Clone + 'static,
+    S::Response: IntoResponse,
+    S::Future: Send + 'static,
 {
-    type Response = S::Response;
+    type Response = Response;
 
-    type Error = Infallible;
+    type Error = S::Error;
 
-    type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>>>>;
+    type Future = BoxFuture<'static, Result<Self::Response, Self::Error>>;
 
     fn poll_ready(
         &mut self,
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Result<(), Self::Error>> {
-        todo!()
+        self.inner.poll_ready(cx)
     }
 
-    fn call(&mut self, req: http::Request<ReqBody>) -> Self::Future {
-        todo!()
+    fn call(&mut self, mut req: Request<ReqBody>) -> Self::Future {
+        let mut inner = self.inner.clone();
+        let data = self.data.clone();
+        Box::pin(async move {
+            if let Err(err) = handle_auth(&mut req, &data) {
+                return Ok(err);
+            }
+            Ok(inner.call(req).await.map(IntoResponse::into_response)?)
+        })
     }
 }
 
@@ -95,34 +110,6 @@ pub enum AuthExtension {
 pub struct AuthExtensionData {
     pub header: jsonwebtoken::Header,
     pub claims: Claims,
-}
-
-#[derive(Clone)]
-pub struct AuthServiceData {
-    pub encoding_key: EncodingKey,
-    pub decoding_key: DecodingKey,
-}
-
-impl Debug for AuthServiceData {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("AuthServiceData").finish()
-    }
-}
-
-pub struct AuthEndpoint<E: Endpoint> {
-    data: AuthServiceData,
-    inner: E,
-}
-
-#[async_trait]
-impl<E: Endpoint> Endpoint for AuthEndpoint<E> {
-    type Output = Response;
-    async fn call(&self, mut req: Request) -> poem::Result<Self::Output> {
-        if let Err(err) = handle_auth(&mut req, &self.data) {
-            return Ok(err);
-        }
-        self.inner.call(req).await.map(IntoResponse::into_response)
-    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -165,12 +152,12 @@ const VALIDATION: Lazy<Validation> = Lazy::new(|| {
     validation
 });
 
-fn handle_auth(req: &mut poem::Request, data: &AuthServiceData) -> Result<(), Response> {
-    let cookies = req.cookie();
+fn handle_auth<B>(req: &mut Request<B>, data: &AuthServiceData) -> Result<(), Response> {
+    let cookies = CookieJar::from_headers(req.headers());
     let Some(cookie) = cookies.get(SESSION_COOKIE_NAME) else {
         req.extensions_mut().insert(AuthExtension::MissingCookie);
         return Ok(()) };
-    let value = cookie.value_str();
+    let value = cookie.value();
     let token = match jsonwebtoken::decode(value, &data.decoding_key, &VALIDATION) {
         Ok(token) => token,
         Err(err) => {
@@ -191,8 +178,8 @@ fn handle_auth(req: &mut poem::Request, data: &AuthServiceData) -> Result<(), Re
     Ok(())
 }
 
-fn get_auth_extension_data(req: &Request) -> Result<AuthExtensionData, Response> {
-    let Some(extension): Option<&AuthExtension> = req.extensions().get() else {
+fn get_auth_extension_data(req: &mut Parts) -> Result<AuthExtensionData, Response> {
+    let Some(extension): Option<&AuthExtension> = req.extensions.get() else {
             tracing::error!("Missing AuthMiddleware");
             return Err(StatusCode::INTERNAL_SERVER_ERROR.into_response());
         };
@@ -214,13 +201,15 @@ fn get_auth_extension_data(req: &Request) -> Result<AuthExtensionData, Response>
 }
 
 #[async_trait]
-impl<'a> FromRequest<'a> for Session {
-    async fn from_request(req: &'a Request, _body: &mut RequestBody) -> poem::Result<Self> {
-        let data = get_auth_extension_data(req).map_err(|err| poem::Error::from_response(err))?;
+impl FromRequestParts<()> for Session {
+    type Rejection = Response;
+
+    async fn from_request_parts(parts: &mut Parts, state: &()) -> Result<Self, Self::Rejection> {
+        let data = get_auth_extension_data(parts)?;
         let claims = data.claims;
-        let tx: Result<Tx<Postgres>, _> = Tx::from_request_without_body(req).await;
+        let tx: Result<Tx<Postgres>, _> = Tx::from_request_parts(parts, state).await;
         if let Err(err) = tx {
-            return Err(err);
+            return Err(err.into_response());
         }
         let mut tx = tx.expect("Rust bug");
         let res = query!(
@@ -231,7 +220,7 @@ impl<'a> FromRequest<'a> for Session {
         .await
         .map_err(|err| {
             tracing::error!("{err}");
-            StatusCode::INTERNAL_SERVER_ERROR
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
         })?;
         if let Some(res) = res {
             Ok(Session {
@@ -239,7 +228,7 @@ impl<'a> FromRequest<'a> for Session {
                 user_id: res.user_id,
             })
         } else {
-            Err(StatusCode::UNAUTHORIZED.into())
+            Err(StatusCode::UNAUTHORIZED.into_response())
         }
     }
 }

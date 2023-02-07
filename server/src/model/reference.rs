@@ -111,7 +111,7 @@ impl Referencable for Policy {
 
 impl Referencable for Flow {
     fn ref_uid(&self) -> Option<Reference<Self>> {
-        None
+        Some(Reference::new_uid(self.uid))
     }
 
     fn ref_slug(&self) -> Option<Reference<Self>> {

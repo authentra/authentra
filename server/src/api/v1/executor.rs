@@ -1,13 +1,15 @@
 use async_trait::async_trait;
-use poem::{
-    get, handler,
-    web::{Data, Form, Json, Path},
-    FromRequest, Request, RequestBody, Route,
+use axum::{
+    extract::{rejection::PathRejection, FromRequestParts, Path},
+    response::Redirect,
+    routing::get,
+    Extension, Form, Json, Router,
 };
+use http::{request::Parts, Uri};
 use serde::Deserialize;
 
 use crate::{
-    api::{ApiError, ApiErrorKind, Redirect},
+    api::{ApiError, ApiErrorKind},
     auth::Session,
     executor::{data::FlowData, FlowExecutor},
     model::{Flow, Reference},
@@ -15,12 +17,10 @@ use crate::{
 
 use super::ping_handler;
 
-pub fn setup_executor_router() -> Route {
-    Route::new()
-        .at("/ping", get(ping_handler))
-        .at("/executor", get(ping_handler))
-    // .at("/executor", setup_executor_router())
-    // .at("/:flow_slug", get(get_flow))
+pub fn setup_executor_router() -> Router {
+    Router::new()
+        .route("/ping", get(ping_handler))
+        .route("/:flow_slug", get(get_flow))
 }
 
 #[derive(Deserialize)]
@@ -29,19 +29,20 @@ pub struct FlowParam {
 }
 
 #[async_trait]
-impl<'a> FromRequest<'a> for Reference<Flow> {
-    async fn from_request(req: &'a Request, body: &mut RequestBody) -> poem::Result<Self> {
-        let path: Path<FlowParam> = Path::from_request(req, body).await?;
+impl FromRequestParts<()> for Reference<Flow> {
+    type Rejection = PathRejection;
+
+    async fn from_request_parts(parts: &mut Parts, state: &()) -> Result<Self, Self::Rejection> {
+        let path: Path<FlowParam> = Path::from_request_parts(parts, state).await?;
         let flow_slug = path.0.flow_slug;
         Ok(Reference::new_slug(flow_slug))
     }
 }
 
-#[handler]
 async fn get_flow(
     session: Session,
     flow: Reference<Flow>,
-    Data(executor): Data<&FlowExecutor>,
+    Extension(executor): Extension<FlowExecutor>,
 ) -> Result<Json<FlowData>, ApiError> {
     let key = executor
         .get_key(&session, flow)
@@ -53,21 +54,20 @@ async fn get_flow(
     let data = execution.data().await;
     Ok(Json(data))
 }
-#[handler]
 async fn post_flow(
     session: Session,
     flow: Reference<Flow>,
-    Data(executor): Data<&FlowExecutor>,
+    Extension(executor): Extension<FlowExecutor>,
+    uri: &Uri,
     Form(form): Form<serde_json::Value>,
-    req: &Request,
 ) -> Result<Redirect, ApiError> {
     let key = executor
         .get_key(&session, flow)
         .ok_or(ApiErrorKind::NotFound.into_api())?;
-    let execution = executor
+    let _execution = executor
         .get_execution(&key, false)
         .await
         .ok_or(ApiErrorKind::NotFound.into_api())?;
     tracing::info!("{form:#?}");
-    Ok(Redirect::found(req.uri().path()))
+    Ok(Redirect::to(uri.path()))
 }

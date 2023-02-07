@@ -29,20 +29,20 @@ pub enum FlowComponent {
 }
 
 impl Stage {
-    pub fn as_component(&self, execution: &FlowExecution) -> Option<FlowComponent> {
+    pub fn as_component(&self, _execution: &FlowExecution) -> Option<FlowComponent> {
         match &self.kind {
             StageKind::Deny => Some(FlowComponent::AccessDenied {
                 message: "Access denied".to_owned(),
             }),
-            StageKind::Prompt { bindings } => todo!(),
-            StageKind::Identification { password } => todo!(),
+            StageKind::Prompt { bindings: _ } => todo!(),
+            StageKind::Identification { password: _ } => todo!(),
             StageKind::UserLogin => todo!(),
             StageKind::UserLogout => todo!(),
             StageKind::UserWrite => todo!(),
             StageKind::Password { .. } => Some(FlowComponent::Password {
                 recovery_url: "".to_owned(),
             }),
-            StageKind::Consent { mode } => todo!(),
+            StageKind::Consent { mode: _ } => todo!(),
         }
     }
 }

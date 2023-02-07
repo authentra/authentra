@@ -1,17 +1,14 @@
 use std::{
-    collections::{HashMap, HashSet},
-    sync::{atomic::AtomicUsize, Arc, Weak},
+    collections::HashSet,
+    sync::{atomic::AtomicUsize, Arc},
     time::Duration,
 };
 
 use derive_more::Display;
 use moka::sync::Cache;
 use parking_lot::Mutex;
-use poem::{Request, Response};
-use uuid::Uuid;
 
 use crate::{
-    api::{ApiError, ApiErrorKind},
     auth::Session,
     flow_storage::{FlowStorage, FreezedStorage, ReferenceLookup, ReverseLookup},
     model::{Flow, Reference, ReferenceKind},
@@ -52,7 +49,6 @@ pub struct FlowExecutor {
 
 struct FlowExecutorInternal {
     executions: Cache<FlowKey, FlowExecution>,
-    locked_keys: Mutex<HashSet<FlowKey>>,
     storage: FlowStorage,
 }
 
@@ -63,7 +59,6 @@ impl FlowExecutorInternal {
                 .time_to_idle(TIME_TO_IDLE.clone())
                 .time_to_live(TIME_TO_LIVE.clone())
                 .build(),
-            locked_keys: Mutex::new(HashSet::new()),
             storage,
         }
     }
@@ -105,6 +100,9 @@ impl FlowExecutor {
             }
         };
         let mut storage = FreezedStorage::new(self.internal.storage.clone());
+        if flow.entries.is_empty() {
+            return None;
+        }
         flow.reverse_lookup(&storage).await;
         let errors = storage.freeze();
         if !errors.is_empty() {

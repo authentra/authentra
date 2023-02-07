@@ -3,11 +3,9 @@ use std::sync::{
     Arc,
 };
 
-use http::StatusCode;
-use poem::{IntoResponse, Request, Response};
+
 
 use crate::{
-    api::{ApiError, Redirect},
     flow_storage::ReferenceLookup,
     model::{Flow, FlowEntry, Reference, Stage},
 };
@@ -24,7 +22,7 @@ impl FlowExecution {
     pub async fn data(&self) -> FlowData {
         let flow = self.0.flow.as_ref();
         let entry = self.get_entry();
-        let stage = self.lookup_stage(&entry.stage).await;
+        let _stage = self.lookup_stage(&entry.stage).await;
         FlowData {
             flow: FlowInfo {
                 title: flow.title.clone(),
@@ -46,10 +44,6 @@ impl FlowExecution {
             Some(v) => v,
             None => panic!("Missing stage in storage"),
         }
-    }
-
-    pub async fn next(&self, request: &Request) -> poem::Result<Response, ApiError> {
-        Ok(Redirect::found(request.uri().path()).into_response())
     }
 }
 

@@ -1,13 +1,10 @@
 use argon2::{Argon2, PasswordHash};
-use http::StatusCode;
-use poem::{
-    handler,
-    web::{
-        cookie::{Cookie, CookieJar, SameSite},
-        Data, Form,
-    },
-    IntoResponse, Response,
+use axum::{Extension, Form};
+use axum_extra::extract::{
+    cookie::{Cookie, SameSite},
+    CookieJar,
 };
+use http::StatusCode;
 use rand::{
     distributions::{Alphanumeric, DistString},
     rngs::OsRng,
@@ -28,14 +25,13 @@ pub struct LoginForm {
     password: String,
 }
 
-#[handler]
 #[instrument(skip(tx, form, cookies, data))]
 pub async fn login(
     mut tx: Tx<Postgres>,
+    cookies: CookieJar,
+    Extension(data): Extension<AuthServiceData>,
     Form(form): Form<LoginForm>,
-    cookies: &CookieJar,
-    Data(data): Data<&AuthServiceData>,
-) -> Result<Response, ApiError> {
+) -> Result<(CookieJar, StatusCode), ApiError> {
     let rec = query!("select uid,password from users where name = $1", form.name)
         .fetch_optional(&mut tx)
         .await?;
@@ -64,13 +60,12 @@ pub async fn login(
                 &data.encoding_key,
             )
             .expect("JWT encoding failed");
-            let mut cookie = Cookie::new_with_str(SESSION_COOKIE_NAME, token);
+            let mut cookie = Cookie::new(SESSION_COOKIE_NAME, token);
             cookie.set_path("/");
             cookie.set_same_site(Some(SameSite::Strict));
             cookie.set_http_only(true);
-            cookies.add(cookie);
-            StatusCode::OK.into_response()
+            (cookies.add(cookie), StatusCode::OK)
         }
-        None => StatusCode::UNAUTHORIZED.into_response(),
+        None => (cookies, StatusCode::UNAUTHORIZED),
     })
 }

@@ -5,11 +5,16 @@ use std::{
 };
 
 use async_trait::async_trait;
+use axum::{
+    extract::FromRequestParts,
+    response::{IntoResponse, Response},
+};
 use derive_more::{Display, Error, From};
-use http::StatusCode;
+use futures::future::BoxFuture;
+use http::{request::Parts, Request, StatusCode};
 use parking_lot::Mutex;
-use poem::{Endpoint, FromRequest, IntoResponse, Middleware, Request, RequestBody, Response};
 use sqlx::{Database, Executor, Pool, Postgres, Transaction};
+use tower::{Layer, Service};
 
 #[derive(Debug)]
 pub struct Tx<Db: Database>(Lease<sqlx::Transaction<'static, Db>>);
@@ -39,54 +44,81 @@ impl<Db: Database> TxLayer<Db> {
     }
 }
 
-impl<E: Endpoint, Db: Database> Middleware<E> for TxLayer<Db> {
-    type Output = TxService<E, Db>;
+impl<S, Db: Database> Layer<S> for TxLayer<Db> {
+    type Service = TxService<S, Db>;
 
-    fn transform(&self, ep: E) -> Self::Output {
+    fn layer(&self, inner: S) -> Self::Service {
         TxService {
             pool: self.pool.clone(),
-            inner: ep,
+            inner,
         }
     }
 }
 
-pub struct TxService<E: Endpoint, Db: Database> {
+pub struct TxService<S, Db: Database> {
     pool: Pool<Db>,
-    inner: E,
+    inner: S,
 }
 
-#[async_trait]
-impl<E: Endpoint, Db: Database> Endpoint for TxService<E, Db> {
-    type Output = Response;
-    async fn call(&self, mut req: Request) -> poem::Result<Self::Output> {
-        let (slot, lease) = Slot::new_leased(None);
-        let lazy = LazyTx {
+impl<S: Clone, Db: Database> Clone for TxService<S, Db> {
+    fn clone(&self) -> Self {
+        Self {
             pool: self.pool.clone(),
-            tx: Mutex::new(lease),
-        };
-        req.extensions_mut().insert(lazy);
-        let res = self
-            .inner
-            .call(req)
-            .await
-            .map(IntoResponse::into_response)?;
+            inner: self.inner.clone(),
+        }
+    }
+}
 
-        if res.status().is_success() {
-            if let Some(tx) = slot.into_inner().flatten().and_then(Slot::into_inner) {
-                if let Err(err) = tx.commit().await {
-                    tracing::error!("{err}");
-                    return Ok(StatusCode::INTERNAL_SERVER_ERROR.into_response());
+impl<S, ReqBody: Send + 'static, Db: Database> Service<Request<ReqBody>> for TxService<S, Db>
+where
+    S: Service<Request<ReqBody>> + Send + Clone + 'static,
+    S::Response: IntoResponse,
+    S::Future: Send + 'static,
+{
+    type Response = Response;
+
+    type Error = S::Error;
+
+    type Future = BoxFuture<'static, Result<Self::Response, Self::Error>>;
+
+    fn poll_ready(
+        &mut self,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Result<(), Self::Error>> {
+        self.inner.poll_ready(cx)
+    }
+
+    fn call(&mut self, mut req: Request<ReqBody>) -> Self::Future {
+        let mut inner = self.inner.clone();
+        let pool = self.pool.clone();
+        Box::pin(async move {
+            let (slot, lease) = Slot::new_leased(None);
+            let lazy = LazyTx {
+                pool,
+                tx: Mutex::new(lease),
+            };
+            req.extensions_mut().insert(lazy);
+            let res = inner.call(req).await.map(IntoResponse::into_response)?;
+
+            if res.status().is_success() {
+                if let Some(tx) = slot.into_inner().flatten().and_then(Slot::into_inner) {
+                    if let Err(err) = tx.commit().await {
+                        tracing::error!("{err}");
+                        return Ok(StatusCode::INTERNAL_SERVER_ERROR.into_response());
+                    }
                 }
             }
-        }
-        Ok(res)
+            Ok(res)
+        })
     }
 }
 
 #[async_trait]
-impl<'a, Db: Database> FromRequest<'a> for Tx<Db> {
-    async fn from_request(req: &'a Request, _body: &mut RequestBody) -> poem::Result<Self> {
-        let ext: &LazyTx<Db> = req.extensions().get().ok_or(TxError::MissingExtension)?;
+impl<Db: Database> FromRequestParts<()> for Tx<Db> {
+    type Rejection = TxError;
+
+    async fn from_request_parts(parts: &mut Parts, _state: &()) -> Result<Self, Self::Rejection> {
+        let ext: &LazyTx<Db> = parts.extensions.get().ok_or(TxError::MissingExtension)?;
         Ok(Self(ext.get_or_begin().await?))
     }
 }
@@ -179,13 +211,6 @@ pub enum TxError {
 
     #[from(forward)]
     Database(#[error(source, backtrace)] sqlx::Error),
-}
-
-impl From<TxError> for poem::Error {
-    fn from(value: TxError) -> Self {
-        tracing::error!("{value}");
-        poem::Error::from_status(StatusCode::INTERNAL_SERVER_ERROR)
-    }
 }
 
 impl IntoResponse for TxError {

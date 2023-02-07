@@ -11,7 +11,7 @@ paths:
       summary: Test
       description: This is a test operation which needs at least 30 chars
       operationId: test
-      security: 
+      security:
         - auth: []
 components: 
   securitySchemes:

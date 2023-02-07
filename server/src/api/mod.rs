@@ -1,12 +1,10 @@
-use std::borrow::Cow;
+use std::fmt::Debug;
 
+use axum::response::{IntoResponse, Response};
 use derive_more::{Display, Error, From};
-use http::{
-    header::{HeaderName, LOCATION},
-    StatusCode,
-};
+use http::{header::HeaderName, StatusCode};
 
-use poem::{error::ResponseError, IntoResponse};
+use jsonwebtoken::{DecodingKey, EncodingKey};
 use tracing_error::SpanTrace;
 pub use v1::setup_api_v1;
 
@@ -86,48 +84,25 @@ pub struct ConvertedApiError {
     status: StatusCode,
 }
 
-impl ResponseError for ApiError {
-    fn status(&self) -> http::StatusCode {
+impl IntoResponse for ApiError {
+    fn into_response(self) -> Response {
         match self.kind {
             ApiErrorKind::Database(_)
             | ApiErrorKind::PwHash(_)
             | ApiErrorKind::Tx(_)
-            | ApiErrorKind::MiscInternal => StatusCode::INTERNAL_SERVER_ERROR,
-            ApiErrorKind::InvalidLoginData => StatusCode::UNAUTHORIZED,
-            ApiErrorKind::NotFound => StatusCode::NOT_FOUND,
-        }
-    }
-
-    fn as_response(&self) -> poem::Response
-    where
-        Self: std::error::Error + Send + Sync + 'static,
-    {
-        self.status().into_response()
-    }
-}
-
-pub struct Redirect {
-    status: StatusCode,
-    uri: String,
-}
-
-impl Redirect {
-    pub fn found(uri: &str) -> Self {
-        Self {
-            status: StatusCode::FOUND,
-            uri: uri.into(),
-        }
-    }
-    pub fn found_ownend(uri: String) -> Self {
-        Self {
-            status: StatusCode::FOUND,
-            uri,
+            | ApiErrorKind::MiscInternal => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+            ApiErrorKind::InvalidLoginData => StatusCode::UNAUTHORIZED.into_response(),
+            ApiErrorKind::NotFound => StatusCode::NOT_FOUND.into_response(),
         }
     }
 }
-
-impl IntoResponse for Redirect {
-    fn into_response(self) -> poem::Response {
-        self.status.with_header(LOCATION, self.uri).into_response()
+#[derive(Clone)]
+pub struct AuthServiceData {
+    pub encoding_key: EncodingKey,
+    pub decoding_key: DecodingKey,
+}
+impl Debug for AuthServiceData {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("AuthServiceData").finish()
     }
 }

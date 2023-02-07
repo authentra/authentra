@@ -1,19 +1,23 @@
-use std::{fmt::Debug, str::Chars};
+use std::{fmt::Debug, pin::Pin, str::Chars, task::Poll};
 
-use async_trait::async_trait;
+use axum::{
+    response::{IntoResponse, Response},
+};
+use axum_extra::extract::{
+    cookie::{Cookie, SameSite},
+    CookieJar,
+};
+use futures_util::Future;
 use http::{
     header::{self, HOST},
     uri::Scheme,
-    Method, StatusCode, Uri,
-};
-use poem::{
-    web::cookie::{Cookie, CookieJar, SameSite},
-    Endpoint, IntoResponse, Middleware, Request, Response,
+    Method, Request, StatusCode, Uri,
 };
 use rand::{
     distributions::{Alphanumeric, DistString},
     thread_rng,
 };
+use tower::{Layer, Service};
 
 use super::CSRF_HEADER;
 
@@ -42,37 +46,97 @@ impl CsrfLayer {
     }
 }
 
-impl<E: Endpoint> Middleware<E> for CsrfLayer {
-    type Output = CsrfEndpoint<E>;
+impl<S> Layer<S> for CsrfLayer {
+    type Service = CsrfEndpoint<S>;
 
-    fn transform(&self, ep: E) -> Self::Output {
+    fn layer(&self, inner: S) -> Self::Service {
         CsrfEndpoint {
             allowed_hosts: self.allowed_hosts.clone(),
             allowed_hosts_wildcard: self.allowed_hosts.contains(&"*".to_owned()),
-            inner: ep,
+            inner,
         }
     }
 }
 
-pub struct CsrfEndpoint<E: Endpoint> {
+#[derive(Clone)]
+pub struct CsrfEndpoint<S> {
     allowed_hosts: Vec<String>,
     allowed_hosts_wildcard: bool,
-    inner: E,
+    inner: S,
 }
 
-#[async_trait]
-impl<E: Endpoint> Endpoint for CsrfEndpoint<E> {
-    type Output = poem::Response;
-    async fn call(&self, req: Request) -> poem::Result<Self::Output> {
-        if let Err(err) = check_csrf(&req, self.allowed_hosts_wildcard, &self.allowed_hosts) {
-            return Ok(err);
+#[derive(Clone)]
+pub struct CsrfData {
+    allowed_hosts: Vec<String>,
+    is_wildcard: bool,
+}
+
+impl CsrfData {
+    pub fn new(allowed_hosts: Vec<String>) -> Self {
+        Self {
+            is_wildcard: allowed_hosts.contains(&"*".into()),
+            allowed_hosts,
         }
-        self.inner.call(req).await.map(IntoResponse::into_response)
     }
 }
 
-fn check_csrf(
-    req: &Request,
+#[pin_project::pin_project(project = CsrfFutureProj)]
+pub enum CsrfFuture<F> {
+    Declined(Option<Response>),
+    Future(#[pin] F),
+}
+
+impl<F, FutResponse: IntoResponse, FutError> Future for CsrfFuture<F>
+where
+    F: Future<Output = Result<FutResponse, FutError>>,
+{
+    type Output = Result<Response, FutError>;
+
+    fn poll(
+        self: Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Self::Output> {
+        match self.project() {
+            CsrfFutureProj::Declined(dec) => {
+                let response = dec.take().expect("Future polled after completion");
+                Poll::Ready(Ok(response))
+            }
+            CsrfFutureProj::Future(f) => f.poll(cx).map_ok(IntoResponse::into_response),
+        }
+    }
+}
+
+impl<S, ReqBody> Service<Request<ReqBody>> for CsrfEndpoint<S>
+where
+    S: Service<Request<ReqBody>> + Clone + 'static,
+    S::Response: IntoResponse,
+    S::Error: Debug,
+    ReqBody: 'static,
+{
+    type Response = Response;
+
+    type Error = S::Error;
+
+    type Future = CsrfFuture<S::Future>;
+
+    fn poll_ready(
+        &mut self,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Result<(), Self::Error>> {
+        self.inner.poll_ready(cx)
+    }
+
+    fn call(&mut self, req: Request<ReqBody>) -> Self::Future {
+        if let Err(err) = check_csrf(&req, self.allowed_hosts_wildcard, &self.allowed_hosts) {
+            CsrfFuture::Declined(Some(err))
+        } else {
+            CsrfFuture::Future(self.inner.call(req))
+        }
+    }
+}
+
+fn check_csrf<B>(
+    req: &Request<B>,
     allowed_hosts_wildcard: bool,
     allowed_hosts: &Vec<String>,
 ) -> Result<(), Response> {
@@ -80,9 +144,9 @@ fn check_csrf(
         req.method(),
         &Method::GET | &Method::HEAD | &Method::OPTIONS | &Method::TRACE
     ) {
-        if let Err(err) = check_cookie(&req, true) {
+        if let Err((cookies, err)) = check_cookie(&req, true) {
             if err == CsrfCookieError::ValidationError {
-                return Err(csrf_error_response());
+                return Err((cookies, csrf_error_response()).into_response());
             }
         }
         return Ok(());
@@ -106,9 +170,9 @@ fn check_csrf(
             return Err(csrf_error_response());
         }
     }
-    if let Err(err) = check_cookie(&req, true) {
+    if let Err((cookies, err)) = check_cookie(&req, true) {
         if err == CsrfCookieError::ValidationError {
-            return Err(csrf_error_response());
+            return Err((cookies, csrf_error_response()).into_response());
         }
     }
     Ok(())
@@ -121,26 +185,27 @@ enum CsrfCookieError {
     ValidationError,
 }
 
-fn add_csrf_cookie(cookies: &CookieJar) {
+#[must_use]
+fn add_csrf_cookie(cookies: CookieJar) -> CookieJar {
     let mut cookie = Cookie::new(CSRF_COOKIE_NAME, generate_csrf());
     cookie.set_same_site(SameSite::Lax);
-    cookies.add(cookie);
+    cookies.add(cookie)
 }
 
-fn check_cookie(req: &Request, add: bool) -> Result<(), CsrfCookieError> {
-    let cookies = req.cookie();
+fn check_cookie<B>(req: &Request<B>, add: bool) -> Result<CookieJar, (CookieJar, CsrfCookieError)> {
+    let mut cookies = CookieJar::from_headers(req.headers());
     let Some(cookie) = cookies.get(CSRF_COOKIE_NAME) else {
         if add {
-            add_csrf_cookie(cookies);
+            cookies = add_csrf_cookie(cookies);
         }
-        return Err(CsrfCookieError::MissingCookie);
+        return Err((cookies, CsrfCookieError::MissingCookie));
     };
-    let Some(header) = req.headers().get(CSRF_HEADER) else { return Err(CsrfCookieError::InvalidHeader) };
-    let Ok(str) = header.to_str() else { return Err(CsrfCookieError::InvalidHeader) };
-    if validate_token(str, cookie.value_str()) {
-        Ok(())
+    let Some(header) = req.headers().get(CSRF_HEADER) else { return Err((cookies,CsrfCookieError::InvalidHeader)) };
+    let Ok(str) = header.to_str() else { return Err((cookies,CsrfCookieError::InvalidHeader)) };
+    if validate_token(str, cookie.value()) {
+        Ok(cookies)
     } else {
-        Err(CsrfCookieError::ValidationError)
+        Err((cookies, CsrfCookieError::ValidationError))
     }
 }
 
