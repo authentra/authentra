@@ -2,11 +2,12 @@ use serde::Serialize;
 
 use crate::model::{Stage, StageKind, UserField};
 
-use super::flow::FlowExecution;
+use super::{flow::FlowExecution, FieldError};
 
 #[derive(Serialize)]
 pub struct FlowData {
     pub flow: FlowInfo,
+    pub field_error: Option<FieldError>,
     pub pending_user: Option<PendingUser>,
     #[serde(flatten)]
     pub component: FlowComponent,
@@ -68,7 +69,7 @@ pub struct Sources {
     pub show_source_labels: bool,
 }
 
-#[derive(Serialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct PendingUser {
     pub name: String,
     pub avatar_url: String,

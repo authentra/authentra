@@ -9,10 +9,13 @@ use uuid::Uuid;
 
 use crate::flow_storage::FreezedStorage;
 
+use super::data::PendingUser;
+
 pub struct ExecutionContext {
     pub session_id: String,
     pub start_time: OffsetDateTime,
     pub fields: FieldStorage,
+    pub pending: Option<PendingUser>,
     pub user: Option<PolicyUser>,
     pub storage: FreezedStorage,
 }
@@ -25,6 +28,7 @@ impl ExecutionContext {
             fields: FieldStorage::new(),
             user: None,
             storage,
+            pending: None,
         }
     }
 }

@@ -93,10 +93,7 @@ where
         let pool = self.pool.clone();
         Box::pin(async move {
             let (slot, lease) = Slot::new_leased(None);
-            let lazy = LazyTx {
-                pool,
-                tx: Mutex::new(lease),
-            };
+            let lazy = LazyTx { pool, tx: lease };
             req.extensions_mut().insert(lazy);
             let res = inner.call(req).await.map(IntoResponse::into_response)?;
 
@@ -118,7 +115,10 @@ impl<Db: Database> FromRequestParts<()> for Tx<Db> {
     type Rejection = TxError;
 
     async fn from_request_parts(parts: &mut Parts, _state: &()) -> Result<Self, Self::Rejection> {
-        let ext: &LazyTx<Db> = parts.extensions.get().ok_or(TxError::MissingExtension)?;
+        let ext: &mut LazyTx<Db> = parts
+            .extensions
+            .get_mut()
+            .ok_or(TxError::MissingExtension)?;
         Ok(Self(ext.get_or_begin().await?))
     }
 }
@@ -198,7 +198,7 @@ impl<'c> Executor<'c> for &'c mut Tx<Postgres> {
 
 pub struct LazyTx<Db: Database> {
     pool: Pool<Db>,
-    tx: Mutex<Lease<Option<Slot<Transaction<'static, Db>>>>>,
+    tx: Lease<Option<Slot<Transaction<'static, Db>>>>,
 }
 
 #[derive(Debug, Display, Error, From)]
@@ -221,13 +221,12 @@ impl IntoResponse for TxError {
 }
 
 impl<Db: Database> LazyTx<Db> {
-    async fn get_or_begin(&self) -> Result<Lease<Transaction<'static, Db>>, TxError> {
-        let mut lock = self.tx.lock();
-        let tx = if let Some(tx) = lock.as_mut() {
+    async fn get_or_begin(&mut self) -> Result<Lease<Transaction<'static, Db>>, TxError> {
+        let tx = if let Some(tx) = self.tx.as_mut() {
             tx
         } else {
             let tx = self.pool.begin().await?;
-            lock.insert(Slot::new(tx))
+            self.tx.insert(Slot::new(tx))
         };
         tx.lease().ok_or(TxError::OverlappingExtractors)
     }

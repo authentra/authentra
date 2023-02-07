@@ -1,4 +1,3 @@
-
 use axum_extra::extract::{cookie::Cookie, CookieJar};
 use http::StatusCode;
 use sqlx::{query, Postgres};

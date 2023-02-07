@@ -17,7 +17,7 @@ pub enum PasswordBackend {
     LDAP,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, sqlx::Type)]
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::Type, PartialEq, Eq, Hash)]
 #[sqlx(type_name = "user_field", rename_all = "snake_case")]
 #[serde(rename_all = "snake_case")]
 pub enum UserField {

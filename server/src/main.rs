@@ -8,6 +8,7 @@ use crate::config::PostgresConfiguration;
 use crate::config::{AuthustConfiguration, InternalAuthustConfiguration};
 use crate::executor::FlowExecutor;
 use crate::flow_storage::FlowStorage;
+use crate::service::user::UserService;
 use api::AuthServiceData;
 
 use axum::extract::FromRef;
@@ -28,6 +29,7 @@ pub mod config;
 pub mod executor;
 pub mod flow_storage;
 pub mod model;
+pub mod service;
 
 #[tokio::main]
 async fn main() {
@@ -107,6 +109,7 @@ impl FromRef<AppState> for AuthServiceData {
 async fn start_server(config: InternalAuthustConfiguration, pool: PgPool) {
     let storage = FlowStorage::new(pool.clone());
     let executor = FlowExecutor::new(storage);
+    let users = UserService::new();
     let _handlebars = setup_handlebars();
     let state = AppState {
         auth_data: AuthServiceData {
@@ -121,6 +124,7 @@ async fn start_server(config: InternalAuthustConfiguration, pool: PgPool) {
             setup_api_v1(&config.secret, state.clone(), pool).await,
         )
         .layer(Extension(executor))
+        .layer(Extension(users))
         .layer(Extension(state.auth_data.clone()))
         .layer(TraceLayer::new_for_http());
     let bind = axum::Server::bind(&config.listen.http);

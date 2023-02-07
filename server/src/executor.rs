@@ -5,6 +5,8 @@ use std::{
 
 use derive_more::Display;
 use moka::sync::Cache;
+use parking_lot::RwLock;
+use serde::Serialize;
 
 use crate::{
     auth::Session,
@@ -38,6 +40,14 @@ impl FlowKey {
             flow,
         }
     }
+}
+#[derive(Debug, Clone, Display, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FieldError {
+    Invalid {
+        field: &'static str,
+        message: String,
+    },
 }
 
 #[derive(Clone)]
@@ -109,7 +119,7 @@ impl FlowExecutor {
         let context = ExecutionContext::new(key.session.clone(), storage);
         let execution = FlowExecutionInternal {
             flow,
-            context,
+            context: RwLock::new(context),
             current_entry_idx: AtomicUsize::new(0),
         };
         let execution = FlowExecution(Arc::new(execution));

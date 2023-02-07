@@ -1,6 +1,9 @@
 use std::fmt::Debug;
 
-use axum::response::{IntoResponse, Response};
+use axum::{
+    response::{IntoResponse, Response},
+    Json,
+};
 use derive_more::{Display, Error, From};
 use http::{header::HeaderName, StatusCode};
 
@@ -8,7 +11,7 @@ use jsonwebtoken::{DecodingKey, EncodingKey};
 use tracing_error::SpanTrace;
 pub use v1::setup_api_v1;
 
-use self::sql_tx::TxError;
+use self::{sql_tx::TxError, v1::executor::SubmissionValidationError};
 
 pub mod csrf;
 pub mod sql_tx;
@@ -52,6 +55,8 @@ pub enum ApiErrorKind {
     #[display("{}", 0)]
     PwHash(#[error(not(source))] argon2::password_hash::Error),
     Tx(#[error(source)] TxError),
+
+    SubmissionError(#[error(source)] SubmissionValidationError),
 }
 
 impl ApiErrorKind {
@@ -63,6 +68,7 @@ impl ApiErrorKind {
             ApiErrorKind::Tx(_) => true,
             ApiErrorKind::NotFound => false,
             ApiErrorKind::MiscInternal => true,
+            ApiErrorKind::SubmissionError(_) => false,
         }
     }
 
@@ -89,6 +95,11 @@ impl IntoResponse for ApiError {
             | ApiErrorKind::MiscInternal => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
             ApiErrorKind::InvalidLoginData => StatusCode::UNAUTHORIZED.into_response(),
             ApiErrorKind::NotFound => StatusCode::NOT_FOUND.into_response(),
+            ApiErrorKind::SubmissionError(err) => {
+                let mut response = Json(err).into_response();
+                *response.status_mut() = StatusCode::BAD_REQUEST;
+                response
+            }
         }
     }
 }
