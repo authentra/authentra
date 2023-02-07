@@ -1,15 +1,12 @@
 use async_trait::async_trait;
 use axum::{
-    extract::{
-        rejection::{PathRejection},
-        FromRequestParts, OriginalUri, Path,
-    },
+    extract::{rejection::PathRejection, FromRequestParts, OriginalUri, Path},
     response::{IntoResponse, Redirect, Response},
     routing::{get, MethodRouter},
     Extension, Form, Json, Router,
 };
 use derive_more::{Display, Error};
-use http::{request::Parts};
+use http::request::Parts;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sqlx::Postgres;
@@ -92,7 +89,7 @@ async fn post_flow(
         }
         None => {
             execution.complete_current();
-            Redirect::to(uri.path()).into_response()
+            Redirect::to(uri.to_string().as_str()).into_response()
         }
     })
 }

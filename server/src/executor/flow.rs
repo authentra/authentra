@@ -1,8 +1,6 @@
-use std::{
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc,
-    },
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc,
 };
 
 use parking_lot::{lock_api::RwLockReadGuard, Mutex, RawRwLock, RwLock};
