@@ -1,4 +1,4 @@
-use std::{collections::HashMap, ops::Deref, sync::Arc};
+use std::{collections::HashMap, fmt::Debug, ops::Deref, sync::Arc};
 
 use async_trait::async_trait;
 use futures_util::future::join_all;
@@ -8,10 +8,11 @@ use sqlx::{query, query_as, FromRow, PgPool};
 
 use crate::model::{
     AuthenticationRequirement, ConsentMode, Flow, FlowBinding, FlowBindingKind, FlowDesignation,
-    FlowEntry, Policy, PolicyKind, Prompt, PromptKind, Referencable, Reference, ReferenceId,
-    ReferenceTarget, Stage, StageKind, UserField,
+    FlowEntry, PasswordBackend, Policy, PolicyKind, Prompt, PromptKind, Referencable, Reference,
+    ReferenceId, ReferenceTarget, Stage, StageKind, UserField,
 };
 
+#[derive(Debug)]
 struct LookupTable<T> {
     slugs: HashMap<String, Arc<T>>,
     ids: HashMap<i32, Arc<T>>,
@@ -26,7 +27,7 @@ impl<T> Default for LookupTable<T> {
     }
 }
 
-impl<T: ReferenceTarget + Referencable> LookupTable<T> {
+impl<T: ReferenceTarget + Referencable + Debug> LookupTable<T> {
     pub fn lookup(&self, r: &Reference<T>) -> Option<Arc<T>> {
         match &r.id {
             ReferenceId::Slug(slug) => self.slugs.get(slug),
@@ -44,7 +45,7 @@ impl<T: ReferenceTarget + Referencable> LookupTable<T> {
     }
 
     fn insert_ref(&mut self, id: ReferenceId, value: Arc<T>) {
-        match id {
+        match id.clone() {
             ReferenceId::Slug(slug) => self.slugs.insert(slug, value),
             ReferenceId::Uid(id) => self.ids.insert(id, value),
         };
@@ -229,13 +230,13 @@ impl ReferenceDbQuery<Stage> for FlowStorageInternal {
     async fn query_reference(&self, reference: &Reference<Stage>) -> Option<Stage> {
         let lock = self.pool.lock();
         let Some(res) = match &reference.id {
-            ReferenceId::Slug(_) => query_as!(PgStage,
-                r#"select uid, slug, kind as "kind: PgStageKind", timeout, identification_password_stage, consent_stage, identification_stage from stages where uid = $1"#,
-                1
+            ReferenceId::Slug(slug) => query_as!(PgStage,
+                r#"select uid, slug, kind as "kind: PgStageKind", timeout, identification_password_stage, consent_stage, identification_stage from stages where slug = $1"#,
+                slug
             ).fetch_optional(&*lock).await,
-            ReferenceId::Uid(_) => query_as!(PgStage,
+            ReferenceId::Uid(id) => query_as!(PgStage,
                 r#"select uid, slug, kind as "kind: PgStageKind", timeout, identification_password_stage, consent_stage, identification_stage from stages where uid = $1"#,
-                1
+                id
                 ).fetch_optional(&*lock).await,
         }.ok().flatten() else { return None };
         let kind = match res.kind {
@@ -257,7 +258,9 @@ impl ReferenceDbQuery<Stage> for FlowStorageInternal {
             PgStageKind::UserLogin => StageKind::UserLogin,
             PgStageKind::UserLogout => StageKind::UserLogout,
             PgStageKind::UserWrite => StageKind::UserWrite,
-            PgStageKind::Password => todo!(),
+            PgStageKind::Password => StageKind::Password {
+                backends: vec![PasswordBackend::Internal],
+            },
             PgStageKind::Consent => {
                 let Some(uid) = res.consent_stage else { return None };
                 let Some(res) = query!(
@@ -497,6 +500,14 @@ pub struct FreezedStorage {
     policies: RwLock<LookupTable<Policy>>,
     prompts: RwLock<LookupTable<Prompt>>,
     flows: RwLock<LookupTable<Flow>>,
+}
+
+impl Debug for FreezedStorage {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("FreezedStorage")
+            .field("stages", &self.stages)
+            .finish()
+    }
 }
 
 impl FreezedStorage {

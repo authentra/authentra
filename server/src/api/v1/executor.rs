@@ -1,3 +1,4 @@
+use argon2::{password_hash::Encoding, PasswordHash};
 use async_trait::async_trait;
 use axum::{
     extract::{rejection::PathRejection, FromRequestParts, OriginalUri, Path},
@@ -5,25 +6,30 @@ use axum::{
     routing::{get, MethodRouter},
     Extension, Form, Json, Router,
 };
-use derive_more::{Display, Error};
 use http::request::Parts;
-use serde::{Deserialize, Serialize};
+
+use serde::Deserialize;
 use serde_json::Value;
-use sqlx::Postgres;
+use sqlx::{query, Postgres};
+use tower_cookies::Cookies;
+use uuid::Uuid;
 
 use crate::{
-    api::{sql_tx::Tx, ApiError, ApiErrorKind, ExecutorQuery},
+    api::{sql_tx::Tx, ApiError, ApiErrorKind, AuthServiceData, ExecutorQuery},
     auth::Session,
     executor::{
         data::{FlowData, PendingUser},
         flow::FlowExecution,
-        FieldError, FlowExecutor,
+        FieldError, FieldType, FlowExecutor, SubmissionError,
     },
-    model::{Flow, Reference, UserField},
+    model::{Flow, PasswordBackend, Reference, StageKind, UserField},
     service::user::UserService,
 };
 
-use super::ping_handler;
+use super::{
+    auth::{decode_token, set_session_cookie, Claims, SESSION_COOKIE_NAME},
+    ping_handler,
+};
 
 pub fn setup_executor_router() -> Router {
     Router::new().route("/ping", get(ping_handler)).route(
@@ -71,7 +77,9 @@ async fn post_flow(
     flow: Reference<Flow>,
     Extension(executor): Extension<FlowExecutor>,
     Extension(users): Extension<UserService>,
+    Extension(keys): Extension<AuthServiceData>,
     OriginalUri(uri): OriginalUri,
+    cookies: Cookies,
     query: Option<ExecutorQuery>,
     Form(form): Form<Value>,
 ) -> Result<Response, ApiError> {
@@ -82,16 +90,21 @@ async fn post_flow(
         .get_execution(&key, false)
         .await
         .ok_or(ApiErrorKind::NotFound.into_api())?;
-    let error = handle_submission(form, tx, executor, users, &execution).await?;
-    Ok(match error {
-        Some(err) => {
-            Json(execution.data(Some(err), query.unwrap_or_default()).await).into_response()
+    if let Err(err) = handle_submission(form, tx, executor, users, &execution).await {
+        match &err.kind {
+            ApiErrorKind::SubmissionError(err) => Ok(Json(
+                execution
+                    .data(Some(err.clone()), query.unwrap_or_default())
+                    .await,
+            )
+            .into_response()),
+            _ => Err(err),
         }
-        None => {
-            execution.complete_current();
-            Redirect::to(uri.to_string().as_str()).into_response()
-        }
-    })
+    } else {
+        execution.complete_current();
+        complete(&execution, &keys, &cookies).await?;
+        Ok(Redirect::to(uri.to_string().as_str()).into_response())
+    }
 }
 
 async fn handle_submission(
@@ -100,20 +113,20 @@ async fn handle_submission(
     _executor: FlowExecutor,
     users: UserService,
     execution: &FlowExecution,
-) -> Result<Option<FieldError>, ApiError> {
+) -> Result<(), ApiError> {
     let entry = execution.get_entry();
     let stage = execution.lookup_stage(&entry.stage).await;
     match &stage.kind {
-        crate::model::StageKind::Deny => return Ok(None),
-        crate::model::StageKind::Prompt { bindings: _ } => return Ok(None),
-        crate::model::StageKind::Identification {
+        StageKind::Deny => return Ok(()),
+        StageKind::Prompt { bindings: _ } => return Ok(()),
+        StageKind::Identification {
             password: _,
             user_fields,
         } => {
             let uid = str_from_field(
                 "uid",
                 form.get("uid")
-                    .ok_or(SubmissionValidationError::MissingField { field_name: "uid" })?,
+                    .ok_or(SubmissionError::MissingField { field_name: "uid" })?,
             )?;
             let user = users
                 .lookup_user(
@@ -127,34 +140,77 @@ async fn handle_submission(
             match user {
                 Some(user) => execution.use_mut_context(move |ctx| {
                     ctx.pending = Some(PendingUser {
+                        uid: user.uuid,
                         name: user.name,
                         avatar_url: "".into(),
+                        authenticated: false,
                     });
                 }),
                 None => {
-                    return Ok(Some(FieldError::Invalid {
+                    return Err(SubmissionError::from(FieldError::Invalid {
                         field: "uid",
                         message: "Failed to authenticate".to_owned(),
-                    }))
+                    })
+                    .into())
                 }
             };
+            return Ok(());
         }
-        crate::model::StageKind::UserLogin => return Ok(None),
-        crate::model::StageKind::UserLogout => return Ok(None),
-        crate::model::StageKind::UserWrite => return Ok(None),
-        crate::model::StageKind::Password { backends: _ } => return Ok(None),
-        crate::model::StageKind::Consent { mode: _ } => return Ok(None),
+        StageKind::UserLogin => return Ok(()),
+        StageKind::UserLogout => return Ok(()),
+        StageKind::UserWrite => return Ok(()),
+        StageKind::Password { backends } => {
+            let pending = match execution.get_context().pending.clone() {
+                Some(v) => v,
+                None => return Err(SubmissionError::NoPendingUser.into()),
+            };
+            let password = str_from_field(
+                "password",
+                form.get("password").ok_or(SubmissionError::MissingField {
+                    field_name: "password",
+                })?,
+            )?;
+            if backends.contains(&PasswordBackend::Internal) {
+                let res = query!("select password from users where uid = $1", pending.uid)
+                    .fetch_optional(&mut tx)
+                    .await?;
+                match res {
+                    Some(res) => {
+                        let hash = PasswordHash::parse(&res.password, Encoding::B64)?;
+                        let is_valid =
+                            match hash.verify_password(&[&argon2::Argon2::default()], password) {
+                                Ok(_) => true,
+                                Err(err) => match err {
+                                    argon2::password_hash::Error::Password => false,
+                                    err => return Err(err.into()),
+                                },
+                            };
+                        if is_valid {
+                            execution.use_mut_context(|ctx| {
+                                ctx.pending
+                                    .as_mut()
+                                    .map(|pending| pending.authenticated = true);
+                            });
+                            return Ok(());
+                        }
+                    }
+                    None => return Err(SubmissionError::NoPendingUser.into()),
+                }
+            }
+            return Err(SubmissionError::Field(FieldError::Invalid {
+                field: "password",
+                message: "Invalid Password".to_owned(),
+            })
+            .into());
+        }
+        StageKind::Consent { mode: _ } => return Ok(()),
     };
-    Ok(None)
 }
 
-fn str_from_field<'a>(
-    name: &'static str,
-    value: &'a Value,
-) -> Result<&'a String, SubmissionValidationError> {
+fn str_from_field<'a>(name: &'static str, value: &'a Value) -> Result<&'a String, SubmissionError> {
     match value {
         Value::String(value) => Ok(value),
-        other => Err(SubmissionValidationError::InvalidFieldType {
+        other => Err(SubmissionError::InvalidFieldType {
             field_name: name,
             expected: FieldType::String,
             got: other.into(),
@@ -162,39 +218,44 @@ fn str_from_field<'a>(
     }
 }
 
-#[derive(Debug, Clone, Display, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum FieldType {
-    Null,
-    Boolean,
-    String,
-    Number,
-    Object,
-    Array,
-}
-
-impl<'a> From<&'a Value> for FieldType {
-    fn from(value: &'a Value) -> Self {
-        match value {
-            Value::Null => FieldType::Null,
-            Value::Bool(_) => FieldType::Boolean,
-            Value::Number(_) => FieldType::Number,
-            Value::String(_) => FieldType::String,
-            Value::Array(_) => FieldType::Array,
-            Value::Object(_) => FieldType::Object,
+async fn complete(
+    execution: &FlowExecution,
+    keys: &AuthServiceData,
+    cookies: &Cookies,
+) -> Result<(), ApiError> {
+    loop {
+        if execution.is_completed() {
+            break;
         }
+        let entry = execution.get_entry();
+        let stage = execution.lookup_stage(&entry.stage).await;
+        if stage.kind.requires_input() {
+            break;
+        }
+        match stage.kind {
+            StageKind::UserLogin => {
+                let (uid, is_authenticated): (Uuid, bool) = execution
+                    .get_context()
+                    .pending
+                    .as_ref()
+                    .map(|v| (v.uid.clone(), v.authenticated))
+                    .ok_or(SubmissionError::NoPendingUser)?;
+                if !is_authenticated {
+                    continue;
+                }
+                let cookie = cookies
+                    .get(SESSION_COOKIE_NAME)
+                    .ok_or(ApiErrorKind::InvalidSessionCookie)?;
+                let mut claims: Claims = decode_token(&keys.decoding_key, cookie.value())?.claims;
+                claims.sub = Some(uid);
+                claims.authenticated = true;
+                set_session_cookie(&keys.encoding_key, cookies, &claims)?;
+            }
+            StageKind::UserLogout => todo!(),
+            StageKind::UserWrite => todo!(),
+            _ => unreachable!("Encountered client side stage"),
+        }
+        execution.complete_current();
     }
-}
-
-#[derive(Debug, Clone, Error, Display, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum SubmissionValidationError {
-    MissingField {
-        field_name: &'static str,
-    },
-    InvalidFieldType {
-        field_name: &'static str,
-        expected: FieldType,
-        got: FieldType,
-    },
+    Ok(())
 }

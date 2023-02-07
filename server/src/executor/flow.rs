@@ -13,7 +13,7 @@ use crate::{
 
 use super::{
     data::{FlowComponent, FlowData, FlowInfo},
-    ExecutionContext, FieldError,
+    ExecutionContext, SubmissionError,
 };
 
 #[derive(Clone)]
@@ -27,7 +27,7 @@ impl FlowExecution {
         let mut lock = self.0.context.try_write().expect("Context is locked");
         func(&mut *lock);
     }
-    pub async fn data(&self, error: Option<FieldError>, query: ExecutorQuery) -> FlowData {
+    pub async fn data(&self, error: Option<SubmissionError>, query: ExecutorQuery) -> FlowData {
         let flow = self.0.flow.as_ref();
         let entry = self.get_entry();
         let stage = self.lookup_stage(&entry.stage).await;
@@ -52,7 +52,7 @@ impl FlowExecution {
             },
             component,
             pending_user: self.0.context.read().pending.clone(),
-            field_error: error,
+            error,
         }
     }
     pub fn get_entry(&self) -> &FlowEntry {
@@ -71,17 +71,16 @@ impl FlowExecution {
         }
     }
 
+    pub fn is_completed(&self) -> bool {
+        self.0.is_completed.load(Ordering::Relaxed)
+    }
+
     pub async fn lookup_stage(&self, reference: &Reference<Stage>) -> Arc<Stage> {
-        match self
-            .0
-            .context
-            .read()
-            .storage
-            .lookup_reference(reference)
-            .await
-        {
+        let lock = self.0.context.read();
+        let storage = &lock.storage;
+        match storage.lookup_reference(reference).await {
             Some(v) => v,
-            None => panic!("Missing stage in storage"),
+            None => panic!("Missing stage in storage {reference:?}"),
         }
     }
 }

@@ -8,7 +8,6 @@ edition = "2021"
 [dependencies]
 serde = { workspace = true, features = ["derive"] }
 config = { workspace = true }
-dotenvy = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 once_cell = { workspace = true }
 tracing = { workspace = true, features = ["log"] }
@@ -23,7 +22,6 @@ sqlx = { workspace = true, features = [
 http = "0.2.8"
 uuid = { version = "1.2.2", features = ["serde"] }
 time = { version = "0.3.17", features = ["serde"] }
-concat-idents = "1.1.4"
 parking_lot = { version = "0.12.1", features = ["send_guard"] }
 jsonwebtoken = "8.2.0"
 rand = "0.8.5"
@@ -42,11 +40,13 @@ handlebars = "4.3.6"
 impl-tools = "0.6.2"
 serde_json = { workspace = true, features = ["preserve_order"] }
 axum = { workspace = true, features = ["headers", "macros"] }
-axum-extra = { version = "0.4.2", features = ["cookie", "query", "form"] }
+axum-extra = { version = "0.4.2", features = [] }
 tower = "0.4.13"
 futures = "0.3.26"
 pin-project-lite = "0.2.9"
 pin-project = "1.0.12"
 tower-http = { version = "0.3.5", features = ["trace"] }
 serde_urlencoded = "0.7.1"
+# cookie = { version = "0.17.0", features = ["percent-encoding"] }
+tower-cookies = { git = "https://github.com/DSeeLP/tower-cookies" }
 # parking_lot = { workspace = true }

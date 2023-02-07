@@ -10,7 +10,7 @@ pub struct Stage {
     pub timeout: i64,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum PasswordBackend {
     Internal,
@@ -46,6 +46,20 @@ pub enum StageKind {
         mode: ConsentMode,
     },
 }
+
+impl StageKind {
+    pub const fn requires_input(&self) -> bool {
+        match self {
+            StageKind::Deny => true,
+            StageKind::Prompt { .. } => true,
+            StageKind::Identification { .. } => true,
+            StageKind::UserLogin | StageKind::UserLogout | StageKind::UserWrite => false,
+            StageKind::Password { .. } => true,
+            StageKind::Consent { .. } => true,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ConsentMode {
     Always,

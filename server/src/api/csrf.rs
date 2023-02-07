@@ -1,10 +1,6 @@
 use std::{fmt::Debug, pin::Pin, str::Chars, task::Poll};
 
 use axum::response::{IntoResponse, Response};
-use axum_extra::extract::{
-    cookie::{Cookie, SameSite},
-    CookieJar,
-};
 use futures_util::Future;
 use http::{
     header::{self, HOST},
@@ -16,6 +12,10 @@ use rand::{
     thread_rng,
 };
 use tower::{Layer, Service};
+use tower_cookies::{
+    cookie::{Cookie, SameSite},
+    Cookies,
+};
 
 use super::CSRF_HEADER;
 
@@ -127,9 +127,9 @@ fn check_csrf<B>(
         req.method(),
         &Method::GET | &Method::HEAD | &Method::OPTIONS | &Method::TRACE
     ) {
-        if let Err((cookies, err)) = check_cookie(&req, true) {
+        if let Err(err) = check_cookie(&req, true) {
             if err == CsrfCookieError::ValidationError {
-                return Err((cookies, csrf_error_response()).into_response());
+                return Err(csrf_error_response());
             }
         }
         return Ok(());
@@ -153,9 +153,9 @@ fn check_csrf<B>(
             return Err(csrf_error_response());
         }
     }
-    if let Err((cookies, err)) = check_cookie(&req, true) {
+    if let Err(err) = check_cookie(&req, true) {
         if err == CsrfCookieError::ValidationError {
-            return Err((cookies, csrf_error_response()).into_response());
+            return Err(csrf_error_response());
         }
     }
     Ok(())
@@ -168,27 +168,27 @@ enum CsrfCookieError {
     ValidationError,
 }
 
-#[must_use]
-fn add_csrf_cookie(cookies: CookieJar) -> CookieJar {
+fn add_csrf_cookie(cookies: &Cookies) {
     let mut cookie = Cookie::new(CSRF_COOKIE_NAME, generate_csrf());
     cookie.set_same_site(SameSite::Lax);
+    cookie.set_path("/");
     cookies.add(cookie)
 }
 
-fn check_cookie<B>(req: &Request<B>, add: bool) -> Result<CookieJar, (CookieJar, CsrfCookieError)> {
-    let mut cookies = CookieJar::from_headers(req.headers());
+fn check_cookie<B>(req: &Request<B>, add: bool) -> Result<(), CsrfCookieError> {
+    let cookies: &Cookies = req.extensions().get().expect("No cookie layer installed");
     let Some(cookie) = cookies.get(CSRF_COOKIE_NAME) else {
         if add {
-            cookies = add_csrf_cookie(cookies);
+            add_csrf_cookie(cookies);
         }
-        return Err((cookies, CsrfCookieError::MissingCookie));
+        return Err(CsrfCookieError::MissingCookie);
     };
-    let Some(header) = req.headers().get(CSRF_HEADER) else { return Err((cookies,CsrfCookieError::InvalidHeader)) };
-    let Ok(str) = header.to_str() else { return Err((cookies,CsrfCookieError::InvalidHeader)) };
+    let Some(header) = req.headers().get(CSRF_HEADER) else { return Err(CsrfCookieError::InvalidHeader) };
+    let Ok(str) = header.to_str() else { return Err(CsrfCookieError::InvalidHeader) };
     if validate_token(str, cookie.value()) {
-        Ok(cookies)
+        Ok(())
     } else {
-        Err((cookies, CsrfCookieError::ValidationError))
+        Err(CsrfCookieError::ValidationError)
     }
 }
 

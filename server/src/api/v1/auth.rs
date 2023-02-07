@@ -7,19 +7,23 @@ use axum::{
     routing::{get, post},
     Router,
 };
-use axum_extra::extract::CookieJar;
 use futures::future::BoxFuture;
 
 use http::{request::Parts, Request, StatusCode};
-use jsonwebtoken::Validation;
+use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header, TokenData, Validation};
 use once_cell::sync::Lazy;
-use serde::{Deserialize, Serialize};
+use rand::{
+    distributions::{Alphanumeric, DistString},
+    rngs::OsRng,
+};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use sqlx::{query, Postgres};
 use tower::{Layer, Service};
+use tower_cookies::{cookie::SameSite, Cookie, Cookies};
 use uuid::Uuid;
 
 use crate::{
-    api::{sql_tx::Tx, AuthServiceData},
+    api::{sql_tx::Tx, ApiError, ApiErrorKind, AuthServiceData},
     auth::Session,
 };
 
@@ -27,7 +31,7 @@ mod login;
 mod logout;
 mod register;
 
-const SESSION_COOKIE_NAME: &str = "session";
+pub const SESSION_COOKIE_NAME: &str = "session";
 
 pub(super) fn setup_auth_router() -> Router {
     Router::new()
@@ -134,10 +138,10 @@ pub struct Oauth2Claims {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Claims {
-    sid: String,
-    iss: String,
-    sub: Option<Uuid>,
-    authenticated: bool,
+    pub sid: String,
+    pub iss: String,
+    pub sub: Option<Uuid>,
+    pub authenticated: bool,
 }
 
 fn response(code: StatusCode, body: &'static str) -> Response {
@@ -145,30 +149,45 @@ fn response(code: StatusCode, body: &'static str) -> Response {
 }
 
 const VALIDATION: Lazy<Validation> = Lazy::new(|| {
-    let mut validation = Validation::new(jsonwebtoken::Algorithm::HS256);
+    let mut validation = Validation::new(Algorithm::HS256);
     validation.set_required_spec_claims(&["iss"]);
     validation.set_issuer(&["authust"]);
     validation
 });
 
+pub fn decode_token<T: DeserializeOwned>(
+    key: &DecodingKey,
+    token: &str,
+) -> Result<TokenData<T>, ApiError> {
+    Ok(jsonwebtoken::decode(token, key, &VALIDATION)?)
+}
+
+pub fn encode_token(key: &EncodingKey, claims: &Claims) -> Result<String, ApiError> {
+    let header = Header::new(Algorithm::HS256);
+    Ok(jsonwebtoken::encode(&header, claims, key)?)
+}
+
+pub fn set_session_cookie(
+    key: &EncodingKey,
+    cookies: &Cookies,
+    claims: &Claims,
+) -> Result<(), ApiError> {
+    let token = encode_token(key, claims)?;
+    let mut cookie = Cookie::new(SESSION_COOKIE_NAME, token);
+    cookie.set_path("/");
+    cookie.set_same_site(SameSite::Strict);
+    cookie.set_http_only(true);
+    cookies.add(cookie);
+    Ok(())
+}
+
 fn handle_auth<B>(req: &mut Request<B>, data: &AuthServiceData) -> Result<(), Response> {
-    let cookies = CookieJar::from_headers(req.headers());
+    let cookies: &Cookies = req.extensions().get().expect("Missing cookie layer");
     let Some(cookie) = cookies.get(SESSION_COOKIE_NAME) else {
         req.extensions_mut().insert(AuthExtension::MissingCookie);
         return Ok(()) };
     let value = cookie.value();
-    let token = match jsonwebtoken::decode(value, &data.decoding_key, &VALIDATION) {
-        Ok(token) => token,
-        Err(err) => {
-            req.extensions_mut()
-                .insert(AuthExtension::InvalidCookieFormat);
-            tracing::error!("JWT Error: {err}");
-            return Err(response(
-                StatusCode::FORBIDDEN,
-                "Session cookie validation error",
-            ));
-        }
-    };
+    let token = decode_token(&data.decoding_key, value).map_err(|err| err.into_response())?;
     req.extensions_mut()
         .insert(AuthExtension::Valid(AuthExtensionData {
             header: token.header,
@@ -177,18 +196,17 @@ fn handle_auth<B>(req: &mut Request<B>, data: &AuthServiceData) -> Result<(), Re
     Ok(())
 }
 
-fn get_auth_extension_data(req: &mut Parts) -> Result<AuthExtensionData, Response> {
+fn get_auth_extension_data(req: &mut Parts) -> Result<AuthExtensionData, ApiError> {
     let Some(extension): Option<&AuthExtension> = req.extensions.get() else {
-            tracing::error!("Missing AuthMiddleware");
-            return Err(StatusCode::INTERNAL_SERVER_ERROR.into_response());
+            return Err(ApiErrorKind::MissingMiddleware("auth").into_api());
         };
     let data = match extension {
         AuthExtension::Valid(data) => data,
         AuthExtension::MissingCookie => {
-            return Err((StatusCode::UNAUTHORIZED, "Missing session cookie").into_response())
+            return Err(ApiErrorKind::SessionCookieMissing.into_api());
         }
         AuthExtension::InvalidCookieFormat => {
-            return Err((StatusCode::BAD_REQUEST, "Session cookie format").into_response());
+            return Err(ApiErrorKind::InvalidSessionCookie.into_api());
         }
     };
     Ok(data.to_owned())
@@ -196,33 +214,51 @@ fn get_auth_extension_data(req: &mut Parts) -> Result<AuthExtensionData, Respons
 
 #[async_trait]
 impl FromRequestParts<()> for Session {
-    type Rejection = Response;
+    type Rejection = ApiError;
 
     async fn from_request_parts(parts: &mut Parts, state: &()) -> Result<Self, Self::Rejection> {
-        let data = get_auth_extension_data(parts)?;
+        let mut tx: Tx<Postgres> = Tx::from_request_parts(parts, state).await?;
+        let data = match get_auth_extension_data(parts) {
+            Ok(v) => Ok(v),
+            Err(err) => match &err.kind {
+                ApiErrorKind::SessionCookieMissing => {
+                    let session_key = Alphanumeric.sample_string(&mut OsRng, 96);
+                    query!("insert into sessions(uid) values ($1)", session_key,)
+                        .execute(&mut tx)
+                        .await?;
+                    let claims = Claims {
+                        sid: session_key.clone(),
+                        iss: "authust".to_owned(),
+                        sub: None,
+                        authenticated: false,
+                    };
+                    let data: &AuthServiceData =
+                        parts.extensions.get().expect("Missing AuthServiceData");
+                    let cookies: &Cookies =
+                        parts.extensions.get().expect("Cookie layer is missing");
+                    set_session_cookie(&data.encoding_key, &cookies, &claims)?;
+                    return Ok(Session {
+                        session_id: session_key,
+                        user_id: None,
+                    });
+                }
+                _ => Err(err),
+            },
+        }?;
         let claims = data.claims;
-        let tx: Result<Tx<Postgres>, _> = Tx::from_request_parts(parts, state).await;
-        if let Err(err) = tx {
-            return Err(err.into_response());
-        }
-        let mut tx = tx.expect("Rust bug");
         let res = query!(
             "select user_id as \"user_id?: Uuid\" from sessions where uid = $1",
             claims.sid
         )
         .fetch_optional(&mut tx)
-        .await
-        .map_err(|err| {
-            tracing::error!("{err}");
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-        })?;
+        .await?;
         if let Some(res) = res {
             Ok(Session {
                 session_id: claims.sid,
                 user_id: res.user_id,
             })
         } else {
-            Err(StatusCode::UNAUTHORIZED.into_response())
+            Err(ApiErrorKind::Unauthorized.into_api())
         }
     }
 }

@@ -10,9 +10,8 @@ create table users
 
 create table sessions
 (
-    uid     char(96) not null unique,
-    user_id uuid     null references users,
-    primary key (uid, user_id)
+    uid     char(96) primary key,
+    user_id uuid     references users
 );
 
 create type policy_kind as enum ('password_expiry', 'password_strength', 'expression');

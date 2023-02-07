@@ -9,18 +9,24 @@ use axum::{
 use derive_more::{Display, Error, From};
 use http::{header::HeaderName, request::Parts, StatusCode};
 
-use jsonwebtoken::{DecodingKey, EncodingKey};
+use jsonwebtoken::{errors::ErrorKind, DecodingKey, EncodingKey};
 use serde::Deserialize;
 use tracing_error::SpanTrace;
 pub use v1::setup_api_v1;
 
-use self::{sql_tx::TxError, v1::executor::SubmissionValidationError};
+use crate::executor::SubmissionError;
+
+use self::sql_tx::TxError;
 
 pub mod csrf;
 pub mod sql_tx;
 mod v1;
 pub const CSRF_HEADER: HeaderName = HeaderName::from_static("x-csrf-token");
 #[derive(Debug, Display, Error)]
+#[display("{} \n Trace: \n {:?}", self.kind, match &self.st {
+    Some(v) => format!("{v}"),
+    None => String::new()
+})]
 pub struct ApiError {
     pub kind: ApiErrorKind,
     pub st: Option<SpanTrace>,
@@ -51,15 +57,40 @@ pub enum ApiErrorKind {
     Database(#[error(source, backtrace)] sqlx::Error),
 
     InvalidLoginData,
+    SessionCookieMissing,
+    InvalidSessionCookie,
     NotFound,
     MiscInternal,
+    Unauthorized,
+
+    #[display("Missing middleware: '{}'", 0)]
+    MissingMiddleware(#[error(not(source))] &'static str),
 
     #[from(ignore)]
     #[display("{}", 0)]
     PwHash(#[error(not(source))] argon2::password_hash::Error),
     Tx(#[error(source)] TxError),
 
-    SubmissionError(#[error(source)] SubmissionValidationError),
+    #[from]
+    SubmissionError(#[error(source)] SubmissionError),
+    #[from(ignore)]
+    JsonWebToken(#[error(source)] jsonwebtoken::errors::Error),
+}
+
+impl From<jsonwebtoken::errors::Error> for ApiErrorKind {
+    fn from(value: jsonwebtoken::errors::Error) -> Self {
+        match value.kind() {
+            ErrorKind::InvalidEcdsaKey => ApiErrorKind::JsonWebToken(value),
+            ErrorKind::InvalidRsaKey(_) => ApiErrorKind::JsonWebToken(value),
+            ErrorKind::RsaFailedSigning => ApiErrorKind::JsonWebToken(value),
+            ErrorKind::InvalidAlgorithmName => ApiErrorKind::JsonWebToken(value),
+            ErrorKind::InvalidKeyFormat => ApiErrorKind::JsonWebToken(value),
+            ErrorKind::InvalidAlgorithm => ApiErrorKind::JsonWebToken(value),
+            ErrorKind::MissingAlgorithm => ApiErrorKind::JsonWebToken(value),
+            ErrorKind::Crypto(_) => ApiErrorKind::JsonWebToken(value),
+            _ => ApiErrorKind::InvalidSessionCookie,
+        }
+    }
 }
 
 impl ApiErrorKind {
@@ -72,6 +103,11 @@ impl ApiErrorKind {
             ApiErrorKind::NotFound => false,
             ApiErrorKind::MiscInternal => true,
             ApiErrorKind::SubmissionError(_) => false,
+            ApiErrorKind::SessionCookieMissing => false,
+            ApiErrorKind::InvalidSessionCookie => false,
+            ApiErrorKind::MissingMiddleware(_) => true,
+            ApiErrorKind::Unauthorized => false,
+            ApiErrorKind::JsonWebToken(_) => true,
         }
     }
 
@@ -91,17 +127,28 @@ impl From<argon2::password_hash::Error> for ApiErrorKind {
 
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
+        if self.kind.is_internal() {
+            tracing::error!("{self}");
+        }
         match self.kind {
             ApiErrorKind::Database(_)
             | ApiErrorKind::PwHash(_)
             | ApiErrorKind::Tx(_)
-            | ApiErrorKind::MiscInternal => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+            | ApiErrorKind::MiscInternal
+            | ApiErrorKind::MissingMiddleware(_)
+            | ApiErrorKind::JsonWebToken(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
             ApiErrorKind::InvalidLoginData => StatusCode::UNAUTHORIZED.into_response(),
             ApiErrorKind::NotFound => StatusCode::NOT_FOUND.into_response(),
             ApiErrorKind::SubmissionError(err) => {
                 let mut response = Json(err).into_response();
                 *response.status_mut() = StatusCode::BAD_REQUEST;
                 response
+            }
+            ApiErrorKind::SessionCookieMissing | ApiErrorKind::Unauthorized => {
+                StatusCode::UNAUTHORIZED.into_response()
+            }
+            ApiErrorKind::InvalidSessionCookie => {
+                (StatusCode::UNAUTHORIZED, "Invalid session cookie").into_response()
             }
         }
     }
