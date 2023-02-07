@@ -1,6 +1,5 @@
-use std::{sync::Arc, time::Duration};
+use std::sync::Arc;
 
-use moka::sync::Cache;
 use sqlx::{query, Postgres};
 use uuid::Uuid;
 
@@ -22,7 +21,7 @@ pub struct PartialUser {
 }
 
 impl UserService {
-    pub fn delete_user(&self, uid: i32) {}
+    pub fn delete_user(&self, _uid: i32) {}
 
     pub async fn lookup_user(
         &self,
@@ -76,22 +75,10 @@ impl UserService {
     }
 }
 
-struct InternalUserService {
-    name_cache: Cache<String, Uuid>,
-    email_cache: Cache<String, Uuid>,
-}
+struct InternalUserService {}
 
 impl InternalUserService {
     pub fn new() -> Self {
-        Self {
-            name_cache: Cache::builder()
-                .time_to_idle(Duration::from_secs(60 * 60))
-                .max_capacity(2000)
-                .build(),
-            email_cache: Cache::builder()
-                .time_to_idle(Duration::from_secs(60 * 60))
-                .max_capacity(2000)
-                .build(),
-        }
+        Self {}
     }
 }

@@ -1,13 +1,16 @@
 use std::fmt::Debug;
 
+use async_trait::async_trait;
 use axum::{
+    extract::{rejection::QueryRejection, FromRequestParts, Query},
     response::{IntoResponse, Response},
     Json,
 };
 use derive_more::{Display, Error, From};
-use http::{header::HeaderName, StatusCode};
+use http::{header::HeaderName, request::Parts, StatusCode};
 
 use jsonwebtoken::{DecodingKey, EncodingKey};
+use serde::Deserialize;
 use tracing_error::SpanTrace;
 pub use v1::setup_api_v1;
 
@@ -111,5 +114,45 @@ pub struct AuthServiceData {
 impl Debug for AuthServiceData {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("AuthServiceData").finish()
+    }
+}
+
+#[derive(Debug, Deserialize, Default)]
+pub struct ExecutorQuery {
+    pub next: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct InternalQuery {
+    query: String,
+}
+
+pub enum ExecutorQueryRejection {
+    Chained(QueryRejection),
+    FailedToDeserializeQueryString(serde_urlencoded::de::Error),
+}
+
+impl IntoResponse for ExecutorQueryRejection {
+    fn into_response(self) -> Response {
+        match self {
+            ExecutorQueryRejection::Chained(v) => v.into_response(),
+            ExecutorQueryRejection::FailedToDeserializeQueryString(_v) => {
+                (StatusCode::BAD_REQUEST, "Failed to deserialize query").into_response()
+            }
+        }
+    }
+}
+#[async_trait]
+impl FromRequestParts<()> for ExecutorQuery {
+    type Rejection = ExecutorQueryRejection;
+    async fn from_request_parts(
+        parts: &mut Parts,
+        state: &(),
+    ) -> Result<ExecutorQuery, Self::Rejection> {
+        let query: Query<InternalQuery> = Query::from_request_parts(parts, state)
+            .await
+            .map_err(|err| ExecutorQueryRejection::Chained(err))?;
+        Ok(serde_urlencoded::from_str(query.0.query.as_str())
+            .map_err(|err| ExecutorQueryRejection::FailedToDeserializeQueryString(err))?)
     }
 }

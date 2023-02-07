@@ -358,7 +358,7 @@ dependencies = [
 [[package]]
 name = "derive_more"
 version = "0.99.17"
-source = "git+https://github.com/JelteF/derive_more#273b947919af667404134d558673f29ee9c51df6"
+source = "git+https://github.com/JelteF/derive_more#4816fd93df66f717ae04a51c198fa6ba73681498"
 dependencies = [
  "derive_more-impl",
 ]
@@ -366,7 +366,7 @@ dependencies = [
 [[package]]
 name = "derive_more-impl"
 version = "0.99.17"
-source = "git+https://github.com/JelteF/derive_more#273b947919af667404134d558673f29ee9c51df6"
+source = "git+https://github.com/JelteF/derive_more#4816fd93df66f717ae04a51c198fa6ba73681498"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1562,6 +1562,7 @@ dependencies = [
  "rand",
  "serde",
  "serde_json",
+ "serde_urlencoded",
  "sqlx",
  "time",
  "tokio",

@@ -27,6 +27,12 @@ pub enum FlowComponent {
     Password {
         recovery_url: String,
     },
+    Redirect {
+        to: String,
+    },
+    Error {
+        message: String,
+    },
 }
 
 impl Stage {

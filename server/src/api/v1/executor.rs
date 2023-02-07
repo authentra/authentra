@@ -1,18 +1,21 @@
 use async_trait::async_trait;
 use axum::{
-    extract::{rejection::PathRejection, FromRequestParts, OriginalUri, Path},
+    extract::{
+        rejection::{PathRejection},
+        FromRequestParts, OriginalUri, Path,
+    },
     response::{IntoResponse, Redirect, Response},
     routing::{get, MethodRouter},
     Extension, Form, Json, Router,
 };
 use derive_more::{Display, Error};
-use http::{request::Parts, Uri};
+use http::{request::Parts};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sqlx::Postgres;
 
 use crate::{
-    api::{sql_tx::Tx, ApiError, ApiErrorKind},
+    api::{sql_tx::Tx, ApiError, ApiErrorKind, ExecutorQuery},
     auth::Session,
     executor::{
         data::{FlowData, PendingUser},
@@ -52,6 +55,7 @@ async fn get_flow(
     session: Session,
     flow: Reference<Flow>,
     Extension(executor): Extension<FlowExecutor>,
+    query: Option<ExecutorQuery>,
 ) -> Result<Json<FlowData>, ApiError> {
     let key = executor
         .get_key(&session, flow)
@@ -60,7 +64,7 @@ async fn get_flow(
         .get_execution(&key, true)
         .await
         .ok_or(ApiErrorKind::NotFound.into_api())?;
-    let data = execution.data(None).await;
+    let data = execution.data(None, query.unwrap_or_default()).await;
     Ok(Json(data))
 }
 
@@ -71,6 +75,7 @@ async fn post_flow(
     Extension(executor): Extension<FlowExecutor>,
     Extension(users): Extension<UserService>,
     OriginalUri(uri): OriginalUri,
+    query: Option<ExecutorQuery>,
     Form(form): Form<Value>,
 ) -> Result<Response, ApiError> {
     let key = executor
@@ -82,8 +87,13 @@ async fn post_flow(
         .ok_or(ApiErrorKind::NotFound.into_api())?;
     let error = handle_submission(form, tx, executor, users, &execution).await?;
     Ok(match error {
-        Some(err) => Json(execution.data(Some(err)).await).into_response(),
-        None => Redirect::to(uri.path()).into_response(),
+        Some(err) => {
+            Json(execution.data(Some(err), query.unwrap_or_default()).await).into_response()
+        }
+        None => {
+            execution.complete_current();
+            Redirect::to(uri.path()).into_response()
+        }
     })
 }
 

@@ -13,7 +13,13 @@ tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 once_cell = { workspace = true }
 tracing = { workspace = true, features = ["log"] }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
-sqlx = { workspace = true, features = ["runtime-tokio-rustls", "postgres", "uuid", "time", "offline"] }
+sqlx = { workspace = true, features = [
+  "runtime-tokio-rustls",
+  "postgres",
+  "uuid",
+  "time",
+  "offline",
+] }
 http = "0.2.8"
 uuid = { version = "1.2.2", features = ["serde"] }
 time = { version = "0.3.17", features = ["serde"] }
@@ -25,7 +31,11 @@ futures-util = "0.3.25"
 # Wait for tower-cookies to update to new version
 async-trait = "0.1.63"
 argon2 = "0.4.1"
-derive_more = { git = "https://github.com/JelteF/derive_more", features = ["error", "display", "from"] }
+derive_more = { git = "https://github.com/JelteF/derive_more", features = [
+  "error",
+  "display",
+  "from",
+] }
 tracing-error = "0.2.0"
 moka = "0.9.6"
 handlebars = "4.3.6"
@@ -38,5 +48,5 @@ futures = "0.3.26"
 pin-project-lite = "0.2.9"
 pin-project = "1.0.12"
 tower-http = { version = "0.3.5", features = ["trace"] }
+serde_urlencoded = "0.7.1"
 # parking_lot = { workspace = true }
-

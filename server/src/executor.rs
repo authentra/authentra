@@ -1,11 +1,14 @@
 use std::{
-    sync::{atomic::AtomicUsize, Arc},
+    sync::{
+        atomic::{AtomicBool},
+        Arc,
+    },
     time::Duration,
 };
 
 use derive_more::Display;
 use moka::sync::Cache;
-use parking_lot::RwLock;
+use parking_lot::{Mutex, RwLock};
 use serde::Serialize;
 
 use crate::{
@@ -120,7 +123,8 @@ impl FlowExecutor {
         let execution = FlowExecutionInternal {
             flow,
             context: RwLock::new(context),
-            current_entry_idx: AtomicUsize::new(0),
+            current_entry_idx: Mutex::new(0),
+            is_completed: AtomicBool::new(false),
         };
         let execution = FlowExecution(Arc::new(execution));
         self.internal
