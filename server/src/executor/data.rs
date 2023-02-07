@@ -1,6 +1,6 @@
 use serde::Serialize;
 
-use crate::model::{Stage, StageKind};
+use crate::model::{Stage, StageKind, UserField};
 
 use super::flow::FlowExecution;
 
@@ -19,7 +19,7 @@ pub enum FlowComponent {
         message: String,
     },
     Identification {
-        user_fields: Vec<String>,
+        user_fields: Vec<UserField>,
         #[serde(flatten)]
         sources: Sources,
     },
@@ -29,13 +29,28 @@ pub enum FlowComponent {
 }
 
 impl Stage {
-    pub fn as_component(&self, _execution: &FlowExecution) -> Option<FlowComponent> {
+    pub async fn as_component(&self, execution: &FlowExecution) -> Option<FlowComponent> {
         match &self.kind {
             StageKind::Deny => Some(FlowComponent::AccessDenied {
                 message: "Access denied".to_owned(),
             }),
             StageKind::Prompt { bindings: _ } => todo!(),
-            StageKind::Identification { password: _ } => todo!(),
+            StageKind::Identification {
+                password,
+                user_fields,
+            } => {
+                let _stage = match password {
+                    Some(v) => Some(execution.lookup_stage(&v).await),
+                    None => None,
+                };
+                Some(FlowComponent::Identification {
+                    user_fields: user_fields.to_owned(),
+                    sources: Sources {
+                        sources: vec![],
+                        show_source_labels: false,
+                    },
+                })
+            }
             StageKind::UserLogin => todo!(),
             StageKind::UserLogout => todo!(),
             StageKind::UserWrite => todo!(),

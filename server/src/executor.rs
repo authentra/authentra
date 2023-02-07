@@ -1,12 +1,10 @@
 use std::{
-    collections::HashSet,
     sync::{atomic::AtomicUsize, Arc},
     time::Duration,
 };
 
 use derive_more::Display;
 use moka::sync::Cache;
-use parking_lot::Mutex;
 
 use crate::{
     auth::Session,
@@ -113,7 +111,6 @@ impl FlowExecutor {
             flow,
             context,
             current_entry_idx: AtomicUsize::new(0),
-            executor: self.clone(),
         };
         let execution = FlowExecution(Arc::new(execution));
         self.internal

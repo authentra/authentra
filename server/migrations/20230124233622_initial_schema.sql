@@ -77,6 +77,14 @@ create table consent_stages
     until int8
 );
 
+create type userid_fields as enum ('email', 'name', 'uuid');
+
+create table identification_stages
+(
+    uid    serial primary key,
+    fields userid_fields[] not null
+);
+
 create table stages
 (
     uid                           serial primary key,
@@ -84,13 +92,8 @@ create table stages
     kind                          stage_kind   not null,
     timeout                       int8         not null,
     identification_password_stage int4 references stages,
+    identification_stage          int4 references stages,
     consent_stage                 int4 references consent_stages
-);
-
-create table identification_stages
-(
-    uid            serial primary key,
-    password_stage int4 references stages on delete set null
 );
 
 create table stage_prompt_bindings

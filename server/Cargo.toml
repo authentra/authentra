@@ -31,7 +31,7 @@ moka = "0.9.6"
 handlebars = "4.3.6"
 impl-tools = "0.6.2"
 serde_json = { workspace = true, features = ["preserve_order"] }
-axum = { workspace = true, features = ["headers"] }
+axum = { workspace = true, features = ["headers", "macros"] }
 axum-extra = { version = "0.4.2", features = ["cookie", "query", "form"] }
 tower = "0.4.13"
 futures = "0.3.26"

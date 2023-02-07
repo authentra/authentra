@@ -102,7 +102,6 @@ where
 pub enum AuthExtension {
     Valid(AuthExtensionData),
     MissingCookie,
-    InvalidCookieProperties,
     InvalidCookieFormat,
 }
 
@@ -187,11 +186,6 @@ fn get_auth_extension_data(req: &mut Parts) -> Result<AuthExtensionData, Respons
         AuthExtension::Valid(data) => data,
         AuthExtension::MissingCookie => {
             return Err((StatusCode::UNAUTHORIZED, "Missing session cookie").into_response())
-        }
-        AuthExtension::InvalidCookieProperties => {
-            return Err(
-                (StatusCode::BAD_REQUEST, "Session cookie invalid parameters").into_response(),
-            );
         }
         AuthExtension::InvalidCookieFormat => {
             return Err((StatusCode::BAD_REQUEST, "Session cookie format").into_response());

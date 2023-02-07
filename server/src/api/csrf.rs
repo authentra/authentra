@@ -1,8 +1,6 @@
 use std::{fmt::Debug, pin::Pin, str::Chars, task::Poll};
 
-use axum::{
-    response::{IntoResponse, Response},
-};
+use axum::response::{IntoResponse, Response};
 use axum_extra::extract::{
     cookie::{Cookie, SameSite},
     CookieJar,
@@ -63,21 +61,6 @@ pub struct CsrfEndpoint<S> {
     allowed_hosts: Vec<String>,
     allowed_hosts_wildcard: bool,
     inner: S,
-}
-
-#[derive(Clone)]
-pub struct CsrfData {
-    allowed_hosts: Vec<String>,
-    is_wildcard: bool,
-}
-
-impl CsrfData {
-    pub fn new(allowed_hosts: Vec<String>) -> Self {
-        Self {
-            is_wildcard: allowed_hosts.contains(&"*".into()),
-            allowed_hosts,
-        }
-    }
 }
 
 #[pin_project::pin_project(project = CsrfFutureProj)]

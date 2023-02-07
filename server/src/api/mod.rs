@@ -80,10 +80,6 @@ impl From<argon2::password_hash::Error> for ApiErrorKind {
     }
 }
 
-pub struct ConvertedApiError {
-    status: StatusCode,
-}
-
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
         match self.kind {

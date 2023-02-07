@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use axum::{
     extract::{rejection::PathRejection, FromRequestParts, Path},
     response::Redirect,
-    routing::get,
+    routing::{get, MethodRouter},
     Extension, Form, Json, Router,
 };
 use http::{request::Parts, Uri};
@@ -18,9 +18,10 @@ use crate::{
 use super::ping_handler;
 
 pub fn setup_executor_router() -> Router {
-    Router::new()
-        .route("/ping", get(ping_handler))
-        .route("/:flow_slug", get(get_flow))
+    Router::new().route("/ping", get(ping_handler)).route(
+        "/:flow_slug",
+        MethodRouter::new().get(get_flow).post(post_flow),
+    )
 }
 
 #[derive(Deserialize)]
@@ -54,11 +55,12 @@ async fn get_flow(
     let data = execution.data().await;
     Ok(Json(data))
 }
+
 async fn post_flow(
     session: Session,
     flow: Reference<Flow>,
     Extension(executor): Extension<FlowExecutor>,
-    uri: &Uri,
+    uri: Uri,
     Form(form): Form<serde_json::Value>,
 ) -> Result<Redirect, ApiError> {
     let key = executor

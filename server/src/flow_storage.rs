@@ -9,7 +9,7 @@ use sqlx::{query, query_as, FromRow, PgPool};
 use crate::model::{
     AuthenticationRequirement, ConsentMode, Flow, FlowBinding, FlowBindingKind, FlowDesignation,
     FlowEntry, Policy, PolicyKind, Prompt, PromptKind, Referencable, Reference, ReferenceId,
-    ReferenceTarget, Stage, StageKind,
+    ReferenceTarget, Stage, StageKind, UserField,
 };
 
 struct LookupTable<T> {
@@ -126,7 +126,9 @@ pub struct PgPolicy {
     slug: String,
     kind: PgPolicyKind,
     password_expiration: Option<i32>,
+    #[allow(unused)]
     password_strength: Option<i32>,
+    #[allow(unused)]
     expression: Option<i32>,
 }
 
@@ -210,6 +212,7 @@ pub struct PgStage {
     kind: PgStageKind,
     timeout: i64,
     identification_password_stage: Option<i32>,
+    identification_stage: Option<i32>,
     consent_stage: Option<i32>,
 }
 
@@ -227,18 +230,30 @@ impl ReferenceDbQuery<Stage> for FlowStorageInternal {
         let lock = self.pool.lock();
         let Some(res) = match &reference.id {
             ReferenceId::Slug(_) => query_as!(PgStage,
-                r#"select uid, slug, kind as "kind: PgStageKind", timeout, identification_password_stage, consent_stage from stages where uid = $1"#,
+                r#"select uid, slug, kind as "kind: PgStageKind", timeout, identification_password_stage, consent_stage, identification_stage from stages where uid = $1"#,
                 1
             ).fetch_optional(&*lock).await,
             ReferenceId::Uid(_) => query_as!(PgStage,
-                r#"select uid, slug, kind as "kind: PgStageKind", timeout, identification_password_stage, consent_stage from stages where uid = $1"#,
+                r#"select uid, slug, kind as "kind: PgStageKind", timeout, identification_password_stage, consent_stage, identification_stage from stages where uid = $1"#,
                 1
                 ).fetch_optional(&*lock).await,
         }.ok().flatten() else { return None };
         let kind = match res.kind {
             PgStageKind::Deny => StageKind::Deny,
             PgStageKind::Prompt => todo!(),
-            PgStageKind::Identification => todo!(),
+            PgStageKind::Identification => {
+                let stage = match query!(
+                    r#"select fields as "fields: Vec<UserField>" from identification_stages where uid = $1"#,
+                    res.identification_stage
+                ).fetch_optional(&*lock).await.ok().flatten() {
+                    Some(v) => v,
+                    None => return None
+                };
+                StageKind::Identification {
+                    password: res.identification_password_stage.map(Reference::new_uid),
+                    user_fields: stage.fields,
+                }
+            }
             PgStageKind::UserLogin => StageKind::UserLogin,
             PgStageKind::UserLogout => StageKind::UserLogout,
             PgStageKind::UserWrite => StageKind::UserWrite,
@@ -580,7 +595,7 @@ impl ReverseLookup for Stage {
                 }))
                 .await;
             }
-            StageKind::Identification { password } => {
+            StageKind::Identification { password, .. } => {
                 if let Some(password) = password {
                     let stage = storage.lookup_reference(password).await;
                     if let Some(stage) = stage {
