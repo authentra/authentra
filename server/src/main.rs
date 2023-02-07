@@ -7,7 +7,8 @@ use crate::api::setup_api_v1;
 use crate::config::PostgresConfiguration;
 use crate::config::{AuthustConfiguration, InternalAuthustConfiguration};
 use crate::executor::FlowExecutor;
-use crate::flow_storage::FlowStorage;
+use crate::flow_storage::{FlowStorage, FreezedStorage, ReferenceLookup, ReverseLookup};
+use crate::model::{Flow, Reference};
 use crate::service::user::UserService;
 use api::AuthServiceData;
 
@@ -17,6 +18,7 @@ use axum::{Extension, Router};
 use handlebars::Handlebars;
 
 use jsonwebtoken::{DecodingKey, EncodingKey};
+use sqlx::query;
 use sqlx::{migrate::Migrator, postgres::PgConnectOptions, ConnectOptions, PgPool};
 use tower_http::trace::TraceLayer;
 use tracing::info;
@@ -55,12 +57,6 @@ async fn setup() {
     let pool = setup_database(&configuration.postgres, &password)
         .await
         .expect("Failed to connect to database");
-    info!("Running migrations on database...");
-    MIGRATOR
-        .run(&pool)
-        .await
-        .expect("Failed to run migrations on database");
-    info!("Database setup complete");
     start_server(configuration, pool).await;
 }
 
@@ -77,7 +73,14 @@ async fn setup_database(
         .application_name("Authust");
     options.log_statements(tracing::log::LevelFilter::Off);
     options.log_slow_statements(tracing::log::LevelFilter::Warn, Duration::from_millis(100));
-    PgPool::connect_with(options).await
+    let pool = PgPool::connect_with(options).await?;
+    info!("Running migrations on database...");
+    MIGRATOR
+        .run(&pool)
+        .await
+        .expect("Failed to run migrations on database");
+    info!("Database setup complete");
+    Ok(pool)
 }
 
 #[derive(Debug, Clone)]
@@ -106,8 +109,29 @@ impl FromRef<AppState> for AuthServiceData {
     }
 }
 
+async fn preload(pool: &PgPool, storage: &FlowStorage) -> Result<(), sqlx::Error> {
+    info!("Preloading flows...");
+    let ids = query!("select uid from flows")
+        .fetch_all(pool)
+        .await
+        .expect("Failed to load flow ids")
+        .into_iter()
+        .map(|rec| Reference::<Flow>::new_uid(rec.uid));
+    let freezed = FreezedStorage::new(storage.clone());
+    for reference in ids {
+        let flow = freezed
+            .lookup_reference(&reference)
+            .await
+            .expect("Failed to preload flow");
+        flow.reverse_lookup(&freezed).await;
+    }
+    info!("Preload complete");
+    Ok(())
+}
+
 async fn start_server(config: InternalAuthustConfiguration, pool: PgPool) {
     let storage = FlowStorage::new(pool.clone());
+    preload(&pool, &storage).await.expect("Preloading failed");
     let executor = FlowExecutor::new(storage);
     let users = UserService::new();
     let _handlebars = setup_handlebars();
