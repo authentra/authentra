@@ -1,5 +1,5 @@
 [package]
-name = "server"
+name = "authust_server"
 version = "0.1.0"
 edition = "2021"
 
@@ -50,4 +50,4 @@ serde_urlencoded = "0.7.1"
 # cookie = { version = "0.17.0", features = ["percent-encoding"] }
 tower-cookies = { git = "https://github.com/DSeeLP/tower-cookies" }
 # parking_lot = { workspace = true }
-model = { path = "../crates/model", features = ["axum", "sqlx"] }
+model = { path = "../model", features = ["axum", "sqlx"], package = "authust_model" }

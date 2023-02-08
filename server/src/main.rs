@@ -91,8 +91,8 @@ pub struct AuthustState {
 fn setup_handlebars<'reg>() -> Handlebars<'reg> {
     let mut handlebars = Handlebars::new();
     fn register(reg: &mut Handlebars, name: &str, path: impl AsRef<Path>) {
-        reg.register_template_file(name, path)
-            .expect("Failed to register template");
+        // reg.register_template_file(name, path)
+        //     .expect("Failed to register template");
     }
     register(&mut handlebars, "flow", "templates/flow.hbs");
     handlebars

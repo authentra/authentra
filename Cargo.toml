@@ -1,5 +1,5 @@
 [workspace]
-members = ["shared", "server", "outpost", "crates/model"]
+members = ["model", "server"]
 
 [workspace.dependencies]
 axum = ">=0.6.4"
