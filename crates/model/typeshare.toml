@@ -1,0 +1,12 @@
+[swift]
+prefix = ''
+
+[swift.type_mappings]
+[typescript.type_mappings]
+"Uuid" = "string"
+
+[kotlin]
+package = ''
+module_name = ''
+
+[kotlin.type_mappings]

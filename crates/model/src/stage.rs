@@ -3,22 +3,32 @@ use serde::{Deserialize, Serialize};
 use super::{PromptBinding, Reference};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[typeshare::typeshare]
 pub struct Stage {
     pub uid: i32,
     pub slug: String,
     pub kind: StageKind,
-    pub timeout: i64,
+    pub timeout: i32,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[typeshare::typeshare]
 #[serde(rename_all = "snake_case")]
 pub enum PasswordBackend {
     Internal,
     LDAP,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, sqlx::Type, PartialEq, Eq, Hash)]
-#[sqlx(type_name = "user_field", rename_all = "snake_case")]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[cfg_attr(feature = "sqlx", derive(sqlx::Type))]
+#[cfg_attr(
+    feature = "sqlx",
+    sqlx(type_name = "user_field", rename_all = "snake_case")
+)]
+#[typeshare::typeshare]
 #[serde(rename_all = "snake_case")]
 pub enum UserField {
     Email,
@@ -27,6 +37,9 @@ pub enum UserField {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[typeshare::typeshare]
+#[serde(tag = "kind", content = "data")]
 pub enum StageKind {
     Deny,
     Prompt {
@@ -61,8 +74,11 @@ impl StageKind {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[typeshare::typeshare]
+#[serde(tag = "type", content = "mode", rename_all = "snake_case")]
 pub enum ConsentMode {
     Always,
     Once,
-    Until { duration: i64 },
+    Until { duration: i32 },
 }

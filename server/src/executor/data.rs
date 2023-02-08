@@ -1,43 +1,17 @@
-use serde::Serialize;
-use uuid::Uuid;
+use async_trait::async_trait;
 
-use crate::model::{Stage, StageKind, UserField};
+use model::{FlowComponent, Sources, Stage, StageKind};
 
-use super::{flow::FlowExecution, SubmissionError};
+use super::flow::FlowExecution;
 
-#[derive(Serialize)]
-pub struct FlowData {
-    pub flow: FlowInfo,
-    pub error: Option<SubmissionError>,
-    pub pending_user: Option<PendingUser>,
-    #[serde(flatten)]
-    pub component: FlowComponent,
+#[async_trait]
+pub trait AsComponent {
+    async fn as_component(&self, execution: &FlowExecution) -> Option<FlowComponent>;
 }
 
-#[derive(Serialize)]
-#[serde(tag = "component", rename_all = "kebab-case")]
-pub enum FlowComponent {
-    AccessDenied {
-        message: String,
-    },
-    Identification {
-        user_fields: Vec<UserField>,
-        #[serde(flatten)]
-        sources: Sources,
-    },
-    Password {
-        recovery_url: String,
-    },
-    Redirect {
-        to: String,
-    },
-    Error {
-        message: String,
-    },
-}
-
-impl Stage {
-    pub async fn as_component(&self, execution: &FlowExecution) -> Option<FlowComponent> {
+#[async_trait]
+impl AsComponent for Stage {
+    async fn as_component(&self, execution: &FlowExecution) -> Option<FlowComponent> {
         match &self.kind {
             StageKind::Deny => Some(FlowComponent::AccessDenied {
                 message: "Access denied".to_owned(),
@@ -68,31 +42,4 @@ impl Stage {
             StageKind::Consent { mode: _ } => todo!(),
         }
     }
-}
-
-#[derive(Serialize)]
-pub struct Sources {
-    pub sources: Vec<Source>,
-    pub show_source_labels: bool,
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub struct PendingUser {
-    #[serde(skip)]
-    pub uid: Uuid,
-    pub name: String,
-    pub avatar_url: String,
-    // #[serde(skip)]
-    pub authenticated: bool,
-}
-
-#[derive(Serialize)]
-pub struct Source {
-    pub name: String,
-    pub icon_url: String,
-}
-
-#[derive(Serialize)]
-pub struct FlowInfo {
-    pub title: String,
 }

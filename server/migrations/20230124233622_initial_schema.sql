@@ -19,7 +19,7 @@ create type policy_kind as enum ('password_expiry', 'password_strength', 'expres
 create table password_expiration_policies
 (
     uid     serial primary key,
-    max_age int8 not null
+    max_age int4 not null
 );
 
 create table password_strength_policies
@@ -73,7 +73,7 @@ create table consent_stages
 (
     uid   serial primary key,
     mode  consent_mode not null,
-    until int8
+    until int4
 );
 
 create type userid_fields as enum ('email', 'name', 'uuid');
@@ -89,7 +89,7 @@ create table stages
     uid                           serial primary key,
     slug                          varchar(128) not null unique,
     kind                          stage_kind   not null,
-    timeout                       int8         not null,
+    timeout                       int4        not null,
     identification_password_stage int4 references stages,
     identification_stage          int4 references stages,
     consent_stage                 int4 references consent_stages

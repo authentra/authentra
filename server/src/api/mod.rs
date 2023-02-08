@@ -10,11 +10,10 @@ use derive_more::{Display, Error, From};
 use http::{header::HeaderName, request::Parts, StatusCode};
 
 use jsonwebtoken::{errors::ErrorKind, DecodingKey, EncodingKey};
+use model::error::SubmissionError;
 use serde::Deserialize;
 use tracing_error::SpanTrace;
 pub use v1::setup_api_v1;
-
-use crate::executor::SubmissionError;
 
 use self::sql_tx::TxError;
 

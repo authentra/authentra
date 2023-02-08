@@ -6,15 +6,81 @@ info:
   title: Authust API V1
   version: '1.0'
 paths:
-  "/":
+  "/api/v1/flow/executor/{flow-slug}":
     get: 
-      summary: Test
-      description: This is a test operation which needs at least 30 chars
-      operationId: test
-      security:
+      summary: Get Flow
+      operationId: get-flow
+      parameters:
+        - $ref: "#/components/parameters/FlowSlug"
+        - $ref: "#/components/parameters/Query"
+      responses: 
+        200: 
+          description: Ok
+          content:
+            application/json:
+              schema: 
+                $ref: "#/components/schemas/FlowData"
+      security: 
+        - {}
         - auth: []
-components: 
+    post: 
+      summary: Post Flow
+      operationId: post-flow
+      parameters:
+        - $ref: "#/components/parameters/FlowSlug"
+        - $ref: "#/components/parameters/Query"
+      responses: 
+        200:
+          description: Ok
+          content:
+            application/json:
+              schema: 
+                $ref: "#/components/schemas/FlowData"
+      security:
+        - {}
+        - auth: []
+
+  "/api/v1/auth":
+    get: 
+      summary: Check Auth
+      operationId: check-auth
+      responses: 
+        200: 
+          description: Ok
+          content:
+            application/json:
+              schema: 
+                type: object
+                properties: 
+                  uid:
+                    type:
+                      - string
+                      - null
+                    format: uuid
+        401:
+          description: Unauthorized
+      security:
+        - {}
+        - auth: []
+components:
   securitySchemes:
     auth:
-      type: http
-      scheme: bearer
+      type: apiKey
+      in: cookie
+      name: session
+  parameters:
+    FlowSlug:
+      in: path
+      required: true
+      name: flow-slug
+      schema:
+        type: string
+    Query:
+      in: query
+      name: query
+      required: false
+      schema:
+        type: string
+  schemas:
+    FlowData:
+      $ref: crates/model/schemas/flow-data.json

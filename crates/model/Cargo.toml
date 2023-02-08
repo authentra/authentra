@@ -1,0 +1,29 @@
+[package]
+name = "model"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[features]
+axum = ["dep:axum", "dep:async-trait"]
+
+[[example]]
+name = "generate-schemas"
+required-features = ["schemars"]
+
+[dependencies]
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+uuid = { workspace = true, features = ["serde"] }
+sqlx = { workspace = true, optional = true }
+impl-tools = { workspace = true }
+async-trait = { workspace = true, optional = true }
+axum = { workspace = true, optional = true }
+schemars = { workspace = true, optional = true, features = ["uuid1"] }
+derive_more = { workspace = true, features = [
+  "error",
+  "display",
+  "from",
+] }
+typeshare = { workspace = true }

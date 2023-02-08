@@ -4,12 +4,11 @@ use std::{
     marker::PhantomData,
 };
 
+use model::PendingUser;
 use time::OffsetDateTime;
 use uuid::Uuid;
 
 use crate::flow_storage::FreezedStorage;
-
-use super::data::PendingUser;
 
 pub struct ExecutionContext {
     pub session_id: String,

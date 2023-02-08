@@ -2,9 +2,9 @@
 
 apis:
   # Update the apiName with your actual API name, and the version with your actual API version.
-  apiName@version:
+  authust@1.0:
     # Update the path to your OpenAPI root file
-    root: ./server/openapi.yaml
+    root: ./openapi.yaml
 
 extends:
   - recommended
@@ -14,5 +14,3 @@ theme:
     generateCodeSamples:
       languages:
         - lang: curl
-        - lang: Node.js
-        - lang: Python

@@ -8,7 +8,6 @@ use crate::config::PostgresConfiguration;
 use crate::config::{AuthustConfiguration, InternalAuthustConfiguration};
 use crate::executor::FlowExecutor;
 use crate::flow_storage::{FlowStorage, FreezedStorage, ReferenceLookup, ReverseLookup};
-use crate::model::{Flow, Reference};
 use crate::service::user::UserService;
 use api::AuthServiceData;
 
@@ -18,8 +17,10 @@ use axum::{Extension, Router};
 use handlebars::Handlebars;
 
 use jsonwebtoken::{DecodingKey, EncodingKey};
+use model::{Flow, Reference};
 use sqlx::query;
 use sqlx::{migrate::Migrator, postgres::PgConnectOptions, ConnectOptions, PgPool};
+use tower_http::cors::CorsLayer;
 use tower_http::trace::TraceLayer;
 use tracing::info;
 use tracing_error::ErrorLayer;
@@ -30,7 +31,6 @@ pub mod auth;
 pub mod config;
 pub mod executor;
 pub mod flow_storage;
-pub mod model;
 pub mod service;
 
 #[tokio::main]
@@ -130,6 +130,8 @@ async fn preload(pool: &PgPool, storage: &FlowStorage) -> Result<(), sqlx::Error
 }
 
 async fn start_server(config: InternalAuthustConfiguration, pool: PgPool) {
+    //TODO: disable CORS
+    let cors = CorsLayer::very_permissive();
     let storage = FlowStorage::new(pool.clone());
     preload(&pool, &storage).await.expect("Preloading failed");
     let executor = FlowExecutor::new(storage);
@@ -150,7 +152,8 @@ async fn start_server(config: InternalAuthustConfiguration, pool: PgPool) {
         .layer(Extension(executor))
         .layer(Extension(users))
         .layer(Extension(state.auth_data.clone()))
-        .layer(TraceLayer::new_for_http());
+        .layer(TraceLayer::new_for_http())
+        .layer(cors);
     let bind = axum::Server::bind(&config.listen.http);
     info!("Listening on {}...", config.listen.http);
     bind.serve(router.into_make_service())

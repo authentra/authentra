@@ -20,16 +20,16 @@ sqlx = { workspace = true, features = [
   "offline",
 ] }
 http = "0.2.8"
-uuid = { version = "1.2.2", features = ["serde"] }
-time = { version = "0.3.17", features = ["serde"] }
+uuid = { workspace = true, features = ["serde"] }
+time = { workspace = true, features = ["serde"] }
 parking_lot = { version = "0.12.1", features = ["send_guard"] }
 jsonwebtoken = "8.2.0"
 rand = "0.8.5"
 futures-util = "0.3.25"
 # Wait for tower-cookies to update to new version
-async-trait = "0.1.63"
+async-trait = { workspace = true }
 argon2 = "0.4.1"
-derive_more = { git = "https://github.com/JelteF/derive_more", features = [
+derive_more = { workspace = true, features = [
   "error",
   "display",
   "from",
@@ -45,8 +45,9 @@ tower = "0.4.13"
 futures = "0.3.26"
 pin-project-lite = "0.2.9"
 pin-project = "1.0.12"
-tower-http = { version = "0.3.5", features = ["trace"] }
+tower-http = { version = "0.3.5", features = ["trace", "cors"] }
 serde_urlencoded = "0.7.1"
 # cookie = { version = "0.17.0", features = ["percent-encoding"] }
 tower-cookies = { git = "https://github.com/DSeeLP/tower-cookies" }
 # parking_lot = { workspace = true }
+model = { path = "../crates/model", features = ["axum", "sqlx"] }

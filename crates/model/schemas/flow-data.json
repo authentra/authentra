@@ -1,0 +1,300 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "FlowData",
+  "type": "object",
+  "oneOf": [
+    {
+      "type": "object",
+      "required": [
+        "component",
+        "message"
+      ],
+      "properties": {
+        "component": {
+          "type": "string",
+          "enum": [
+            "access-denied"
+          ]
+        },
+        "message": {
+          "type": "string"
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
+        "component",
+        "show_source_labels",
+        "sources",
+        "user_fields"
+      ],
+      "properties": {
+        "component": {
+          "type": "string",
+          "enum": [
+            "identification"
+          ]
+        },
+        "show_source_labels": {
+          "type": "boolean"
+        },
+        "sources": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Source"
+          }
+        },
+        "user_fields": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/UserField"
+          }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
+        "component",
+        "recovery_url"
+      ],
+      "properties": {
+        "component": {
+          "type": "string",
+          "enum": [
+            "password"
+          ]
+        },
+        "recovery_url": {
+          "type": "string"
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
+        "component",
+        "to"
+      ],
+      "properties": {
+        "component": {
+          "type": "string",
+          "enum": [
+            "redirect"
+          ]
+        },
+        "to": {
+          "type": "string"
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
+        "component",
+        "message"
+      ],
+      "properties": {
+        "component": {
+          "type": "string",
+          "enum": [
+            "error"
+          ]
+        },
+        "message": {
+          "type": "string"
+        }
+      }
+    }
+  ],
+  "required": [
+    "flow"
+  ],
+  "properties": {
+    "error": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/SubmissionError"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "flow": {
+      "$ref": "#/definitions/FlowInfo"
+    },
+    "pending_user": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/PendingUser"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "definitions": {
+    "FieldError": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "invalid"
+          ],
+          "properties": {
+            "invalid": {
+              "type": "object",
+              "required": [
+                "field",
+                "message"
+              ],
+              "properties": {
+                "field": {
+                  "type": "string"
+                },
+                "message": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "FieldType": {
+      "type": "string",
+      "enum": [
+        "null",
+        "boolean",
+        "string",
+        "number",
+        "object",
+        "array"
+      ]
+    },
+    "FlowInfo": {
+      "type": "object",
+      "required": [
+        "title"
+      ],
+      "properties": {
+        "title": {
+          "type": "string"
+        }
+      }
+    },
+    "PendingUser": {
+      "type": "object",
+      "required": [
+        "avatar_url",
+        "name"
+      ],
+      "properties": {
+        "avatar_url": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      }
+    },
+    "Source": {
+      "type": "object",
+      "required": [
+        "icon_url",
+        "name"
+      ],
+      "properties": {
+        "icon_url": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      }
+    },
+    "SubmissionError": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "no_pending_user",
+            "unauthenticated"
+          ]
+        },
+        {
+          "type": "object",
+          "required": [
+            "missing_field"
+          ],
+          "properties": {
+            "missing_field": {
+              "type": "object",
+              "required": [
+                "field_name"
+              ],
+              "properties": {
+                "field_name": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "invalid_field_type"
+          ],
+          "properties": {
+            "invalid_field_type": {
+              "type": "object",
+              "required": [
+                "expected",
+                "field_name",
+                "got"
+              ],
+              "properties": {
+                "expected": {
+                  "$ref": "#/definitions/FieldType"
+                },
+                "field_name": {
+                  "type": "string"
+                },
+                "got": {
+                  "$ref": "#/definitions/FieldType"
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "field"
+          ],
+          "properties": {
+            "field": {
+              "$ref": "#/definitions/FieldError"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "UserField": {
+      "type": "string",
+      "enum": [
+        "email",
+        "name",
+        "uuid"
+      ]
+    }
+  }
+}

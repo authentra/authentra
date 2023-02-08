@@ -1,14 +1,11 @@
 use argon2::{password_hash::Encoding, PasswordHash};
-use async_trait::async_trait;
 use axum::{
-    extract::{rejection::PathRejection, FromRequestParts, OriginalUri, Path},
+    extract::OriginalUri,
     response::{IntoResponse, Redirect, Response},
     routing::{get, MethodRouter},
     Extension, Form, Json, Router,
 };
-use http::request::Parts;
 
-use serde::Deserialize;
 use serde_json::Value;
 use sqlx::{query, Postgres};
 use tower_cookies::Cookies;
@@ -17,13 +14,12 @@ use uuid::Uuid;
 use crate::{
     api::{sql_tx::Tx, ApiError, ApiErrorKind, AuthServiceData, ExecutorQuery},
     auth::Session,
-    executor::{
-        data::{FlowData, PendingUser},
-        flow::FlowExecution,
-        FieldError, FieldType, FlowExecutor, SubmissionError,
-    },
-    model::{Flow, PasswordBackend, Reference, StageKind, UserField},
+    executor::{flow::FlowExecution, FlowExecutor},
     service::user::UserService,
+};
+use model::{
+    error::{FieldError, FieldType, SubmissionError},
+    Flow, FlowData, PasswordBackend, PendingUser, Reference, StageKind, UserField,
 };
 
 use super::{
@@ -36,22 +32,6 @@ pub fn setup_executor_router() -> Router {
         "/:flow_slug",
         MethodRouter::new().get(get_flow).post(post_flow),
     )
-}
-
-#[derive(Deserialize)]
-pub struct FlowParam {
-    flow_slug: String,
-}
-
-#[async_trait]
-impl FromRequestParts<()> for Reference<Flow> {
-    type Rejection = PathRejection;
-
-    async fn from_request_parts(parts: &mut Parts, state: &()) -> Result<Self, Self::Rejection> {
-        let path: Path<FlowParam> = Path::from_request_parts(parts, state).await?;
-        let flow_slug = path.0.flow_slug;
-        Ok(Reference::new_slug(flow_slug))
-    }
 }
 
 async fn get_flow(

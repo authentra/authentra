@@ -6,7 +6,7 @@ use parking_lot::{Mutex, RwLock};
 
 use sqlx::{query, query_as, FromRow, PgPool};
 
-use crate::model::{
+use model::{
     AuthenticationRequirement, ConsentMode, Flow, FlowBinding, FlowBindingKind, FlowDesignation,
     FlowEntry, PasswordBackend, Policy, PolicyKind, Prompt, PromptKind, Referencable, Reference,
     ReferenceId, ReferenceTarget, Stage, StageKind, UserField,
@@ -211,7 +211,7 @@ pub struct PgStage {
     uid: i32,
     slug: String,
     kind: PgStageKind,
-    timeout: i64,
+    timeout: i32,
     identification_password_stage: Option<i32>,
     identification_stage: Option<i32>,
     consent_stage: Option<i32>,

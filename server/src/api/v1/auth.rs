@@ -5,7 +5,7 @@ use axum::{
     extract::FromRequestParts,
     response::{IntoResponse, Response},
     routing::{get, post},
-    Router,
+    Json, Router,
 };
 use futures::future::BoxFuture;
 
@@ -41,8 +41,15 @@ pub(super) fn setup_auth_router() -> Router {
         .route("/", get(test))
 }
 
-pub async fn test(_session: Session) -> Response {
-    StatusCode::OK.into_response()
+#[derive(Serialize)]
+pub struct SessionResponse {
+    uid: Option<Uuid>,
+}
+
+pub async fn test(session: Session) -> Json<SessionResponse> {
+    Json(SessionResponse {
+        uid: session.user_id,
+    })
 }
 
 #[derive(Debug, Clone)]

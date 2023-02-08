@@ -1,0 +1,234 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Stage",
+  "type": "object",
+  "required": [
+    "kind",
+    "slug",
+    "timeout",
+    "uid"
+  ],
+  "properties": {
+    "kind": {
+      "$ref": "#/definitions/StageKind"
+    },
+    "slug": {
+      "type": "string"
+    },
+    "timeout": {
+      "type": "integer",
+      "format": "int64"
+    },
+    "uid": {
+      "type": "integer",
+      "format": "int32"
+    }
+  },
+  "definitions": {
+    "ConsentMode": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "Always",
+            "Once"
+          ]
+        },
+        {
+          "type": "object",
+          "required": [
+            "Until"
+          ],
+          "properties": {
+            "Until": {
+              "type": "object",
+              "required": [
+                "duration"
+              ],
+              "properties": {
+                "duration": {
+                  "type": "integer",
+                  "format": "int64"
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "PasswordBackend": {
+      "type": "string",
+      "enum": [
+        "internal",
+        "l_d_a_p"
+      ]
+    },
+    "PromptBinding": {
+      "type": "object",
+      "required": [
+        "order",
+        "prompt"
+      ],
+      "properties": {
+        "order": {
+          "type": "integer",
+          "format": "uint16",
+          "minimum": 0.0
+        },
+        "prompt": {
+          "$ref": "#/definitions/Reference"
+        }
+      }
+    },
+    "Reference": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "slug"
+          ],
+          "properties": {
+            "slug": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "uid"
+          ],
+          "properties": {
+            "uid": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "StageKind": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "Deny",
+            "UserLogin",
+            "UserLogout",
+            "UserWrite"
+          ]
+        },
+        {
+          "type": "object",
+          "required": [
+            "Prompt"
+          ],
+          "properties": {
+            "Prompt": {
+              "type": "object",
+              "required": [
+                "bindings"
+              ],
+              "properties": {
+                "bindings": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/definitions/PromptBinding"
+                  }
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "Identification"
+          ],
+          "properties": {
+            "Identification": {
+              "type": "object",
+              "required": [
+                "user_fields"
+              ],
+              "properties": {
+                "password": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/definitions/Reference"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "user_fields": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/definitions/UserField"
+                  }
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "Password"
+          ],
+          "properties": {
+            "Password": {
+              "type": "object",
+              "required": [
+                "backends"
+              ],
+              "properties": {
+                "backends": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/definitions/PasswordBackend"
+                  }
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "Consent"
+          ],
+          "properties": {
+            "Consent": {
+              "type": "object",
+              "required": [
+                "mode"
+              ],
+              "properties": {
+                "mode": {
+                  "$ref": "#/definitions/ConsentMode"
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "UserField": {
+      "type": "string",
+      "enum": [
+        "email",
+        "name",
+        "uuid"
+      ]
+    }
+  }
+}

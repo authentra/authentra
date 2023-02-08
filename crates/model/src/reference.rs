@@ -1,6 +1,8 @@
 use std::marker::PhantomData;
 
 use impl_tools::autoimpl;
+#[cfg(feature = "schemars")]
+use schemars::{schema::Schema, schema_for, JsonSchema};
 use serde::{Deserialize, Serialize};
 
 use self::sealed::Sealed;
@@ -8,6 +10,8 @@ use self::sealed::Sealed;
 use super::{Flow, Policy, Prompt, Stage};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+// #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[typeshare::typeshare]
 #[autoimpl(Hash ignore self._target)]
 #[autoimpl(PartialEq ignore self._target)]
 #[autoimpl(Eq)]
@@ -16,6 +20,28 @@ pub struct Reference<Target: ReferenceTarget> {
     pub id: ReferenceId,
     #[serde(skip)]
     _target: PhantomData<Target>,
+}
+
+#[cfg(feature = "schemars")]
+impl<T: ReferenceTarget> JsonSchema for Reference<T> {
+    fn schema_name() -> String {
+        "Reference".to_owned()
+    }
+
+    fn json_schema(_gen: &mut schemars::gen::SchemaGenerator) -> schemars::schema::Schema {
+        let mut schema = schema_for!(ReferenceId).schema;
+        schema.metadata = None;
+        Schema::Object(schema)
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Hash, PartialEq, Eq)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[typeshare::typeshare]
+#[serde(tag = "kind", content = "id", rename_all = "lowercase")]
+pub enum ReferenceId {
+    Slug(String),
+    Uid(i32),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Hash, PartialEq, Eq)]
@@ -48,7 +74,7 @@ impl<Target: ReferenceTarget> Reference<Target> {
 }
 
 mod sealed {
-    use crate::model::{Flow, Policy, Prompt, Stage};
+    use crate::{Flow, Policy, Prompt, Stage};
 
     pub trait Sealed {}
     impl Sealed for Flow {}
@@ -117,10 +143,4 @@ impl Referencable for Flow {
     fn ref_slug(&self) -> Option<Reference<Self>> {
         Some(Reference::new_slug(self.slug.clone()))
     }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Hash, PartialEq, Eq)]
-pub enum ReferenceId {
-    Slug(String),
-    Uid(i32),
 }

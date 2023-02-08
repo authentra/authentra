@@ -5,16 +5,12 @@ use std::sync::{
 
 use parking_lot::{lock_api::RwLockReadGuard, Mutex, RawRwLock, RwLock};
 
-use crate::{
-    api::ExecutorQuery,
-    flow_storage::ReferenceLookup,
-    model::{Flow, FlowEntry, Reference, Stage},
+use crate::{api::ExecutorQuery, flow_storage::ReferenceLookup};
+use model::{
+    error::SubmissionError, Flow, FlowComponent, FlowData, FlowEntry, FlowInfo, Reference, Stage,
 };
 
-use super::{
-    data::{FlowComponent, FlowData, FlowInfo},
-    ExecutionContext, SubmissionError,
-};
+use super::{data::AsComponent, ExecutionContext};
 
 #[derive(Clone)]
 pub struct FlowExecution(pub(super) Arc<FlowExecutionInternal>);

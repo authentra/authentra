@@ -1,0 +1,63 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Prompt",
+  "type": "object",
+  "required": [
+    "field_key",
+    "kind",
+    "label",
+    "required",
+    "uid"
+  ],
+  "properties": {
+    "field_key": {
+      "type": "string"
+    },
+    "help_text": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "kind": {
+      "$ref": "#/definitions/PromptKind"
+    },
+    "label": {
+      "type": "string"
+    },
+    "placeholder": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "required": {
+      "type": "boolean"
+    },
+    "uid": {
+      "type": "integer",
+      "format": "int32"
+    }
+  },
+  "definitions": {
+    "PromptKind": {
+      "type": "string",
+      "enum": [
+        "username",
+        "email",
+        "password",
+        "text",
+        "text_read_only",
+        "signed_number",
+        "unsigned_number",
+        "checkbox",
+        "switch",
+        "date",
+        "date_time",
+        "seperator",
+        "static",
+        "locale"
+      ]
+    }
+  }
+}
