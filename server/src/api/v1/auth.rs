@@ -219,6 +219,26 @@ fn get_auth_extension_data(req: &mut Parts) -> Result<AuthExtensionData, ApiErro
     Ok(data.to_owned())
 }
 
+async fn make_new_session(tx: &mut Tx<Postgres>, parts: &mut Parts) -> Result<Session, ApiError> {
+    let session_key = Alphanumeric.sample_string(&mut OsRng, 96);
+    query!("insert into sessions(uid) values ($1)", session_key,)
+        .execute(tx)
+        .await?;
+    let claims = Claims {
+        sid: session_key.clone(),
+        iss: "authust".to_owned(),
+        sub: None,
+        authenticated: false,
+    };
+    let data: &AuthServiceData = parts.extensions.get().expect("Missing AuthServiceData");
+    let cookies: &Cookies = parts.extensions.get().expect("Cookie layer is missing");
+    set_session_cookie(&data.encoding_key, &cookies, &claims)?;
+    Ok(Session {
+        session_id: session_key,
+        user_id: None,
+    })
+}
+
 #[async_trait]
 impl FromRequestParts<()> for Session {
     type Rejection = ApiError;
@@ -229,25 +249,7 @@ impl FromRequestParts<()> for Session {
             Ok(v) => Ok(v),
             Err(err) => match &err.kind {
                 ApiErrorKind::SessionCookieMissing => {
-                    let session_key = Alphanumeric.sample_string(&mut OsRng, 96);
-                    query!("insert into sessions(uid) values ($1)", session_key,)
-                        .execute(&mut tx)
-                        .await?;
-                    let claims = Claims {
-                        sid: session_key.clone(),
-                        iss: "authust".to_owned(),
-                        sub: None,
-                        authenticated: false,
-                    };
-                    let data: &AuthServiceData =
-                        parts.extensions.get().expect("Missing AuthServiceData");
-                    let cookies: &Cookies =
-                        parts.extensions.get().expect("Cookie layer is missing");
-                    set_session_cookie(&data.encoding_key, &cookies, &claims)?;
-                    return Ok(Session {
-                        session_id: session_key,
-                        user_id: None,
-                    });
+                    return make_new_session(&mut tx, parts).await;
                 }
                 _ => Err(err),
             },
@@ -265,7 +267,7 @@ impl FromRequestParts<()> for Session {
                 user_id: res.user_id,
             })
         } else {
-            Err(ApiErrorKind::Unauthorized.into_api())
+            make_new_session(&mut tx, parts).await
         }
     }
 }

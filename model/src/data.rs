@@ -8,6 +8,7 @@ use crate::{error::SubmissionError, UserField};
 #[typeshare::typeshare]
 pub struct FlowData {
     pub flow: FlowInfo,
+    #[serde(rename = "response_error")]
     pub error: Option<SubmissionError>,
     pub pending_user: Option<PendingUser>,
     #[serde(flatten)]
