@@ -1,20 +1,14 @@
-import './app.css'
-import 'uno.css'
-import App from './App.svelte'
-import Home from './routes/Home.svelte'
-import Test from './routes/Test.svelte';
-import { wrap } from 'svelte-spa-router/wrap';
+import { createApp } from 'vue'
+import { createPinia } from 'pinia'
 
-export const routes = {
-  "/": Home,
-  "/test": Test,
-  "/flow/:flow_slug": wrap({
-    asyncComponent: () => import('./routes/flow/Flow.svelte')
-  })
-};
+import App from './App.vue'
+import router from './router'
 
-const app = new App({
-  target: document.getElementById('app'),
-})
+import './assets/main.css'
 
-export default app
+const app = createApp(App)
+
+app.use(createPinia())
+app.use(router)
+
+app.mount('#app')

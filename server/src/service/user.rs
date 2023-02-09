@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use model::user::PartialUser;
 use sqlx::{query, Postgres};
 use uuid::Uuid;
 
@@ -14,14 +15,29 @@ impl UserService {
     }
 }
 
-pub struct PartialUser {
-    pub uuid: Uuid,
-    pub name: String,
-    pub icon_url: Option<String>,
-}
-
 impl UserService {
     pub fn delete_user(&self, _uid: i32) {}
+
+    pub async fn lookup_user_uid(
+        &self,
+        tx: &mut Tx<Postgres>,
+        uid: Uuid,
+    ) -> Result<Option<PartialUser>, ApiError> {
+        Ok(
+            if let Some(res) = query!("select uid,name from users where uid = $1", uid)
+                .fetch_optional(&mut *tx)
+                .await?
+            {
+                Some(PartialUser {
+                    uid: res.uid,
+                    name: res.name,
+                    icon_url: None,
+                })
+            } else {
+                None
+            },
+        )
+    }
 
     pub async fn lookup_user(
         &self,
@@ -37,7 +53,7 @@ impl UserService {
                 .await?
             {
                 return Ok(Some(PartialUser {
-                    uuid: res.uid,
+                    uid: res.uid,
                     name: res.name,
                     icon_url: None,
                 }));
@@ -49,7 +65,7 @@ impl UserService {
                 .await?
             {
                 return Ok(Some(PartialUser {
-                    uuid: res.uid,
+                    uid: res.uid,
                     name: res.name,
                     icon_url: None,
                 }));
@@ -65,7 +81,7 @@ impl UserService {
                 .await?
             {
                 return Ok(Some(PartialUser {
-                    uuid: res.uid,
+                    uid: res.uid,
                     name: res.name,
                     icon_url: None,
                 }));

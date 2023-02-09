@@ -1,9 +1,9 @@
 use argon2::{password_hash::Encoding, PasswordHash};
 use axum::{
-    extract::OriginalUri,
+    extract::{OriginalUri, State},
     response::{IntoResponse, Redirect, Response},
     routing::{get, MethodRouter},
-    Extension, Form, Json, Router,
+    Form, Json, Router,
 };
 
 use serde_json::Value;
@@ -16,6 +16,7 @@ use crate::{
     auth::Session,
     executor::{flow::FlowExecution, FlowExecutor},
     service::user::UserService,
+    SharedState,
 };
 use model::{
     error::{FieldError, FieldType, SubmissionError},
@@ -27,7 +28,7 @@ use super::{
     ping_handler,
 };
 
-pub fn setup_executor_router() -> Router {
+pub fn setup_executor_router() -> Router<SharedState> {
     Router::new().route("/ping", get(ping_handler)).route(
         "/:flow_slug",
         MethodRouter::new().get(get_flow).post(post_flow),
@@ -37,9 +38,10 @@ pub fn setup_executor_router() -> Router {
 async fn get_flow(
     session: Session,
     flow: Reference<Flow>,
-    Extension(executor): Extension<FlowExecutor>,
+    State(state): State<SharedState>,
     query: Option<ExecutorQuery>,
 ) -> Result<Json<FlowData>, ApiError> {
+    let executor = state.executor();
     let key = executor
         .get_key(&session, flow)
         .ok_or(ApiErrorKind::MiscInternal.into_api())?;
@@ -55,14 +57,13 @@ async fn post_flow(
     session: Session,
     mut tx: Tx<Postgres>,
     flow: Reference<Flow>,
-    Extension(executor): Extension<FlowExecutor>,
-    Extension(users): Extension<UserService>,
-    Extension(keys): Extension<AuthServiceData>,
+    State(state): State<SharedState>,
     OriginalUri(uri): OriginalUri,
     cookies: Cookies,
     query: Option<ExecutorQuery>,
     Form(form): Form<Value>,
 ) -> Result<Response, ApiError> {
+    let executor = state.executor();
     let key = executor
         .get_key(&session, flow)
         .ok_or(ApiErrorKind::NotFound.into_api())?;
@@ -70,7 +71,7 @@ async fn post_flow(
         .get_execution(&key, false)
         .await
         .ok_or(ApiErrorKind::NotFound.into_api())?;
-    if let Err(err) = handle_submission(form, &mut tx, executor, users, &execution).await {
+    if let Err(err) = handle_submission(form, &mut tx, executor, &state.users(), &execution).await {
         match &err.kind {
             ApiErrorKind::SubmissionError(err) => Ok(Json(
                 execution
@@ -82,7 +83,7 @@ async fn post_flow(
         }
     } else {
         execution.complete_current();
-        complete(&mut tx, &execution, &keys, &cookies, session).await?;
+        complete(&mut tx, &execution, &state.auth_data(), &cookies, session).await?;
         tx.commit().await?;
         Ok(Redirect::to(uri.to_string().as_str()).into_response())
     }
@@ -91,8 +92,8 @@ async fn post_flow(
 async fn handle_submission(
     form: Value,
     tx: &mut Tx<Postgres>,
-    _executor: FlowExecutor,
-    users: UserService,
+    _executor: &FlowExecutor,
+    users: &UserService,
     execution: &FlowExecution,
 ) -> Result<(), ApiError> {
     let entry = execution.get_entry();
@@ -122,7 +123,7 @@ async fn handle_submission(
             match user {
                 Some(user) => execution.use_mut_context(move |ctx| {
                     ctx.pending = Some(PendingUser {
-                        uid: user.uuid,
+                        uid: user.uid,
                         name: user.name,
                         avatar_url: "".into(),
                         authenticated: false,

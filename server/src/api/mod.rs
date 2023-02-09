@@ -189,11 +189,14 @@ impl IntoResponse for ExecutorQueryRejection {
     }
 }
 #[async_trait]
-impl FromRequestParts<()> for ExecutorQuery {
+impl<S> FromRequestParts<S> for ExecutorQuery
+where
+    S: Send + Sync,
+{
     type Rejection = ExecutorQueryRejection;
     async fn from_request_parts(
         parts: &mut Parts,
-        state: &(),
+        state: &S,
     ) -> Result<ExecutorQuery, Self::Rejection> {
         let query: Query<InternalQuery> = Query::from_request_parts(parts, state)
             .await

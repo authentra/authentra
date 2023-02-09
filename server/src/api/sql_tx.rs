@@ -111,10 +111,10 @@ where
 }
 
 #[async_trait]
-impl<Db: Database> FromRequestParts<()> for Tx<Db> {
+impl<Db: Database, S> FromRequestParts<S> for Tx<Db> {
     type Rejection = TxError;
 
-    async fn from_request_parts(parts: &mut Parts, _state: &()) -> Result<Self, Self::Rejection> {
+    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
         let ext: &mut LazyTx<Db> = parts
             .extensions
             .get_mut()

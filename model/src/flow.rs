@@ -81,10 +81,13 @@ pub struct FlowParam {
 
 #[cfg(feature = "axum")]
 #[async_trait::async_trait]
-impl axum::extract::FromRequestParts<()> for Reference<Flow> {
+impl<S> axum::extract::FromRequestParts<S> for Reference<Flow>
+where
+    S: Send + Sync,
+{
     type Rejection = PathRejection;
 
-    async fn from_request_parts(parts: &mut Parts, state: &()) -> Result<Self, Self::Rejection> {
+    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
         let path: Path<FlowParam> = Path::from_request_parts(parts, state).await?;
         let flow_slug = path.0.flow_slug;
         Ok(Reference::new_slug(flow_slug))

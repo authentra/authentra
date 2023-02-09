@@ -50,13 +50,7 @@ paths:
           content:
             application/json:
               schema: 
-                type: object
-                properties: 
-                  uid:
-                    type:
-                      - string
-                      - null
-                    format: uuid
+                $ref: "#/components/schemas/PartialUser"
         401:
           description: Unauthorized
       security:
@@ -83,4 +77,6 @@ components:
         type: string
   schemas:
     FlowData:
-      $ref: crates/model/schemas/flow-data.json
+      $ref: model/schemas/flow-data.json
+    PartialUser:
+      $ref: model/schemas/partial-user.json

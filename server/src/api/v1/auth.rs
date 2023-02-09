@@ -2,15 +2,16 @@ use std::fmt::Debug;
 
 use async_trait::async_trait;
 use axum::{
-    extract::FromRequestParts,
+    extract::{FromRequestParts, State},
     response::{IntoResponse, Response},
     routing::{get, post},
     Json, Router,
 };
 use futures::future::BoxFuture;
 
-use http::{request::Parts, Request, StatusCode};
+use http::{request::Parts, Request};
 use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header, TokenData, Validation};
+use model::user::PartialUser;
 use once_cell::sync::Lazy;
 use rand::{
     distributions::{Alphanumeric, DistString},
@@ -25,31 +26,35 @@ use uuid::Uuid;
 use crate::{
     api::{sql_tx::Tx, ApiError, ApiErrorKind, AuthServiceData},
     auth::Session,
+    SharedState,
 };
 
-mod login;
-mod logout;
 mod register;
 
 pub const SESSION_COOKIE_NAME: &str = "session";
 
-pub(super) fn setup_auth_router() -> Router {
+pub(super) fn setup_auth_router() -> Router<SharedState> {
     Router::new()
-        .route("/login", post(login::login))
-        .route("/logout", post(logout::logout))
         .route("/register", post(register::register))
-        .route("/", get(test))
+        .route("/", get(user_info))
 }
 
 #[derive(Serialize)]
 pub struct SessionResponse {
-    uid: Option<Uuid>,
+    user: Option<PartialUser>,
 }
 
-pub async fn test(session: Session) -> Json<SessionResponse> {
-    Json(SessionResponse {
-        uid: session.user_id,
-    })
+#[axum::debug_handler]
+pub async fn user_info(
+    session: Session,
+    mut tx: Tx<Postgres>,
+    State(state): State<SharedState>,
+) -> Result<Json<SessionResponse>, ApiError> {
+    if let Some(uid) = session.user_id {
+        let user = state.users().lookup_user_uid(&mut tx, uid).await?;
+        return Ok(Json(SessionResponse { user }));
+    }
+    Ok(Json(SessionResponse { user: None }))
 }
 
 #[derive(Debug, Clone)]
@@ -113,7 +118,6 @@ where
 pub enum AuthExtension {
     Valid(AuthExtensionData),
     MissingCookie,
-    InvalidCookieFormat,
 }
 
 #[derive(Debug, Clone)]
@@ -149,10 +153,6 @@ pub struct Claims {
     pub iss: String,
     pub sub: Option<Uuid>,
     pub authenticated: bool,
-}
-
-fn response(code: StatusCode, body: &'static str) -> Response {
-    (code, body).into_response()
 }
 
 const VALIDATION: Lazy<Validation> = Lazy::new(|| {
@@ -212,9 +212,6 @@ fn get_auth_extension_data(req: &mut Parts) -> Result<AuthExtensionData, ApiErro
         AuthExtension::MissingCookie => {
             return Err(ApiErrorKind::SessionCookieMissing.into_api());
         }
-        AuthExtension::InvalidCookieFormat => {
-            return Err(ApiErrorKind::InvalidSessionCookie.into_api());
-        }
     };
     Ok(data.to_owned())
 }
@@ -240,10 +237,13 @@ async fn make_new_session(tx: &mut Tx<Postgres>, parts: &mut Parts) -> Result<Se
 }
 
 #[async_trait]
-impl FromRequestParts<()> for Session {
+impl<S> FromRequestParts<S> for Session
+where
+    S: Send + Sync,
+{
     type Rejection = ApiError;
 
-    async fn from_request_parts(parts: &mut Parts, state: &()) -> Result<Self, Self::Rejection> {
+    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
         let mut tx: Tx<Postgres> = Tx::from_request_parts(parts, state).await?;
         let data = match get_auth_extension_data(parts) {
             Ok(v) => Ok(v),

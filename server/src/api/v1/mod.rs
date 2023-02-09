@@ -10,7 +10,7 @@ use crate::{
         sql_tx::TxLayer,
         v1::{auth::setup_auth_router, flow::setup_flow_router},
     },
-    AppState,
+    SharedState,
 };
 
 use self::auth::AuthLayer;
@@ -20,12 +20,12 @@ pub mod auth;
 pub mod executor;
 pub mod flow;
 
-pub async fn setup_api_v1(_secret: &str, state: AppState, pool: PgPool) -> Router {
+pub async fn setup_api_v1(_secret: &str, state: SharedState, pool: PgPool) -> Router<SharedState> {
     let service = ServiceBuilder::new()
         .layer(CookieManagerLayer::new())
         .layer(TxLayer::new(pool))
         .layer(CsrfLayer::new(vec!["*".into()]))
-        .layer(AuthLayer::new(state.auth_data.clone()));
+        .layer(AuthLayer::new(state.auth_data().clone()));
     let router = Router::new()
         .route("/ping", get(ping_handler))
         .nest("/flow", setup_flow_router())

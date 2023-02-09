@@ -1,6 +1,7 @@
 #![feature(error_generic_member_access, provide_any)]
 
 use std::path::Path;
+use std::sync::Arc;
 use std::time::Duration;
 
 use crate::api::setup_api_v1;
@@ -13,7 +14,7 @@ use api::AuthServiceData;
 
 use axum::extract::FromRef;
 use axum::routing::get;
-use axum::{Extension, Router};
+use axum::Router;
 use handlebars::Handlebars;
 
 use jsonwebtoken::{DecodingKey, EncodingKey};
@@ -90,7 +91,7 @@ pub struct AuthustState {
 
 fn setup_handlebars<'reg>() -> Handlebars<'reg> {
     let mut handlebars = Handlebars::new();
-    fn register(reg: &mut Handlebars, name: &str, path: impl AsRef<Path>) {
+    fn register(_reg: &mut Handlebars, _name: &str, _path: impl AsRef<Path>) {
         // reg.register_template_file(name, path)
         //     .expect("Failed to register template");
     }
@@ -129,6 +130,29 @@ async fn preload(pool: &PgPool, storage: &FlowStorage) -> Result<(), sqlx::Error
     Ok(())
 }
 
+#[derive(Clone)]
+pub struct SharedState(Arc<InternalSharedState>);
+
+impl SharedState {
+    pub fn users(&self) -> &UserService {
+        &self.0.users
+    }
+
+    pub fn executor(&self) -> &FlowExecutor {
+        &self.0.executor
+    }
+
+    pub fn auth_data(&self) -> &AuthServiceData {
+        &self.0.auth_data
+    }
+}
+
+struct InternalSharedState {
+    users: UserService,
+    executor: FlowExecutor,
+    auth_data: AuthServiceData,
+}
+
 async fn start_server(config: InternalAuthustConfiguration, pool: PgPool) {
     //TODO: disable CORS
     let cors = CorsLayer::very_permissive();
@@ -137,23 +161,24 @@ async fn start_server(config: InternalAuthustConfiguration, pool: PgPool) {
     let executor = FlowExecutor::new(storage);
     let users = UserService::new();
     let _handlebars = setup_handlebars();
-    let state = AppState {
+    let internal_state = InternalSharedState {
+        users,
+        executor,
         auth_data: AuthServiceData {
             encoding_key: EncodingKey::from_secret(config.secret.as_bytes()),
             decoding_key: DecodingKey::from_secret(config.secret.as_bytes()),
         },
     };
+    let state = SharedState(Arc::new(internal_state));
     let router = Router::new()
         .route("/test", get(hello_world))
         .nest(
             "/api/v1",
             setup_api_v1(&config.secret, state.clone(), pool).await,
         )
-        .layer(Extension(executor))
-        .layer(Extension(users))
-        .layer(Extension(state.auth_data.clone()))
         .layer(TraceLayer::new_for_http())
-        .layer(cors);
+        .layer(cors)
+        .with_state(state);
     let bind = axum::Server::bind(&config.listen.http);
     info!("Listening on {}...", config.listen.http);
     bind.serve(router.into_make_service())

@@ -5,6 +5,7 @@ mod policy;
 mod prompt;
 mod reference;
 mod stage;
+pub mod user;
 
 pub use data::*;
 pub use flow::*;

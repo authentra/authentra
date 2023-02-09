@@ -1,1 +1,2 @@
-json2ts schema.json --unreachableDefinitions --declareExternallyReferenced > frontend/src/api/model.d.ts
+redocly bundle openapi.yaml -o bundle.yaml
+openapi-typescript bundle.yaml --output frontend-new/src/api/schema.ts --immutable-types
