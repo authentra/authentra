@@ -15,7 +15,5 @@ uuid = ">=1.2.2"
 time = { version = "0.3.17" }
 impl-tools = ">=0.8.0"
 async-trait = ">=0.1.63"
-axum-core = ">=0.3.2"
 schemars = "0.8.11"
 derive_more = { git = "https://github.com/JelteF/derive_more" }
-typeshare = "1.0.0"

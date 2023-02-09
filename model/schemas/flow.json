@@ -76,44 +76,17 @@
       }
     },
     "FlowBindingKind": {
-      "oneOf": [
+      "anyOf": [
         {
-          "type": "object",
-          "required": [
-            "Group"
-          ],
-          "properties": {
-            "Group": {
-              "type": "string",
-              "format": "uuid"
-            }
-          },
-          "additionalProperties": false
+          "type": "string",
+          "format": "uuid"
         },
         {
-          "type": "object",
-          "required": [
-            "User"
-          ],
-          "properties": {
-            "User": {
-              "type": "string",
-              "format": "uuid"
-            }
-          },
-          "additionalProperties": false
+          "type": "string",
+          "format": "uuid"
         },
         {
-          "type": "object",
-          "required": [
-            "Policy"
-          ],
-          "properties": {
-            "Policy": {
-              "$ref": "#/definitions/Reference"
-            }
-          },
-          "additionalProperties": false
+          "$ref": "#/definitions/Reference"
         }
       ]
     },
@@ -147,31 +120,24 @@
       }
     },
     "Reference": {
-      "oneOf": [
+      "type": "object",
+      "required": [
+        "id"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/ReferenceId"
+        }
+      }
+    },
+    "ReferenceId": {
+      "anyOf": [
         {
-          "type": "object",
-          "required": [
-            "slug"
-          ],
-          "properties": {
-            "slug": {
-              "type": "string"
-            }
-          },
-          "additionalProperties": false
+          "type": "string"
         },
         {
-          "type": "object",
-          "required": [
-            "uid"
-          ],
-          "properties": {
-            "uid": {
-              "type": "integer",
-              "format": "int32"
-            }
-          },
-          "additionalProperties": false
+          "type": "integer",
+          "format": "int32"
         }
       ]
     }

@@ -13,7 +13,7 @@
         "component": {
           "type": "string",
           "enum": [
-            "access-denied"
+            "access_denied"
           ]
         },
         "message": {
@@ -112,16 +112,6 @@
     "flow"
   ],
   "properties": {
-    "error": {
-      "anyOf": [
-        {
-          "$ref": "#/definitions/SubmissionError"
-        },
-        {
-          "type": "null"
-        }
-      ]
-    },
     "flow": {
       "$ref": "#/definitions/FlowInfo"
     },
@@ -134,37 +124,19 @@
           "type": "null"
         }
       ]
+    },
+    "response_error": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/SubmissionError"
+        },
+        {
+          "type": "null"
+        }
+      ]
     }
   },
   "definitions": {
-    "FieldError": {
-      "oneOf": [
-        {
-          "type": "object",
-          "required": [
-            "invalid"
-          ],
-          "properties": {
-            "invalid": {
-              "type": "object",
-              "required": [
-                "field",
-                "message"
-              ],
-              "properties": {
-                "field": {
-                  "type": "string"
-                },
-                "message": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "additionalProperties": false
-        }
-      ]
-    },
     "FieldType": {
       "type": "string",
       "enum": [
@@ -220,71 +192,114 @@
     "SubmissionError": {
       "oneOf": [
         {
-          "type": "string",
-          "enum": [
-            "no_pending_user",
-            "unauthenticated"
-          ]
+          "type": "object",
+          "required": [
+            "field_name",
+            "type"
+          ],
+          "properties": {
+            "field_name": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "enum": [
+                "missing_field"
+              ]
+            }
+          }
         },
         {
           "type": "object",
           "required": [
-            "missing_field"
+            "expected",
+            "field_name",
+            "got",
+            "type"
           ],
           "properties": {
-            "missing_field": {
+            "expected": {
+              "$ref": "#/definitions/FieldType"
+            },
+            "field_name": {
+              "type": "string"
+            },
+            "got": {
+              "$ref": "#/definitions/FieldType"
+            },
+            "type": {
+              "type": "string",
+              "enum": [
+                "invalid_field_type"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "type"
+          ],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "no_pending_user"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "oneOf": [
+            {
               "type": "object",
               "required": [
-                "field_name"
+                "field",
+                "message",
+                "type"
               ],
               "properties": {
-                "field_name": {
+                "field": {
                   "type": "string"
+                },
+                "message": {
+                  "type": "string"
+                },
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "invalid"
+                  ]
                 }
               }
             }
-          },
-          "additionalProperties": false
+          ],
+          "required": [
+            "type"
+          ],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "field"
+              ]
+            }
+          }
         },
         {
           "type": "object",
           "required": [
-            "invalid_field_type"
+            "type"
           ],
           "properties": {
-            "invalid_field_type": {
-              "type": "object",
-              "required": [
-                "expected",
-                "field_name",
-                "got"
-              ],
-              "properties": {
-                "expected": {
-                  "$ref": "#/definitions/FieldType"
-                },
-                "field_name": {
-                  "type": "string"
-                },
-                "got": {
-                  "$ref": "#/definitions/FieldType"
-                }
-              }
+            "type": {
+              "type": "string",
+              "enum": [
+                "unauthenticated"
+              ]
             }
-          },
-          "additionalProperties": false
-        },
-        {
-          "type": "object",
-          "required": [
-            "field"
-          ],
-          "properties": {
-            "field": {
-              "$ref": "#/definitions/FieldError"
-            }
-          },
-          "additionalProperties": false
+          }
         }
       ]
     },

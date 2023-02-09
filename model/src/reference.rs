@@ -11,15 +11,18 @@ use super::{Flow, Policy, Prompt, Stage};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 // #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
-#[typeshare::typeshare]
 #[autoimpl(Hash ignore self._target)]
 #[autoimpl(PartialEq ignore self._target)]
 #[autoimpl(Eq)]
-pub struct Reference<Target: ReferenceTarget> {
-    #[serde(flatten)]
+pub struct Reference<Target> {
     pub id: ReferenceId,
-    #[serde(skip)]
     _target: PhantomData<Target>,
+}
+
+#[cfg(feature = "schemars")]
+#[derive(Serialize, JsonSchema)]
+struct MockSchema {
+    id: ReferenceId,
 }
 
 #[cfg(feature = "schemars")]
@@ -29,7 +32,8 @@ impl<T: ReferenceTarget> JsonSchema for Reference<T> {
     }
 
     fn json_schema(_gen: &mut schemars::gen::SchemaGenerator) -> schemars::schema::Schema {
-        let mut schema = schema_for!(ReferenceId).schema;
+        _gen.subschema_for::<ReferenceId>();
+        let mut schema = schema_for!(MockSchema).schema;
         schema.metadata = None;
         Schema::Object(schema)
     }
@@ -37,8 +41,7 @@ impl<T: ReferenceTarget> JsonSchema for Reference<T> {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Hash, PartialEq, Eq)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
-#[typeshare::typeshare]
-#[serde(tag = "kind", content = "id", rename_all = "lowercase")]
+#[serde(untagged, rename_all = "lowercase")]
 pub enum ReferenceId {
     Slug(String),
     Uid(i32),

@@ -23,32 +23,51 @@
     "PolicyKind": {
       "oneOf": [
         {
-          "type": "string",
-          "enum": [
-            "PasswordStrength",
-            "Expression"
-          ]
+          "type": "object",
+          "required": [
+            "kind",
+            "max_age"
+          ],
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "password_expiry"
+              ]
+            },
+            "max_age": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
         },
         {
           "type": "object",
           "required": [
-            "PasswordExpiry"
+            "kind"
           ],
           "properties": {
-            "PasswordExpiry": {
-              "type": "object",
-              "required": [
-                "max_age"
-              ],
-              "properties": {
-                "max_age": {
-                  "type": "integer",
-                  "format": "int64"
-                }
-              }
+            "kind": {
+              "type": "string",
+              "enum": [
+                "password_strength"
+              ]
             }
-          },
-          "additionalProperties": false
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind"
+          ],
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "expression"
+              ]
+            }
+          }
         }
       ]
     }

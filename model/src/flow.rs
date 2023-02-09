@@ -15,7 +15,6 @@ use super::{Policy, Reference, Stage};
     feature = "sqlx",
     sqlx(type_name = "authentication_requirement", rename_all = "snake_case")
 )]
-#[typeshare::typeshare]
 #[serde(rename_all = "snake_case")]
 pub enum AuthenticationRequirement {
     Superuser,
@@ -31,7 +30,6 @@ pub enum AuthenticationRequirement {
     feature = "sqlx",
     sqlx(type_name = "flow_designation", rename_all = "snake_case")
 )]
-#[typeshare::typeshare]
 #[serde(rename_all = "snake_case")]
 pub enum FlowDesignation {
     Authentication,
@@ -39,7 +37,6 @@ pub enum FlowDesignation {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
-#[typeshare::typeshare]
 pub struct Flow {
     pub uid: i32,
     pub slug: String,
@@ -52,7 +49,6 @@ pub struct Flow {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
-#[typeshare::typeshare]
 pub struct FlowBinding {
     pub enabled: bool,
     pub negate: bool,
@@ -62,8 +58,7 @@ pub struct FlowBinding {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
-#[serde(tag = "kind", content = "ref", rename_all = "snake_case")]
-#[typeshare::typeshare]
+#[serde(untagged, rename_all = "snake_case")]
 pub enum FlowBindingKind {
     Group(Uuid),
     User(Uuid),
@@ -72,7 +67,6 @@ pub enum FlowBindingKind {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
-#[typeshare::typeshare]
 pub struct FlowEntry {
     pub ordering: i16,
     pub bindings: Vec<FlowBinding>,

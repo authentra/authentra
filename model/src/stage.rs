@@ -4,7 +4,6 @@ use super::{PromptBinding, Reference};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
-#[typeshare::typeshare]
 pub struct Stage {
     pub uid: i32,
     pub slug: String,
@@ -14,7 +13,6 @@ pub struct Stage {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
-#[typeshare::typeshare]
 #[serde(rename_all = "snake_case")]
 pub enum PasswordBackend {
     Internal,
@@ -28,7 +26,6 @@ pub enum PasswordBackend {
     feature = "sqlx",
     sqlx(type_name = "user_field", rename_all = "snake_case")
 )]
-#[typeshare::typeshare]
 #[serde(rename_all = "snake_case")]
 pub enum UserField {
     Email,
@@ -38,8 +35,7 @@ pub enum UserField {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
-#[typeshare::typeshare]
-#[serde(tag = "kind", content = "data")]
+#[serde(tag = "kind", rename_all = "snake_case")]
 pub enum StageKind {
     Deny,
     Prompt {
@@ -75,8 +71,7 @@ impl StageKind {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
-#[typeshare::typeshare]
-#[serde(tag = "type", content = "mode", rename_all = "snake_case")]
+#[serde(tag = "mode", rename_all = "snake_case")]
 pub enum ConsentMode {
     Always,
     Once,

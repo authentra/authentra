@@ -1,1 +1,1 @@
-typeshare --lang typescript --output-file def.ts model/src/
+json2ts schema.json --unreachableDefinitions --declareExternallyReferenced > frontend/src/api/model.d.ts

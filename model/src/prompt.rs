@@ -4,7 +4,6 @@ use super::Reference;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
-#[typeshare::typeshare]
 pub struct PromptBinding {
     pub order: u16,
     pub prompt: Reference<Prompt>,
@@ -12,7 +11,6 @@ pub struct PromptBinding {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
-#[typeshare::typeshare]
 pub struct Prompt {
     pub uid: i32,
     pub field_key: String,
@@ -25,7 +23,6 @@ pub struct Prompt {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
-#[typeshare::typeshare]
 #[serde(rename_all = "snake_case")]
 pub enum PromptKind {
     Username,

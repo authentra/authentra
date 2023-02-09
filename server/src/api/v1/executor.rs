@@ -53,7 +53,7 @@ async fn get_flow(
 
 async fn post_flow(
     session: Session,
-    tx: Tx<Postgres>,
+    mut tx: Tx<Postgres>,
     flow: Reference<Flow>,
     Extension(executor): Extension<FlowExecutor>,
     Extension(users): Extension<UserService>,
@@ -70,7 +70,7 @@ async fn post_flow(
         .get_execution(&key, false)
         .await
         .ok_or(ApiErrorKind::NotFound.into_api())?;
-    if let Err(err) = handle_submission(form, tx, executor, users, &execution).await {
+    if let Err(err) = handle_submission(form, &mut tx, executor, users, &execution).await {
         match &err.kind {
             ApiErrorKind::SubmissionError(err) => Ok(Json(
                 execution
@@ -82,14 +82,15 @@ async fn post_flow(
         }
     } else {
         execution.complete_current();
-        complete(&execution, &keys, &cookies).await?;
+        complete(&mut tx, &execution, &keys, &cookies, session).await?;
+        tx.commit().await?;
         Ok(Redirect::to(uri.to_string().as_str()).into_response())
     }
 }
 
 async fn handle_submission(
     form: Value,
-    mut tx: Tx<Postgres>,
+    tx: &mut Tx<Postgres>,
     _executor: FlowExecutor,
     users: UserService,
     execution: &FlowExecution,
@@ -105,12 +106,13 @@ async fn handle_submission(
         } => {
             let uid = str_from_field(
                 "uid",
-                form.get("uid")
-                    .ok_or(SubmissionError::MissingField { field_name: "uid" })?,
+                form.get("uid").ok_or(SubmissionError::MissingField {
+                    field_name: "uid".into(),
+                })?,
             )?;
             let user = users
                 .lookup_user(
-                    &mut tx,
+                    &mut *tx,
                     uid,
                     user_fields.contains(&UserField::Name),
                     user_fields.contains(&UserField::Email),
@@ -128,7 +130,7 @@ async fn handle_submission(
                 }),
                 None => {
                     return Err(SubmissionError::from(FieldError::Invalid {
-                        field: "uid",
+                        field: "uid".into(),
                         message: "Failed to authenticate".to_owned(),
                     })
                     .into())
@@ -147,12 +149,12 @@ async fn handle_submission(
             let password = str_from_field(
                 "password",
                 form.get("password").ok_or(SubmissionError::MissingField {
-                    field_name: "password",
+                    field_name: "password".into(),
                 })?,
             )?;
             if backends.contains(&PasswordBackend::Internal) {
                 let res = query!("select password from users where uid = $1", pending.uid)
-                    .fetch_optional(&mut tx)
+                    .fetch_optional(&mut *tx)
                     .await?;
                 match res {
                     Some(res) => {
@@ -178,7 +180,7 @@ async fn handle_submission(
                 }
             }
             return Err(SubmissionError::Field(FieldError::Invalid {
-                field: "password",
+                field: "password".into(),
                 message: "Invalid Password".to_owned(),
             })
             .into());
@@ -191,7 +193,7 @@ fn str_from_field<'a>(name: &'static str, value: &'a Value) -> Result<&'a String
     match value {
         Value::String(value) => Ok(value),
         other => Err(SubmissionError::InvalidFieldType {
-            field_name: name,
+            field_name: name.into(),
             expected: FieldType::String,
             got: other.into(),
         }),
@@ -199,9 +201,11 @@ fn str_from_field<'a>(name: &'static str, value: &'a Value) -> Result<&'a String
 }
 
 async fn complete(
+    tx: &mut Tx<Postgres>,
     execution: &FlowExecution,
     keys: &AuthServiceData,
     cookies: &Cookies,
+    session: Session,
 ) -> Result<(), ApiError> {
     loop {
         if execution.is_completed() {
@@ -230,6 +234,13 @@ async fn complete(
                 claims.sub = Some(uid);
                 claims.authenticated = true;
                 set_session_cookie(&keys.encoding_key, cookies, &claims)?;
+                query!(
+                    "update sessions set user_id = $1 where uid = $2",
+                    uid,
+                    session.session_id
+                )
+                .execute(&mut *tx)
+                .await?;
             }
             StageKind::UserLogout => todo!(),
             StageKind::UserWrite => todo!(),

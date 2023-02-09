@@ -17,7 +17,7 @@
     },
     "timeout": {
       "type": "integer",
-      "format": "int64"
+      "format": "int32"
     },
     "uid": {
       "type": "integer",
@@ -28,32 +28,51 @@
     "ConsentMode": {
       "oneOf": [
         {
-          "type": "string",
-          "enum": [
-            "Always",
-            "Once"
-          ]
+          "type": "object",
+          "required": [
+            "mode"
+          ],
+          "properties": {
+            "mode": {
+              "type": "string",
+              "enum": [
+                "always"
+              ]
+            }
+          }
         },
         {
           "type": "object",
           "required": [
-            "Until"
+            "mode"
           ],
           "properties": {
-            "Until": {
-              "type": "object",
-              "required": [
-                "duration"
-              ],
-              "properties": {
-                "duration": {
-                  "type": "integer",
-                  "format": "int64"
-                }
-              }
+            "mode": {
+              "type": "string",
+              "enum": [
+                "once"
+              ]
             }
-          },
-          "additionalProperties": false
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "duration",
+            "mode"
+          ],
+          "properties": {
+            "duration": {
+              "type": "integer",
+              "format": "int32"
+            },
+            "mode": {
+              "type": "string",
+              "enum": [
+                "until"
+              ]
+            }
+          }
         }
       ]
     },
@@ -82,143 +101,175 @@
       }
     },
     "Reference": {
-      "oneOf": [
+      "type": "object",
+      "required": [
+        "id"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/ReferenceId"
+        }
+      }
+    },
+    "ReferenceId": {
+      "anyOf": [
         {
-          "type": "object",
-          "required": [
-            "slug"
-          ],
-          "properties": {
-            "slug": {
-              "type": "string"
-            }
-          },
-          "additionalProperties": false
+          "type": "string"
         },
         {
-          "type": "object",
-          "required": [
-            "uid"
-          ],
-          "properties": {
-            "uid": {
-              "type": "integer",
-              "format": "int32"
-            }
-          },
-          "additionalProperties": false
+          "type": "integer",
+          "format": "int32"
         }
       ]
     },
     "StageKind": {
       "oneOf": [
         {
-          "type": "string",
-          "enum": [
-            "Deny",
-            "UserLogin",
-            "UserLogout",
-            "UserWrite"
-          ]
-        },
-        {
           "type": "object",
           "required": [
-            "Prompt"
+            "kind"
           ],
           "properties": {
-            "Prompt": {
-              "type": "object",
-              "required": [
-                "bindings"
-              ],
-              "properties": {
-                "bindings": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/definitions/PromptBinding"
-                  }
-                }
-              }
+            "kind": {
+              "type": "string",
+              "enum": [
+                "deny"
+              ]
             }
-          },
-          "additionalProperties": false
+          }
         },
         {
           "type": "object",
           "required": [
-            "Identification"
+            "bindings",
+            "kind"
           ],
           "properties": {
-            "Identification": {
-              "type": "object",
-              "required": [
-                "user_fields"
-              ],
-              "properties": {
-                "password": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/definitions/Reference"
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ]
+            "bindings": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/PromptBinding"
+              }
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "prompt"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "user_fields"
+          ],
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "identification"
+              ]
+            },
+            "password": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/Reference"
                 },
-                "user_fields": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/definitions/UserField"
-                  }
+                {
+                  "type": "null"
                 }
+              ]
+            },
+            "user_fields": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/UserField"
               }
             }
-          },
-          "additionalProperties": false
+          }
         },
         {
           "type": "object",
           "required": [
-            "Password"
+            "kind"
           ],
           "properties": {
-            "Password": {
-              "type": "object",
-              "required": [
-                "backends"
-              ],
-              "properties": {
-                "backends": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/definitions/PasswordBackend"
-                  }
-                }
-              }
+            "kind": {
+              "type": "string",
+              "enum": [
+                "user_login"
+              ]
             }
-          },
-          "additionalProperties": false
+          }
         },
         {
           "type": "object",
           "required": [
-            "Consent"
+            "kind"
           ],
           "properties": {
-            "Consent": {
-              "type": "object",
-              "required": [
-                "mode"
-              ],
-              "properties": {
-                "mode": {
-                  "$ref": "#/definitions/ConsentMode"
-                }
-              }
+            "kind": {
+              "type": "string",
+              "enum": [
+                "user_logout"
+              ]
             }
-          },
-          "additionalProperties": false
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind"
+          ],
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "user_write"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "backends",
+            "kind"
+          ],
+          "properties": {
+            "backends": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/PasswordBackend"
+              }
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "password"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "mode"
+          ],
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "consent"
+              ]
+            },
+            "mode": {
+              "$ref": "#/definitions/ConsentMode"
+            }
+          }
         }
       ]
     },

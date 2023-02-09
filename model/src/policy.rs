@@ -2,7 +2,6 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
-#[typeshare::typeshare]
 pub struct Policy {
     pub uid: i32,
     pub slug: String,
@@ -11,8 +10,7 @@ pub struct Policy {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
-#[typeshare::typeshare]
-#[serde(tag = "type", content = "policy", rename_all = "snake_case")]
+#[serde(tag = "kind", rename_all = "snake_case")]
 pub enum PolicyKind {
     PasswordExpiry { max_age: i32 },
     PasswordStrength,

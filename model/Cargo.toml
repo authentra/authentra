@@ -26,4 +26,3 @@ derive_more = { workspace = true, features = [
   "display",
   "from",
 ] }
-typeshare = { workspace = true }

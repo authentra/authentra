@@ -4,7 +4,6 @@ use serde_json::Value;
 
 #[derive(Debug, Clone, Display, Serialize)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
-#[typeshare::typeshare]
 #[serde(rename_all = "snake_case")]
 pub enum FieldType {
     Null,
@@ -30,14 +29,13 @@ impl<'a> From<&'a Value> for FieldType {
 
 #[derive(Debug, Clone, Error, Display, Serialize, From)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
-#[typeshare::typeshare]
-#[serde(tag = "type", content = "error", rename_all = "snake_case")]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum SubmissionError {
     MissingField {
-        field_name: &'static str,
+        field_name: String,
     },
     InvalidFieldType {
-        field_name: &'static str,
+        field_name: String,
         expected: FieldType,
         got: FieldType,
     },
@@ -48,11 +46,7 @@ pub enum SubmissionError {
 }
 #[derive(Debug, Clone, Error, Display, Serialize)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
-#[typeshare::typeshare]
-#[serde(tag = "type", content = "error", rename_all = "snake_case")]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum FieldError {
-    Invalid {
-        field: &'static str,
-        message: String,
-    },
+    Invalid { field: String, message: String },
 }
