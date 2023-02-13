@@ -32,7 +32,13 @@ pub enum AuthenticationRequirement {
 )]
 #[serde(rename_all = "snake_case")]
 pub enum FlowDesignation {
+    Invalidation,
     Authentication,
+    Authorization,
+    Enrollment,
+    Recovery,
+    Unenrollment,
+    Configuration,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

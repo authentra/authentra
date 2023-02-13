@@ -5,6 +5,8 @@ use impl_tools::autoimpl;
 use schemars::{schema::Schema, schema_for, JsonSchema};
 use serde::{Deserialize, Serialize};
 
+use crate::Tenant;
+
 use self::sealed::Sealed;
 
 use super::{Flow, Policy, Prompt, Stage};
@@ -77,13 +79,14 @@ impl<Target: ReferenceTarget> Reference<Target> {
 }
 
 mod sealed {
-    use crate::{Flow, Policy, Prompt, Stage};
+    use crate::{Flow, Policy, Prompt, Stage, Tenant};
 
     pub trait Sealed {}
     impl Sealed for Flow {}
     impl Sealed for Stage {}
     impl Sealed for Prompt {}
     impl Sealed for Policy {}
+    impl Sealed for Tenant {}
 }
 
 pub trait ReferenceTarget: Sealed {
@@ -107,6 +110,7 @@ ref_target!(Stage);
 ref_target!(Prompt);
 ref_target!(Policy);
 ref_target!(Flow);
+ref_target!(Tenant);
 
 impl Referencable for Stage {
     fn ref_uid(&self) -> Option<Reference<Self>> {
@@ -145,5 +149,15 @@ impl Referencable for Flow {
 
     fn ref_slug(&self) -> Option<Reference<Self>> {
         Some(Reference::new_slug(self.slug.clone()))
+    }
+}
+
+impl Referencable for Tenant {
+    fn ref_uid(&self) -> Option<Reference<Self>> {
+        Some(Reference::new_uid(self.uid))
+    }
+
+    fn ref_slug(&self) -> Option<Reference<Self>> {
+        Some(Reference::new_slug(self.host.clone()))
     }
 }

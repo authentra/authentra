@@ -1,0 +1,14 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "FlowDesignation",
+  "type": "string",
+  "enum": [
+    "invalidation",
+    "authentication",
+    "authorization",
+    "enrollment",
+    "recovery",
+    "unenrollment",
+    "configuration"
+  ]
+}

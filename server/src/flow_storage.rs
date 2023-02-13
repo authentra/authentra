@@ -4,12 +4,12 @@ use async_trait::async_trait;
 use futures_util::future::join_all;
 use parking_lot::{Mutex, RwLock};
 
-use sqlx::{query, query_as, FromRow, PgPool};
+use sqlx::{query, query_as, query_file_as, FromRow, PgPool};
 
 use model::{
     AuthenticationRequirement, ConsentMode, Flow, FlowBinding, FlowBindingKind, FlowDesignation,
-    FlowEntry, PasswordBackend, Policy, PolicyKind, Prompt, PromptKind, Referencable, Reference,
-    ReferenceId, ReferenceTarget, Stage, StageKind, UserField,
+    FlowEntry, PasswordBackend, PgTenant, Policy, PolicyKind, Prompt, PromptKind, Referencable,
+    Reference, ReferenceId, ReferenceTarget, Stage, StageKind, Tenant, UserField,
 };
 
 #[derive(Debug)]
@@ -44,8 +44,30 @@ impl<T: ReferenceTarget + Referencable + Debug> LookupTable<T> {
         }
     }
 
+    pub fn invalidate(&mut self, reference: &Reference<T>) {
+        let kind = reference.kind();
+        match self.invalidate_ref(&reference.id) {
+            Some(v) => {
+                if let Some(reference) = match kind {
+                    model::ReferenceKind::Uid => v.ref_slug(),
+                    model::ReferenceKind::Slug => v.ref_uid(),
+                } {
+                    self.invalidate_ref(&reference.id);
+                }
+            }
+            None => {}
+        }
+    }
+
+    fn invalidate_ref(&mut self, id: &ReferenceId) -> Option<Arc<T>> {
+        match id {
+            ReferenceId::Slug(slug) => self.slugs.remove(slug),
+            ReferenceId::Uid(id) => self.ids.remove(id),
+        }
+    }
+
     fn insert_ref(&mut self, id: ReferenceId, value: Arc<T>) {
-        match id.clone() {
+        match id {
             ReferenceId::Slug(slug) => self.slugs.insert(slug, value),
             ReferenceId::Uid(id) => self.ids.insert(id, value),
         };
@@ -70,7 +92,8 @@ pub struct FlowStorageInternal {
     policies: RwLock<LookupTable<Policy>>,
     prompts: RwLock<LookupTable<Prompt>>,
     flows: RwLock<LookupTable<Flow>>,
-    pool: Mutex<PgPool>,
+    tenants: RwLock<LookupTable<Tenant>>,
+    pool: PgPool,
 }
 
 impl FlowStorageInternal {
@@ -80,13 +103,15 @@ impl FlowStorageInternal {
             policies: RwLock::new(LookupTable::default()),
             prompts: RwLock::new(LookupTable::default()),
             flows: RwLock::new(LookupTable::default()),
-            pool: Mutex::new(pool),
+            tenants: RwLock::new(LookupTable::default()),
+            pool,
         }
     }
 }
 
 #[async_trait]
 pub trait ReferenceLookup<T: ReferenceTarget> {
+    async fn invalidate(&self, reference: &Reference<T>);
     async fn lookup_reference(&self, reference: &Reference<T>) -> Option<Arc<T>>;
 }
 #[async_trait]
@@ -98,9 +123,20 @@ macro_rules! flow_storage_reference_lookup {
     ($ty:ty, $field:ident) => {
         #[async_trait]
         impl ReferenceLookup<$ty> for FlowStorage {
+            async fn invalidate(&self, reference: &Reference<$ty>) {
+                self.internal.$field.write().invalidate(reference);
+            }
             async fn lookup_reference(&self, reference: &Reference<$ty>) -> Option<Arc<$ty>> {
-                match self.internal.$field.read().lookup(reference) {
-                    None => self.internal.query_reference(reference).await.map(Arc::new),
+                let lock = self.internal.$field.read();
+                match lock.lookup(reference) {
+                    None => {
+                        let res = self.internal.query_reference(reference).await.map(Arc::new);
+                        drop(lock);
+                        if let Some(res) = &res {
+                            self.internal.$field.write().insert(res.clone());
+                        }
+                        res
+                    }
                     v => v,
                 }
             }
@@ -112,6 +148,7 @@ flow_storage_reference_lookup!(Stage, stages);
 flow_storage_reference_lookup!(Policy, policies);
 flow_storage_reference_lookup!(Prompt, prompts);
 flow_storage_reference_lookup!(Flow, flows);
+flow_storage_reference_lookup!(Tenant, tenants);
 
 #[derive(Debug, sqlx::Type)]
 #[sqlx(type_name = "policy_kind", rename_all = "snake_case")]
@@ -136,18 +173,17 @@ pub struct PgPolicy {
 #[async_trait]
 impl ReferenceDbQuery<Policy> for FlowStorageInternal {
     async fn query_reference(&self, reference: &Reference<Policy>) -> Option<Policy> {
-        let lock = self.pool.lock();
         let Some(res) = match &reference.id {
             ReferenceId::Slug(slug) => query_as!(
                 PgPolicy,
                 r#"select uid, slug,kind as "kind: PgPolicyKind",password_expiration,password_strength,expression from policies where slug = $1"#,
                 slug
-            ).fetch_optional(&*lock).await,
+            ).fetch_optional(&self.pool).await,
             ReferenceId::Uid(uid) => query_as!(
                 PgPolicy,
                 r#"select uid, slug,kind as "kind: PgPolicyKind",password_expiration,password_strength,expression from policies where uid = $1"#,
                 uid
-            ).fetch_optional(&*lock).await,
+            ).fetch_optional(&self.pool).await,
         }.ok().flatten() else { return None; };
 
         let kind = match res.kind {
@@ -157,7 +193,7 @@ impl ReferenceDbQuery<Policy> for FlowStorageInternal {
                     "select max_age from password_expiration_policies where uid = $1",
                     uid
                 )
-                .fetch_one(&*lock)
+                .fetch_one(&self.pool)
                 .await
                 .expect("Failed to fetch password expiration policy")
                 .max_age;
@@ -228,16 +264,15 @@ pub enum PgConsentMode {
 #[async_trait]
 impl ReferenceDbQuery<Stage> for FlowStorageInternal {
     async fn query_reference(&self, reference: &Reference<Stage>) -> Option<Stage> {
-        let lock = self.pool.lock();
         let Some(res) = match &reference.id {
             ReferenceId::Slug(slug) => query_as!(PgStage,
                 r#"select uid, slug, kind as "kind: PgStageKind", timeout, identification_password_stage, consent_stage, identification_stage from stages where slug = $1"#,
                 slug
-            ).fetch_optional(&*lock).await,
+            ).fetch_optional(&self.pool).await,
             ReferenceId::Uid(id) => query_as!(PgStage,
                 r#"select uid, slug, kind as "kind: PgStageKind", timeout, identification_password_stage, consent_stage, identification_stage from stages where uid = $1"#,
                 id
-                ).fetch_optional(&*lock).await,
+                ).fetch_optional(&self.pool).await,
         }.ok().flatten() else { return None };
         let kind = match res.kind {
             PgStageKind::Deny => StageKind::Deny,
@@ -246,7 +281,7 @@ impl ReferenceDbQuery<Stage> for FlowStorageInternal {
                 let stage = match query!(
                     r#"select fields as "fields: Vec<UserField>" from identification_stages where uid = $1"#,
                     res.identification_stage
-                ).fetch_optional(&*lock).await.ok().flatten() {
+                ).fetch_optional(&self.pool).await.ok().flatten() {
                     Some(v) => v,
                     None => return None
                 };
@@ -266,7 +301,7 @@ impl ReferenceDbQuery<Stage> for FlowStorageInternal {
                 let Some(res) = query!(
                     r#"select mode as "mode: PgConsentMode", until from consent_stages where uid = $1"#,
                     uid
-                ).fetch_one(&*lock).await.ok() else { return None };
+                ).fetch_one(&self.pool).await.ok() else { return None };
                 let mode = match res.mode {
                     PgConsentMode::Always => ConsentMode::Always,
                     PgConsentMode::Once => ConsentMode::Once,
@@ -293,7 +328,7 @@ impl ReferenceDbQuery<Prompt> for FlowStorageInternal {
         let Some(res) = query!(
             r#"select uid, field_key, label, kind as "kind: PgPromptKind", placeholder, required, help_text from prompts where uid = $1"#,
             uid
-        ).fetch_one(&*self.pool.lock()).await.ok() else { return None };
+        ).fetch_one(&self.pool).await.ok() else { return None };
         let kind = match res.kind {
             PgPromptKind::Username => PromptKind::Username,
             PgPromptKind::Email => PromptKind::Email,
@@ -334,21 +369,20 @@ pub struct PgFlow {
 #[async_trait]
 impl ReferenceDbQuery<Flow> for FlowStorageInternal {
     async fn query_reference(&self, reference: &Reference<Flow>) -> Option<Flow> {
-        let lock = self.pool.lock();
         let Some(res) = match &reference.id {
             ReferenceId::Uid(uid) => {
                 query_as!(PgFlow, r#"select uid, slug, title, authentication as "authentication: AuthenticationRequirement", designation as "designation: FlowDesignation" from flows where uid = $1"#, uid)
-                    .fetch_one(&*lock)
+                    .fetch_one(&self.pool)
                     .await
             }
             ReferenceId::Slug(slug) => {
                 query_as!(PgFlow, r#"select uid, slug, title, authentication as "authentication: AuthenticationRequirement", designation as "designation: FlowDesignation" from flows where slug = $1"#, slug)
-                    .fetch_one(&*lock)
+                    .fetch_one(&self.pool)
                     .await
             }
         }
         .ok() else { return None };
-        let bindings = match load_bindings_flow(&*lock, res.uid).await {
+        let bindings = match load_bindings_flow(&self.pool, res.uid).await {
             Some(v) => v,
             None => return None,
         };
@@ -356,15 +390,18 @@ impl ReferenceDbQuery<Flow> for FlowStorageInternal {
             "select uid,stage,ordering from flow_entries where flow = $1",
             res.uid
         )
-        .fetch_all(&*lock)
+        .fetch_all(&self.pool)
         .await;
         let entries = match entries.ok() {
             Some(entries) => {
                 let _v = "";
-                let db_entries =
-                    join_all(entries.iter().map(|v| load_bindings_entry(&*lock, v.uid)))
-                        .await
-                        .into_iter();
+                let db_entries = join_all(
+                    entries
+                        .iter()
+                        .map(|v| load_bindings_entry(&self.pool, v.uid)),
+                )
+                .await
+                .into_iter();
                 let entries = entries
                     .into_iter()
                     .zip(db_entries)
@@ -479,6 +516,26 @@ async fn load_bindings_entry(pool: &PgPool, uid: i32) -> Option<Vec<FlowBinding>
     Some(bindings)
 }
 
+#[async_trait]
+impl ReferenceDbQuery<Tenant> for FlowStorageInternal {
+    async fn query_reference(&self, reference: &Reference<Tenant>) -> Option<Tenant> {
+        let Some(res) = match &reference.id {
+            ReferenceId::Uid(uid) => {
+                query_file_as!(PgTenant, "queries/tenants/select-by-id.sql", uid)
+                    .fetch_one(&self.pool)
+                    .await
+            }
+            ReferenceId::Slug(slug) => {
+                query_file_as!(PgTenant, "queries/tenants/select-by-host.sql", slug)
+                    .fetch_one(&self.pool)
+                    .await
+            }
+        }
+        .ok() else { return None };
+        Some(res.into())
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct UnresolvedReference {
     pub kind: UnresolvedReferenceKind,
@@ -538,6 +595,8 @@ macro_rules! freezed_reference_lookup {
     ($ty:ty, $field:ident, $kind:expr) => {
         #[async_trait]
         impl ReferenceLookup<$ty> for FreezedStorage {
+            #[allow(unused)]
+            async fn invalidate(&self, reference: &Reference<$ty>) {}
             async fn lookup_reference(&self, reference: &Reference<$ty>) -> Option<Arc<$ty>> {
                 if let Some(storage) = &self.storage {
                     let value = storage.lookup_reference(reference).await;

@@ -10,7 +10,7 @@ const router = createRouter({
       component: HomeView
     },
     {
-      path: '/flow/:flow-slug',
+      path: '/flow/:flow_slug',
       name: 'flow-view',
       // route level code-splitting
       // this generates a separate chunk (About.[hash].js) for this route

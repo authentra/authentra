@@ -194,32 +194,6 @@
     },
     "query": "select user_binding,enabled,negate_result,ordering from flow_bindings where flow = $1 and user_binding is not null"
   },
-  "12b5588f54cdf0e3778b4993e970748901104f939603cce853e1300ab9503b14": {
-    "describe": {
-      "columns": [
-        {
-          "name": "uid",
-          "ordinal": 0,
-          "type_info": "Uuid"
-        },
-        {
-          "name": "password",
-          "ordinal": 1,
-          "type_info": "Varchar"
-        }
-      ],
-      "nullable": [
-        false,
-        false
-      ],
-      "parameters": {
-        "Left": [
-          "Text"
-        ]
-      }
-    },
-    "query": "select uid,password from users where name = $1"
-  },
   "171ab3c1250913c28d6d543d05caa0bac92211a9c419a0595ef8507bd01d0e90": {
     "describe": {
       "columns": [
@@ -430,7 +404,13 @@
             "Custom": {
               "kind": {
                 "Enum": [
-                  "authentication"
+                  "invalidation",
+                  "authentication",
+                  "authorization",
+                  "enrollment",
+                  "recovery",
+                  "unenrollment",
+                  "configuration"
                 ]
               },
               "name": "flow_designation"
@@ -452,18 +432,6 @@
       }
     },
     "query": "select uid, slug, title, authentication as \"authentication: AuthenticationRequirement\", designation as \"designation: FlowDesignation\" from flows where slug = $1"
-  },
-  "38c0d34d6b31daf12bfa8a88846b74dd316aaea61cccb19ffe7aaa4efde9100e": {
-    "describe": {
-      "columns": [],
-      "nullable": [],
-      "parameters": {
-        "Left": [
-          "Bpchar"
-        ]
-      }
-    },
-    "query": "delete from sessions where uid = $1"
   },
   "3d5c974482c7c8718280b5d7ea4464f91f8ac33f8dfce1f7545d8affb2246cb9": {
     "describe": {
@@ -558,6 +526,24 @@
     },
     "query": "select uid, slug, kind as \"kind: PgStageKind\", timeout, identification_password_stage, consent_stage, identification_stage from stages where slug = $1"
   },
+  "6fb62ace26905244806ccad1baca5e489c07874edbf5e71902c4bb6f56385c97": {
+    "describe": {
+      "columns": [
+        {
+          "name": "uid",
+          "ordinal": 0,
+          "type_info": "Int4"
+        }
+      ],
+      "nullable": [
+        false
+      ],
+      "parameters": {
+        "Left": []
+      }
+    },
+    "query": "select uid from tenants where is_default = true"
+  },
   "789db3f05af1ab7567528fc2db4ad221d8568e016a5ca3bd141a7b100ebc8f17": {
     "describe": {
       "columns": [
@@ -640,6 +626,98 @@
     },
     "query": "select uid from flows"
   },
+  "a320f9f952d7f68c140f365e6fbb4a272ee7bde7e4d782b0092ebdcbbc8f0240": {
+    "describe": {
+      "columns": [
+        {
+          "name": "uid",
+          "ordinal": 0,
+          "type_info": "Int4"
+        },
+        {
+          "name": "host",
+          "ordinal": 1,
+          "type_info": "Varchar"
+        },
+        {
+          "name": "default",
+          "ordinal": 2,
+          "type_info": "Bool"
+        },
+        {
+          "name": "title",
+          "ordinal": 3,
+          "type_info": "Varchar"
+        },
+        {
+          "name": "logo",
+          "ordinal": 4,
+          "type_info": "Varchar"
+        },
+        {
+          "name": "favicon",
+          "ordinal": 5,
+          "type_info": "Varchar"
+        },
+        {
+          "name": "invalidation_flow",
+          "ordinal": 6,
+          "type_info": "Int4"
+        },
+        {
+          "name": "authentication_flow",
+          "ordinal": 7,
+          "type_info": "Int4"
+        },
+        {
+          "name": "authorization_flow",
+          "ordinal": 8,
+          "type_info": "Int4"
+        },
+        {
+          "name": "enrollment_flow",
+          "ordinal": 9,
+          "type_info": "Int4"
+        },
+        {
+          "name": "recovery_flow",
+          "ordinal": 10,
+          "type_info": "Int4"
+        },
+        {
+          "name": "unenrollment_flow",
+          "ordinal": 11,
+          "type_info": "Int4"
+        },
+        {
+          "name": "configuration_flow",
+          "ordinal": 12,
+          "type_info": "Int4"
+        }
+      ],
+      "nullable": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "parameters": {
+        "Left": [
+          "Text"
+        ]
+      }
+    },
+    "query": "select uid,\n       host,\n       is_default as \"default\",\n       title,\n       logo,\n       favicon,\n       invalidation_flow,\n       authentication_flow,\n       authorization_flow,\n       enrollment_flow,\n       recovery_flow,\n       unenrollment_flow,\n       configuration_flow\nfrom tenants\nwhere host = $1"
+  },
   "a40b2dc9837cd0cb0bb3c47e89071ae397c8811f5f298b822fe4376a47269c0f": {
     "describe": {
       "columns": [],
@@ -695,7 +773,13 @@
             "Custom": {
               "kind": {
                 "Enum": [
-                  "authentication"
+                  "invalidation",
+                  "authentication",
+                  "authorization",
+                  "enrollment",
+                  "recovery",
+                  "unenrollment",
+                  "configuration"
                 ]
               },
               "name": "flow_designation"
@@ -998,6 +1082,98 @@
       }
     },
     "query": "select fields as \"fields: Vec<UserField>\" from identification_stages where uid = $1"
+  },
+  "e850d287f243904120349c1d68062c8d3769673e58214e6868378f8fe744d7a7": {
+    "describe": {
+      "columns": [
+        {
+          "name": "uid",
+          "ordinal": 0,
+          "type_info": "Int4"
+        },
+        {
+          "name": "host",
+          "ordinal": 1,
+          "type_info": "Varchar"
+        },
+        {
+          "name": "default",
+          "ordinal": 2,
+          "type_info": "Bool"
+        },
+        {
+          "name": "title",
+          "ordinal": 3,
+          "type_info": "Varchar"
+        },
+        {
+          "name": "logo",
+          "ordinal": 4,
+          "type_info": "Varchar"
+        },
+        {
+          "name": "favicon",
+          "ordinal": 5,
+          "type_info": "Varchar"
+        },
+        {
+          "name": "invalidation_flow",
+          "ordinal": 6,
+          "type_info": "Int4"
+        },
+        {
+          "name": "authentication_flow",
+          "ordinal": 7,
+          "type_info": "Int4"
+        },
+        {
+          "name": "authorization_flow",
+          "ordinal": 8,
+          "type_info": "Int4"
+        },
+        {
+          "name": "enrollment_flow",
+          "ordinal": 9,
+          "type_info": "Int4"
+        },
+        {
+          "name": "recovery_flow",
+          "ordinal": 10,
+          "type_info": "Int4"
+        },
+        {
+          "name": "unenrollment_flow",
+          "ordinal": 11,
+          "type_info": "Int4"
+        },
+        {
+          "name": "configuration_flow",
+          "ordinal": 12,
+          "type_info": "Int4"
+        }
+      ],
+      "nullable": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "parameters": {
+        "Left": [
+          "Int4"
+        ]
+      }
+    },
+    "query": "select uid,\n       host,\n       is_default as \"default\",\n       title,\n       logo,\n       favicon,\n       invalidation_flow,\n       authentication_flow,\n       authorization_flow,\n       enrollment_flow,\n       recovery_flow,\n       unenrollment_flow,\n       configuration_flow\nfrom tenants\nwhere uid = $1"
   },
   "fc3ef55c9d040091a8d34f47e04a65c0e4d4fddc0e96e034933e18af95504794": {
     "describe": {

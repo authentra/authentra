@@ -31,22 +31,45 @@ impl<'a> From<&'a Value> for FieldType {
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum SubmissionError {
-    MissingField {
-        field_name: String,
-    },
-    InvalidFieldType {
-        field_name: String,
-        expected: FieldType,
-        got: FieldType,
-    },
     NoPendingUser,
     #[from]
     Field(#[error(source)] FieldError),
-    Unauthenticated,
 }
+
 #[derive(Debug, Clone, Error, Display, Serialize)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
-#[serde(tag = "type", rename_all = "snake_case")]
-pub enum FieldError {
-    Invalid { field: String, message: String },
+pub struct FieldError {
+    #[serde(flatten)]
+    kind: FieldErrorKind,
+    field: String,
+}
+
+impl FieldError {
+    pub fn new(field: impl Into<String>, kind: FieldErrorKind) -> Self {
+        Self {
+            field: field.into(),
+            kind,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Error, Display, Serialize)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum FieldErrorKind {
+    Missing,
+    Invalid { message: String },
+    InvalidType { expected: FieldType, got: FieldType },
+}
+
+impl FieldErrorKind {
+    pub fn invalid(message: impl Into<String>) -> Self {
+        Self::Invalid {
+            message: message.into(),
+        }
+    }
+
+    pub fn invalid_type(expected: FieldType, got: FieldType) -> Self {
+        Self::InvalidType { expected, got }
+    }
 }

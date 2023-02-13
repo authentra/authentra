@@ -216,7 +216,11 @@ fn get_auth_extension_data(req: &mut Parts) -> Result<AuthExtensionData, ApiErro
     Ok(data.to_owned())
 }
 
-async fn make_new_session(tx: &mut Tx<Postgres>, parts: &mut Parts) -> Result<Session, ApiError> {
+async fn make_new_session(
+    tx: &mut Tx<Postgres>,
+    parts: &mut Parts,
+    data: &AuthServiceData,
+) -> Result<Session, ApiError> {
     let session_key = Alphanumeric.sample_string(&mut OsRng, 96);
     query!("insert into sessions(uid) values ($1)", session_key,)
         .execute(tx)
@@ -227,7 +231,6 @@ async fn make_new_session(tx: &mut Tx<Postgres>, parts: &mut Parts) -> Result<Se
         sub: None,
         authenticated: false,
     };
-    let data: &AuthServiceData = parts.extensions.get().expect("Missing AuthServiceData");
     let cookies: &Cookies = parts.extensions.get().expect("Cookie layer is missing");
     set_session_cookie(&data.encoding_key, &cookies, &claims)?;
     Ok(Session {
@@ -237,19 +240,19 @@ async fn make_new_session(tx: &mut Tx<Postgres>, parts: &mut Parts) -> Result<Se
 }
 
 #[async_trait]
-impl<S> FromRequestParts<S> for Session
-where
-    S: Send + Sync,
-{
+impl FromRequestParts<SharedState> for Session {
     type Rejection = ApiError;
 
-    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
+    async fn from_request_parts(
+        parts: &mut Parts,
+        state: &SharedState,
+    ) -> Result<Self, Self::Rejection> {
         let mut tx: Tx<Postgres> = Tx::from_request_parts(parts, state).await?;
         let data = match get_auth_extension_data(parts) {
             Ok(v) => Ok(v),
             Err(err) => match &err.kind {
                 ApiErrorKind::SessionCookieMissing => {
-                    return make_new_session(&mut tx, parts).await;
+                    return make_new_session(&mut tx, parts, state.auth_data()).await;
                 }
                 _ => Err(err),
             },
@@ -267,7 +270,7 @@ where
                 user_id: res.user_id,
             })
         } else {
-            make_new_session(&mut tx, parts).await
+            make_new_session(&mut tx, parts, state.auth_data()).await
         }
     }
 }

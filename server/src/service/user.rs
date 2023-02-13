@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use model::user::PartialUser;
 use sqlx::{query, Postgres};
 use uuid::Uuid;
@@ -7,11 +5,11 @@ use uuid::Uuid;
 use crate::api::{sql_tx::Tx, ApiError};
 
 #[derive(Clone)]
-pub struct UserService(Arc<InternalUserService>);
+pub struct UserService {}
 
 impl UserService {
     pub fn new() -> Self {
-        Self(Arc::new(InternalUserService::new()))
+        Self {}
     }
 }
 
@@ -88,13 +86,5 @@ impl UserService {
             }
         }
         return Ok(None);
-    }
-}
-
-struct InternalUserService {}
-
-impl InternalUserService {
-    pub fn new() -> Self {
-        Self {}
     }
 }

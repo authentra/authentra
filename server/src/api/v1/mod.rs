@@ -1,13 +1,10 @@
 use axum::{routing::get, Router};
 
-use sqlx::PgPool;
 use tower::ServiceBuilder;
-use tower_cookies::CookieManagerLayer;
 
 use crate::{
     api::{
         csrf::CsrfLayer,
-        sql_tx::TxLayer,
         v1::{auth::setup_auth_router, flow::setup_flow_router},
     },
     SharedState,
@@ -20,10 +17,8 @@ pub mod auth;
 pub mod executor;
 pub mod flow;
 
-pub async fn setup_api_v1(_secret: &str, state: SharedState, pool: PgPool) -> Router<SharedState> {
+pub async fn setup_api_v1(_secret: &str, state: SharedState) -> Router<SharedState> {
     let service = ServiceBuilder::new()
-        .layer(CookieManagerLayer::new())
-        .layer(TxLayer::new(pool))
         .layer(CsrfLayer::new(vec!["*".into()]))
         .layer(AuthLayer::new(state.auth_data().clone()));
     let router = Router::new()

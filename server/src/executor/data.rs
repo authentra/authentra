@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 
-use model::{FlowComponent, Sources, Stage, StageKind};
+use model::{FlowComponent, PasswordComponentData, Sources, Stage, StageKind};
 
 use super::flow::FlowExecution;
 
@@ -31,13 +31,18 @@ impl AsComponent for Stage {
                         sources: vec![],
                         show_source_labels: false,
                     },
+                    password: password.clone().map(|_| PasswordComponentData {
+                        recovery_url: "".into(),
+                    }),
                 })
             }
             StageKind::UserLogin => todo!(),
             StageKind::UserLogout => todo!(),
             StageKind::UserWrite => todo!(),
             StageKind::Password { .. } => Some(FlowComponent::Password {
-                recovery_url: "".to_owned(),
+                data: PasswordComponentData {
+                    recovery_url: "".into(),
+                },
             }),
             StageKind::Consent { mode: _ } => todo!(),
         }

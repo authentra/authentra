@@ -9,7 +9,7 @@ paths:
   "/api/v1/flow/executor/{flow-slug}":
     get: 
       summary: Get Flow
-      operationId: get-flow
+      operationId: get-flow-execution
       parameters:
         - $ref: "#/components/parameters/FlowSlug"
         - $ref: "#/components/parameters/Query"
@@ -25,7 +25,7 @@ paths:
         - auth: []
     post: 
       summary: Post Flow
-      operationId: post-flow
+      operationId: post-flow-execution
       parameters:
         - $ref: "#/components/parameters/FlowSlug"
         - $ref: "#/components/parameters/Query"
@@ -56,6 +56,23 @@ paths:
       security:
         - {}
         - auth: []
+  "/flow/-/default/{flow-designation}":
+    get: 
+      summary: Redirect to flow execution
+      operationId: redirect-flow-default
+      parameters: 
+        - $ref: "#/components/parameters/FlowDesignation"
+      security: 
+        - {}
+        - auth: []
+      responses:
+        302:
+          description: Redirect to flow execution
+          headers:
+            location:
+              description: Url of the flow execution
+              schema: 
+                type: string
 components:
   securitySchemes:
     auth:
@@ -75,8 +92,18 @@ components:
       required: false
       schema:
         type: string
+    FlowDesignation:
+      in: path
+      required: true
+      name: flow-designation
+      schema: 
+        $ref: "#/components/schemas/FlowDesignation"
   schemas:
     FlowData:
       $ref: model/schemas/flow-data.json
     PartialUser:
       $ref: model/schemas/partial-user.json
+    FlowDesignation:
+      $ref: model/schemas/flow-designation.json
+    Reference:
+      $ref: model/schemas/reference.json

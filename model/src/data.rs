@@ -25,9 +25,11 @@ pub enum FlowComponent {
         user_fields: Vec<UserField>,
         #[serde(flatten)]
         sources: Sources,
+        password: Option<PasswordComponentData>,
     },
     Password {
-        recovery_url: String,
+        #[serde(flatten)]
+        data: PasswordComponentData,
     },
     Redirect {
         to: String,
@@ -35,6 +37,12 @@ pub enum FlowComponent {
     Error {
         message: String,
     },
+}
+
+#[derive(Serialize)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+pub struct PasswordComponentData {
+    pub recovery_url: String,
 }
 
 #[derive(Serialize)]

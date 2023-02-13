@@ -19,7 +19,7 @@ use crate::{
     SharedState,
 };
 use model::{
-    error::{FieldError, FieldType, SubmissionError},
+    error::{FieldError, FieldErrorKind, FieldType, SubmissionError},
     Flow, FlowData, PasswordBackend, PendingUser, Reference, StageKind, UserField,
 };
 
@@ -107,9 +107,11 @@ async fn handle_submission(
         } => {
             let uid = str_from_field(
                 "uid",
-                form.get("uid").ok_or(SubmissionError::MissingField {
-                    field_name: "uid".into(),
-                })?,
+                form.get("uid")
+                    .ok_or(SubmissionError::Field(FieldError::new(
+                        "uid",
+                        FieldErrorKind::Missing,
+                    )))?,
             )?;
             let user = users
                 .lookup_user(
@@ -130,10 +132,10 @@ async fn handle_submission(
                     });
                 }),
                 None => {
-                    return Err(SubmissionError::from(FieldError::Invalid {
-                        field: "uid".into(),
-                        message: "Failed to authenticate".to_owned(),
-                    })
+                    return Err(SubmissionError::from(FieldError::new(
+                        "uid",
+                        FieldErrorKind::invalid("Failed to authenticate"),
+                    ))
                     .into())
                 }
             };
@@ -149,9 +151,11 @@ async fn handle_submission(
             };
             let password = str_from_field(
                 "password",
-                form.get("password").ok_or(SubmissionError::MissingField {
-                    field_name: "password".into(),
-                })?,
+                form.get("password")
+                    .ok_or(SubmissionError::Field(FieldError::new(
+                        "password",
+                        FieldErrorKind::Missing,
+                    )))?,
             )?;
             if backends.contains(&PasswordBackend::Internal) {
                 let res = query!("select password from users where uid = $1", pending.uid)
@@ -180,10 +184,10 @@ async fn handle_submission(
                     None => return Err(SubmissionError::NoPendingUser.into()),
                 }
             }
-            return Err(SubmissionError::Field(FieldError::Invalid {
-                field: "password".into(),
-                message: "Invalid Password".to_owned(),
-            })
+            return Err(SubmissionError::Field(FieldError::new(
+                "password",
+                FieldErrorKind::invalid("Invalid Password"),
+            ))
             .into());
         }
         StageKind::Consent { mode: _ } => return Ok(()),
@@ -193,11 +197,10 @@ async fn handle_submission(
 fn str_from_field<'a>(name: &'static str, value: &'a Value) -> Result<&'a String, SubmissionError> {
     match value {
         Value::String(value) => Ok(value),
-        other => Err(SubmissionError::InvalidFieldType {
-            field_name: name.into(),
-            expected: FieldType::String,
-            got: other.into(),
-        }),
+        other => Err(SubmissionError::Field(FieldError::new(
+            name,
+            FieldErrorKind::invalid_type(FieldType::String, other.into()),
+        ))),
     }
 }
 

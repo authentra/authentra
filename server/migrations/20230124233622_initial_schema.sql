@@ -104,7 +104,7 @@ create table stage_prompt_bindings
 );
 
 create type authentication_requirement as enum ('required', 'none', 'superuser', 'ignored');
-create type flow_designation as enum ('authentication');
+create type flow_designation as enum ('invalidation', 'authentication', 'authorization', 'enrollment', 'recovery', 'unenrollment', 'configuration');
 
 create table flows
 (
@@ -153,4 +153,21 @@ create table applications
     slug         varchar(64) not null,
     display_name varchar(64) not null,
     provider     int4        not null references providers
+);
+
+create table tenants(
+    uid serial primary key,
+    host varchar(255) not null unique,
+    is_default bool not null,
+    title varchar(64) not null,
+    logo varchar(255) not null,
+    favicon varchar(255) not null,
+
+    invalidation_flow int4 references flows,
+    authentication_flow int4 references flows,
+    authorization_flow int4 references flows,
+    enrollment_flow int4 references flows,
+    recovery_flow int4 references flows,
+    unenrollment_flow int4 references flows,
+    configuration_flow int4 references flows
 );

@@ -169,8 +169,8 @@ pub struct ExecutorQuery {
 }
 
 #[derive(Debug, Deserialize)]
-struct InternalQuery {
-    query: String,
+pub struct InternalExecutorQuery {
+    pub query: String,
 }
 
 pub enum ExecutorQueryRejection {
@@ -198,10 +198,14 @@ where
         parts: &mut Parts,
         state: &S,
     ) -> Result<ExecutorQuery, Self::Rejection> {
-        let query: Query<InternalQuery> = Query::from_request_parts(parts, state)
+        let query: Query<InternalExecutorQuery> = Query::from_request_parts(parts, state)
             .await
             .map_err(|err| ExecutorQueryRejection::Chained(err))?;
         Ok(serde_urlencoded::from_str(query.0.query.as_str())
             .map_err(|err| ExecutorQueryRejection::FailedToDeserializeQueryString(err))?)
     }
+}
+
+pub async fn ping_handler() -> &'static str {
+    "Pong!"
 }

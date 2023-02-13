@@ -5,10 +5,12 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use crate::api::setup_api_v1;
+use crate::api::sql_tx::TxLayer;
 use crate::config::PostgresConfiguration;
 use crate::config::{AuthustConfiguration, InternalAuthustConfiguration};
 use crate::executor::FlowExecutor;
 use crate::flow_storage::{FlowStorage, FreezedStorage, ReferenceLookup, ReverseLookup};
+use crate::interface::setup_interface_router;
 use crate::service::user::UserService;
 use api::AuthServiceData;
 
@@ -18,9 +20,11 @@ use axum::Router;
 use handlebars::Handlebars;
 
 use jsonwebtoken::{DecodingKey, EncodingKey};
-use model::{Flow, Reference};
+use model::{Flow, Reference, Tenant};
 use sqlx::query;
 use sqlx::{migrate::Migrator, postgres::PgConnectOptions, ConnectOptions, PgPool};
+use tower::ServiceBuilder;
+use tower_cookies::CookieManagerLayer;
 use tower_http::cors::CorsLayer;
 use tower_http::trace::TraceLayer;
 use tracing::info;
@@ -32,6 +36,7 @@ pub mod auth;
 pub mod config;
 pub mod executor;
 pub mod flow_storage;
+pub mod interface;
 pub mod service;
 
 #[tokio::main]
@@ -126,6 +131,12 @@ async fn preload(pool: &PgPool, storage: &FlowStorage) -> Result<(), sqlx::Error
             .expect("Failed to preload flow");
         flow.reverse_lookup(&freezed).await;
     }
+    // let tenants = query!("select uid from tenants")
+    //     .fetch_all(pool)
+    //     .await
+    //     .expect("Failed to load tenant ids")
+    //     .into_iter()
+    //     .map(|rec| Reference::<Tenant>::new_uid(rec.uid));
     info!("Preload complete");
     Ok(())
 }
@@ -145,12 +156,59 @@ impl SharedState {
     pub fn auth_data(&self) -> &AuthServiceData {
         &self.0.auth_data
     }
+
+    pub fn storage(&self) -> &FlowStorage {
+        &self.0.storage
+    }
+    pub fn defaults(&self) -> &Defaults {
+        &self.0.defaults.as_ref()
+    }
 }
 
 struct InternalSharedState {
     users: UserService,
     executor: FlowExecutor,
     auth_data: AuthServiceData,
+    storage: FlowStorage,
+    defaults: Arc<Defaults>,
+}
+
+pub struct Defaults {
+    storage: FlowStorage,
+    pool: PgPool,
+    tenant: Option<Arc<Tenant>>,
+}
+
+impl Defaults {
+    pub fn tenant(&self) -> Option<Arc<Tenant>> {
+        self.tenant.clone()
+    }
+}
+
+impl Defaults {
+    pub async fn new(storage: FlowStorage, pool: PgPool) -> Self {
+        let default = Self::find_default(&storage, &pool).await;
+        Defaults {
+            storage,
+            pool,
+            tenant: default,
+        }
+    }
+
+    async fn find_default(storage: &FlowStorage, pool: &PgPool) -> Option<Arc<Tenant>> {
+        let res = match query!("select uid from tenants where is_default = true")
+            .fetch_optional(pool)
+            .await
+            .ok()
+            .flatten()
+        {
+            Some(res) => res,
+            None => return None,
+        };
+        let reference: Reference<Tenant> = Reference::new_uid(res.uid);
+        let tenant = storage.lookup_reference(&reference).await;
+        tenant
+    }
 }
 
 async fn start_server(config: InternalAuthustConfiguration, pool: PgPool) {
@@ -158,7 +216,8 @@ async fn start_server(config: InternalAuthustConfiguration, pool: PgPool) {
     let cors = CorsLayer::very_permissive();
     let storage = FlowStorage::new(pool.clone());
     preload(&pool, &storage).await.expect("Preloading failed");
-    let executor = FlowExecutor::new(storage);
+    let defaults = Defaults::new(storage.clone(), pool.clone()).await;
+    let executor = FlowExecutor::new(storage.clone());
     let users = UserService::new();
     let _handlebars = setup_handlebars();
     let internal_state = InternalSharedState {
@@ -168,16 +227,20 @@ async fn start_server(config: InternalAuthustConfiguration, pool: PgPool) {
             encoding_key: EncodingKey::from_secret(config.secret.as_bytes()),
             decoding_key: DecodingKey::from_secret(config.secret.as_bytes()),
         },
+        storage,
+        defaults: Arc::new(defaults),
     };
     let state = SharedState(Arc::new(internal_state));
-    let router = Router::new()
-        .route("/test", get(hello_world))
-        .nest(
-            "/api/v1",
-            setup_api_v1(&config.secret, state.clone(), pool).await,
-        )
+    let service = ServiceBuilder::new()
         .layer(TraceLayer::new_for_http())
         .layer(cors)
+        .layer(CookieManagerLayer::new())
+        .layer(TxLayer::new(pool));
+    let router = Router::new()
+        .route("/test", get(hello_world))
+        .nest("/api/v1", setup_api_v1(&config.secret, state.clone()).await)
+        .nest("/", setup_interface_router())
+        .layer(service)
         .with_state(state);
     let bind = axum::Server::bind(&config.listen.http);
     info!("Listening on {}...", config.listen.http);

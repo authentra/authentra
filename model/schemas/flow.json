@@ -93,7 +93,13 @@
     "FlowDesignation": {
       "type": "string",
       "enum": [
-        "authentication"
+        "invalidation",
+        "authentication",
+        "authorization",
+        "enrollment",
+        "recovery",
+        "unenrollment",
+        "configuration"
       ]
     },
     "FlowEntry": {
