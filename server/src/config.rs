@@ -13,6 +13,7 @@ pub struct InternalAuthustConfiguration {
     pub listen: ListenConfiguration,
     pub postgres: PostgresConfiguration,
     pub secret: String,
+    pub jaeger_endpoint: Option<String>,
     // pub allowed_hosts: Vec<String>,
 }
 

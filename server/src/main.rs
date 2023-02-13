@@ -23,7 +23,6 @@ use sqlx::query;
 use sqlx::{migrate::Migrator, postgres::PgConnectOptions, ConnectOptions, PgPool};
 use tower::ServiceBuilder;
 use tower_cookies::CookieManagerLayer;
-use tower_http::cors::CorsLayer;
 use tower_http::trace::TraceLayer;
 use tracing::info;
 use tracing_error::ErrorLayer;
@@ -51,9 +50,22 @@ async fn setup() {
     let mut configuration =
         InternalAuthustConfiguration::load().expect("Failed to load configuration");
     let password = std::mem::replace(&mut configuration.postgres.password, String::new());
-    let layer = tracing_subscriber::fmt::Layer::new();
+
+    let opentelemetry = if let Some(endpoint) = &configuration.jaeger_endpoint {
+        let tracer = opentelemetry_jaeger::new_agent_pipeline()
+            .with_endpoint(endpoint)
+            .with_service_name("authust")
+            .install_simple()
+            .expect("Faield to install opentelemetry jaeger tracer");
+        let opentelemetry = tracing_opentelemetry::layer().with_tracer(tracer);
+        Some(opentelemetry)
+    } else {
+        None
+    };
+    let layer = tracing_subscriber::fmt::Layer::new().with_filter(EnvFilter::from_default_env());
     let registry = tracing_subscriber::registry()
-        .with(EnvFilter::from_default_env())
+        .with(EnvFilter::new("tokio=trace,runtime=trace,trace"))
+        .with(opentelemetry)
         .with(ErrorLayer::default())
         .with(layer);
     tracing::subscriber::set_global_default(registry).unwrap();
@@ -62,6 +74,7 @@ async fn setup() {
         .await
         .expect("Failed to connect to database");
     start_server(configuration, pool).await;
+    opentelemetry::global::shutdown_tracer_provider();
 }
 
 async fn setup_database(
@@ -212,7 +225,7 @@ impl Defaults {
 async fn start_server(config: InternalAuthustConfiguration, pool: PgPool) {
     #[cfg(debug_assertions)]
     #[cfg(feature = "dev-mode")]
-    let cors = CorsLayer::very_permissive();
+    let cors = tower_http::cors::CorsLayer::very_permissive();
     let storage = FlowStorage::new(pool.clone());
     preload(&pool, &storage).await.expect("Preloading failed");
     let defaults = Defaults::new(storage.clone(), pool.clone()).await;

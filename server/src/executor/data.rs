@@ -36,9 +36,10 @@ impl AsComponent for Stage {
                     }),
                 })
             }
-            StageKind::UserLogin => todo!(),
-            StageKind::UserLogout => todo!(),
-            StageKind::UserWrite => todo!(),
+            StageKind::UserLogin | StageKind::UserLogout | StageKind::UserWrite => {
+                tracing::warn!("Tried to send server side stage to client");
+                None
+            }
             StageKind::Password { .. } => Some(FlowComponent::Password {
                 data: PasswordComponentData {
                     recovery_url: "".into(),

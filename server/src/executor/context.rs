@@ -4,7 +4,7 @@ use std::{
     marker::PhantomData,
 };
 
-use model::PendingUser;
+use model::{PendingUser, Reference, Stage};
 use time::OffsetDateTime;
 use uuid::Uuid;
 
@@ -17,6 +17,12 @@ pub struct ExecutionContext {
     pub pending: Option<PendingUser>,
     pub user: Option<PolicyUser>,
     pub storage: FreezedStorage,
+    pub error: Option<ExecutionError>,
+}
+
+pub struct ExecutionError {
+    pub stage: Option<Reference<Stage>>,
+    pub message: String,
 }
 
 impl ExecutionContext {
@@ -28,6 +34,7 @@ impl ExecutionContext {
             user: None,
             storage,
             pending: None,
+            error: None,
         }
     }
 }

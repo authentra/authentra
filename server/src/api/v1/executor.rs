@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use argon2::{password_hash::Encoding, PasswordHash};
 use axum::{
     extract::{OriginalUri, State},
@@ -9,18 +11,19 @@ use axum::{
 use serde_json::Value;
 use sqlx::{query, Postgres};
 use tower_cookies::Cookies;
+use tracing::instrument;
 use uuid::Uuid;
 
 use crate::{
     api::{sql_tx::Tx, ApiError, ApiErrorKind, AuthServiceData, ExecutorQuery},
     auth::Session,
-    executor::{flow::FlowExecution, FlowExecutor},
+    executor::{flow::FlowExecution, ExecutionError, FlowExecutor},
     service::user::UserService,
     SharedState,
 };
 use model::{
     error::{FieldError, FieldErrorKind, FieldType, SubmissionError},
-    Flow, FlowData, PasswordBackend, PendingUser, Reference, StageKind, UserField,
+    Flow, FlowData, PasswordBackend, PendingUser, Reference, Stage, StageKind, UserField,
 };
 
 use super::{
@@ -35,6 +38,7 @@ pub fn setup_executor_router() -> Router<SharedState> {
     )
 }
 
+#[instrument(skip(state, session))]
 async fn get_flow(
     session: Session,
     flow: Reference<Flow>,
@@ -53,6 +57,7 @@ async fn get_flow(
     Ok(Json(data))
 }
 
+#[instrument(skip(state, session, form, cookies, uri, tx))]
 async fn post_flow(
     session: Session,
     mut tx: Tx<Postgres>,
@@ -89,20 +94,33 @@ async fn post_flow(
     }
 }
 
+#[instrument(skip(form, tx, executor, users, execution))]
 async fn handle_submission(
     form: Value,
     tx: &mut Tx<Postgres>,
-    _executor: &FlowExecutor,
+    executor: &FlowExecutor,
     users: &UserService,
     execution: &FlowExecution,
 ) -> Result<(), ApiError> {
     let entry = execution.get_entry();
     let stage = execution.lookup_stage(&entry.stage).await;
+    handle_stage(form, tx, executor, users, execution, stage).await
+}
+
+#[instrument(skip(form, tx, _executor, users, execution))]
+async fn handle_stage(
+    form: Value,
+    tx: &mut Tx<Postgres>,
+    _executor: &FlowExecutor,
+    users: &UserService,
+    execution: &FlowExecution,
+    stage: Arc<Stage>,
+) -> Result<(), ApiError> {
     match &stage.kind {
         StageKind::Deny => return Ok(()),
         StageKind::Prompt { bindings: _ } => return Ok(()),
         StageKind::Identification {
-            password: _,
+            password,
             user_fields,
         } => {
             let uid = str_from_field(
@@ -139,59 +157,77 @@ async fn handle_submission(
                     .into())
                 }
             };
+            if let Some(password) = password {
+                let password = execution.lookup_stage(password).await;
+                match &password.kind {
+                    StageKind::Password { backends } => {
+                        return handle_password_stage(&form, tx, execution, &backends).await;
+                    }
+                    _ => unreachable!("Is not password stage"),
+                };
+            }
             return Ok(());
         }
         StageKind::UserLogin => return Ok(()),
         StageKind::UserLogout => return Ok(()),
         StageKind::UserWrite => return Ok(()),
         StageKind::Password { backends } => {
-            let pending = match execution.get_context().pending.clone() {
-                Some(v) => v,
-                None => return Err(SubmissionError::NoPendingUser.into()),
-            };
-            let password = str_from_field(
-                "password",
-                form.get("password")
-                    .ok_or(SubmissionError::Field(FieldError::new(
-                        "password",
-                        FieldErrorKind::Missing,
-                    )))?,
-            )?;
-            if backends.contains(&PasswordBackend::Internal) {
-                let res = query!("select password from users where uid = $1", pending.uid)
-                    .fetch_optional(&mut *tx)
-                    .await?;
-                match res {
-                    Some(res) => {
-                        let hash = PasswordHash::parse(&res.password, Encoding::B64)?;
-                        let is_valid =
-                            match hash.verify_password(&[&argon2::Argon2::default()], password) {
-                                Ok(_) => true,
-                                Err(err) => match err {
-                                    argon2::password_hash::Error::Password => false,
-                                    err => return Err(err.into()),
-                                },
-                            };
-                        if is_valid {
-                            execution.use_mut_context(|ctx| {
-                                ctx.pending
-                                    .as_mut()
-                                    .map(|pending| pending.authenticated = true);
-                            });
-                            return Ok(());
-                        }
-                    }
-                    None => return Err(SubmissionError::NoPendingUser.into()),
-                }
-            }
-            return Err(SubmissionError::Field(FieldError::new(
-                "password",
-                FieldErrorKind::invalid("Invalid Password"),
-            ))
-            .into());
+            return handle_password_stage(&form, tx, execution, backends).await;
         }
         StageKind::Consent { mode: _ } => return Ok(()),
     };
+}
+
+#[instrument(skip(form, tx, execution))]
+async fn handle_password_stage(
+    form: &Value,
+    tx: &mut Tx<Postgres>,
+    execution: &FlowExecution,
+    backends: &Vec<PasswordBackend>,
+) -> Result<(), ApiError> {
+    let pending = match execution.get_context().pending.clone() {
+        Some(v) => v,
+        None => return Err(SubmissionError::NoPendingUser.into()),
+    };
+    let password = str_from_field(
+        "password",
+        form.get("password")
+            .ok_or(SubmissionError::Field(FieldError::new(
+                "password",
+                FieldErrorKind::Missing,
+            )))?,
+    )?;
+    if backends.contains(&PasswordBackend::Internal) {
+        let res = query!("select password from users where uid = $1", pending.uid)
+            .fetch_optional(&mut *tx)
+            .await?;
+        match res {
+            Some(res) => {
+                let hash = PasswordHash::parse(&res.password, Encoding::B64)?;
+                let is_valid = match hash.verify_password(&[&argon2::Argon2::default()], password) {
+                    Ok(_) => true,
+                    Err(err) => match err {
+                        argon2::password_hash::Error::Password => false,
+                        err => return Err(err.into()),
+                    },
+                };
+                if is_valid {
+                    execution.use_mut_context(|ctx| {
+                        ctx.pending
+                            .as_mut()
+                            .map(|pending| pending.authenticated = true);
+                    });
+                    return Ok(());
+                }
+            }
+            None => return Err(SubmissionError::NoPendingUser.into()),
+        }
+    }
+    return Err(SubmissionError::Field(FieldError::new(
+        "password",
+        FieldErrorKind::invalid("Invalid Password"),
+    ))
+    .into());
 }
 
 fn str_from_field<'a>(name: &'static str, value: &'a Value) -> Result<&'a String, SubmissionError> {
@@ -204,6 +240,7 @@ fn str_from_field<'a>(name: &'static str, value: &'a Value) -> Result<&'a String
     }
 }
 
+#[instrument(skip(tx, execution, keys, cookies, session))]
 async fn complete(
     tx: &mut Tx<Postgres>,
     execution: &FlowExecution,
@@ -211,6 +248,7 @@ async fn complete(
     cookies: &Cookies,
     session: Session,
 ) -> Result<(), ApiError> {
+    let mut iterations = 0;
     loop {
         if execution.is_completed() {
             break;
@@ -220,6 +258,14 @@ async fn complete(
         if stage.kind.requires_input() {
             break;
         }
+        if iterations > 40 {
+            tracing::error!(
+                stage = ?stage,
+                "Detected long running loop while completing stage",
+            );
+            break;
+        }
+        iterations += 1;
         match stage.kind {
             StageKind::UserLogin => {
                 let (uid, is_authenticated): (Uuid, bool) = execution
@@ -229,7 +275,11 @@ async fn complete(
                     .map(|v| (v.uid.clone(), v.authenticated))
                     .ok_or(SubmissionError::NoPendingUser)?;
                 if !is_authenticated {
-                    continue;
+                    execution.set_error(ExecutionError {
+                        stage: Some(entry.stage.clone()),
+                        message: "Authentication of pending user failed".into(),
+                    });
+                    break;
                 }
                 let cookie = cookies
                     .get(SESSION_COOKIE_NAME)

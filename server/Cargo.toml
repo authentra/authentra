@@ -55,3 +55,6 @@ serde_urlencoded = "0.7.1"
 tower-cookies = { git = "https://github.com/DSeeLP/tower-cookies" }
 # parking_lot = { workspace = true }
 model = { path = "../model", features = ["axum", "sqlx"], package = "authust_model" }
+opentelemetry-jaeger = "0.17.0"
+opentelemetry = { version = "0.18.0", features = ["trace"] }
+tracing-opentelemetry = "0.18.0"

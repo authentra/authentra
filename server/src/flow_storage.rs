@@ -392,7 +392,7 @@ impl ReferenceDbQuery<Flow> for FlowStorageInternal {
         )
         .fetch_all(&self.pool)
         .await;
-        let entries = match entries.ok() {
+        let mut entries: Vec<FlowEntry> = match entries.ok() {
             Some(entries) => {
                 let _v = "";
                 let db_entries = join_all(
@@ -414,7 +414,9 @@ impl ReferenceDbQuery<Flow> for FlowStorageInternal {
                 entries
             }
             None => return None,
-        };
+        }
+        .collect();
+        entries.sort_by_key(|entry| entry.ordering);
         Some(Flow {
             uid: res.uid,
             slug: res.slug,
@@ -422,7 +424,7 @@ impl ReferenceDbQuery<Flow> for FlowStorageInternal {
             designation: res.designation,
             authentication: res.authentication,
             bindings,
-            entries: entries.collect(),
+            entries,
         })
     }
 }

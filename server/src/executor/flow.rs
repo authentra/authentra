@@ -10,7 +10,7 @@ use model::{
     error::SubmissionError, Flow, FlowComponent, FlowData, FlowEntry, FlowInfo, Reference, Stage,
 };
 
-use super::{data::AsComponent, ExecutionContext};
+use super::{data::AsComponent, ExecutionContext, ExecutionError};
 
 #[derive(Clone)]
 pub struct FlowExecution(pub(super) Arc<FlowExecutionInternal>);
@@ -23,6 +23,10 @@ impl FlowExecution {
         let mut lock = self.0.context.try_write().expect("Context is locked");
         func(&mut *lock);
     }
+    pub fn set_error(&self, error: ExecutionError) {
+        self.use_mut_context(|ctx| ctx.error = Some(error));
+    }
+
     pub async fn data(&self, error: Option<SubmissionError>, query: ExecutorQuery) -> FlowData {
         let flow = self.0.flow.as_ref();
         let entry = self.get_entry();
@@ -35,10 +39,15 @@ impl FlowExecution {
                 },
             }
         } else {
-            match stage.as_component(self).await {
-                Some(v) => v,
-                None => FlowComponent::AccessDenied {
-                    message: "Internal error while constructing component".to_owned(),
+            match &self.get_context().error {
+                Some(err) => FlowComponent::Error {
+                    message: err.message.clone(),
+                },
+                None => match stage.as_component(self).await {
+                    Some(v) => v,
+                    None => FlowComponent::AccessDenied {
+                        message: "Internal error while constructing component".to_owned(),
+                    },
                 },
             }
         };
