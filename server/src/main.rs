@@ -210,7 +210,8 @@ impl Defaults {
 }
 
 async fn start_server(config: InternalAuthustConfiguration, pool: PgPool) {
-    //TODO: disable CORS
+    #[cfg(debug_assertions)]
+    #[cfg(feature = "dev-mode")]
     let cors = CorsLayer::very_permissive();
     let storage = FlowStorage::new(pool.clone());
     preload(&pool, &storage).await.expect("Preloading failed");
@@ -231,9 +232,11 @@ async fn start_server(config: InternalAuthustConfiguration, pool: PgPool) {
     let state = SharedState(Arc::new(internal_state));
     let service = ServiceBuilder::new()
         .layer(TraceLayer::new_for_http())
-        .layer(cors)
         .layer(CookieManagerLayer::new())
         .layer(TxLayer::new(pool));
+    #[cfg(debug_assertions)]
+    #[cfg(feature = "dev-mode")]
+    let service = service.layer(cors);
     let router = Router::new()
         .route("/test", get(hello_world))
         .nest("/api/v1", setup_api_v1(&config.secret, state.clone()).await)

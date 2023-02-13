@@ -5,6 +5,10 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[features]
+# This feature only has an effect when debug_assertions are turned on
+dev-mode = []
+
 [dependencies]
 serde = { workspace = true, features = ["derive"] }
 config = { workspace = true }
