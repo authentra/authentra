@@ -53,7 +53,7 @@ impl<T: Into<ApiErrorKind>> From<T> for ApiError {
 
 #[derive(Debug, Display, Error, From)]
 pub enum ApiErrorKind {
-    Database(#[error(source, backtrace)] sqlx::Error),
+    Database(#[error(source)] sqlx::Error),
 
     InvalidLoginData,
     SessionCookieMissing,

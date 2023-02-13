@@ -210,7 +210,7 @@ pub enum TxError {
     MissingExtension,
 
     #[from(forward)]
-    Database(#[error(source, backtrace)] sqlx::Error),
+    Database(#[error(source)] sqlx::Error),
 }
 
 impl IntoResponse for TxError {

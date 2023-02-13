@@ -23,6 +23,7 @@ export function execute_flow(flow_slug: string) {
 
 export function execute_flow_post(flow_slug: string, form: HTMLFormElement) {
     let form_data = new FormData(form);
+    // @ts-expect-error
     form_data = new URLSearchParams(form_data);
     return axios_instance.post<FlowData>("/flow/executor/" + flow_slug, form_data, {
         params: {

@@ -45,7 +45,7 @@ tower = "0.4.13"
 futures = "0.3.26"
 pin-project-lite = "0.2.9"
 pin-project = "1.0.12"
-tower-http = { version = "0.3.5", features = ["trace", "cors"] }
+tower-http = { version = "0.3.5", features = ["trace", "cors", "fs"] }
 serde_urlencoded = "0.7.1"
 # cookie = { version = "0.17.0", features = ["percent-encoding"] }
 tower-cookies = { git = "https://github.com/DSeeLP/tower-cookies" }

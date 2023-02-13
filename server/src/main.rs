@@ -1,5 +1,3 @@
-#![feature(error_generic_member_access, provide_any)]
-
 use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;

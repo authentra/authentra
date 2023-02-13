@@ -35,26 +35,26 @@ function handle_promise(promise: Promise<AxiosResponse<FlowData>>) {
     promise.then((res) => {
         data.value = res.data
         error.value = null
+        //console.log(data.value)
         if (data.value.component == 'redirect') {
             router.push(data.value.to)
         }
     }).catch((err) => {
         error.value = err
         data.value = null
-    })
+    });
 }
 
 </script>
 <template>
     {{ route }}
-    <p>
-        {{ data }}
-    </p>
 
     <form @submit.prevent="submit">
-        <IdentificationInput v-if="data != null && data.component == 'identification'" v-bind:data="data" />
+        <!--<IdentificationInput v-if="data != null && data.component == 'identification'" v-bind:data="data" />
         <PasswordInput
-            v-if="data?.component == 'password' || (data?.component == 'identification' && data.password != null)" />
+        v-if="data != null && (data.component == 'password' || (data.component == 'identification' && data.password != null))"/>-->
+        <PasswordInput
+            v-if="data != null" />
         <button type="submit">Login</button>
     </form>
 

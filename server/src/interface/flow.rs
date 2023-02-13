@@ -11,16 +11,21 @@ use derive_more::From;
 use http::{header::LOCATION, request::Parts, StatusCode};
 use model::{FlowDesignation, Reference, Tenant};
 
-use crate::{api::ping_handler, flow_storage::ReferenceLookup, SharedState};
+use crate::{flow_storage::ReferenceLookup, SharedState};
 
 pub fn setup_flow_router() -> Router<SharedState> {
-    Router::new()
-        .route("/ping", get(ping_handler))
-        .route("/:flow_designation", get(tenant_flow_redirect))
+    Router::new().route("/:flow_designation", get(tenant_flow_redirect))
 }
 
-//TODO: Add config option for interface base uri
-const INTERFACE_BASE_URI: &str = "http://127.0.0.1:5173";
+const INTERFACE_BASE_URI: &str = base_uri();
+
+const fn base_uri() -> &'static str {
+    let env = option_env!("INTERFACE_BASE_URI");
+    match env {
+        Some(v) => v,
+        None => "",
+    }
+}
 
 pub async fn tenant_flow_redirect(
     tenant: Arc<Tenant>,
