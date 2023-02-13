@@ -10,7 +10,7 @@ use model::{
     error::SubmissionError, Flow, FlowComponent, FlowData, FlowEntry, FlowInfo, Reference, Stage,
 };
 
-use super::{data::AsComponent, ExecutionContext, ExecutionError};
+use super::{data::AsComponent, ExecutionContext, ExecutionError, FlowExecutor, FlowKey};
 
 #[derive(Clone)]
 pub struct FlowExecution(pub(super) Arc<FlowExecutionInternal>);
@@ -33,7 +33,10 @@ impl FlowExecution {
         let stage = self.lookup_stage(&entry.stage).await;
         let component = if self.0.is_completed.load(Ordering::Relaxed) {
             match query.next {
-                Some(to) => FlowComponent::Redirect { to },
+                Some(to) => {
+                    self.0.executor.invalidate_flow(&self.0.key);
+                    FlowComponent::Redirect { to }
+                }
                 None => FlowComponent::Error {
                     message: "Missing Redirect".to_owned(),
                 },
@@ -92,7 +95,9 @@ impl FlowExecution {
 
 pub(super) struct FlowExecutionInternal {
     pub(super) flow: Arc<Flow>,
+    pub(super) key: FlowKey,
     pub(super) context: RwLock<ExecutionContext>,
     pub(super) current_entry_idx: Mutex<usize>,
     pub(super) is_completed: AtomicBool,
+    pub(super) executor: FlowExecutor,
 }

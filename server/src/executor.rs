@@ -70,6 +70,10 @@ impl FlowExecutor {
         }
     }
 
+    pub fn invalidate_flow(&self, key: &FlowKey) {
+        self.internal.executions.invalidate(key);
+    }
+
     pub fn get_key(&self, session: &Session, flow: Reference<Flow>) -> Option<FlowKey> {
         if flow.kind() != ReferenceKind::Slug {
             return None;
@@ -113,6 +117,8 @@ impl FlowExecutor {
             context: RwLock::new(context),
             current_entry_idx: Mutex::new(0),
             is_completed: AtomicBool::new(false),
+            executor: self.clone(),
+            key: key.clone(),
         };
         let execution = FlowExecution(Arc::new(execution));
         self.internal
