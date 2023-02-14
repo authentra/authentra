@@ -1,5 +1,5 @@
 [workspace]
-members = ["model", "server"]
+members = ["model", "server", "tools"]
 
 [workspace.dependencies]
 axum = ">=0.6.4"

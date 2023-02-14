@@ -49,14 +49,19 @@ paths:
           description: Ok
           content:
             application/json:
-              schema: 
-                $ref: "#/components/schemas/PartialUser"
+              schema:
+                type: object
+                properties:
+                  user:
+                    oneOf: 
+                      - $ref: "#/components/schemas/PartialUser"
+                      - type: null
         401:
           description: Unauthorized
       security:
         - {}
         - auth: []
-  "/flow/-/default/{flow-designation}":
+  "/flow/-/{flow-designation}":
     get: 
       summary: Redirect to flow execution
       operationId: redirect-flow-default

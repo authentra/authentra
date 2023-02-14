@@ -1,6 +1,5 @@
 import axios from 'axios';
-import { useRoute } from 'vue-router';
-import type { FlowData } from './model';
+import type { FlowData, CheckAuthResponse } from './model';
 
 export const axios_instance = axios.create({
     baseURL: 'http://127.0.0.1:8080/api/v1',
@@ -11,7 +10,9 @@ function get_query() {
     return new URLSearchParams(window.location.search)
 }
 
-export function get_user_info() {}
+export function get_user_info() {
+    return axios_instance.get<CheckAuthResponse>("/auth")
+}
 
 export function execute_flow(flow_slug: string) {
     return axios_instance.get<FlowData>("/flow/executor/" + flow_slug, {

@@ -38,7 +38,7 @@ impl Default for ListenConfiguration {
         Self {
             http: SocketAddr::new(std::net::IpAddr::V6(Ipv6Addr::UNSPECIFIED), 8080),
             https: None,
-            metrics: SocketAddr::new(std::net::IpAddr::V6(Ipv6Addr::UNSPECIFIED), 9300),
+            metrics: SocketAddr::new(std::net::IpAddr::V6(Ipv6Addr::UNSPECIFIED), 3000),
         }
     }
 }

@@ -1,3 +1,5 @@
+use std::future::ready;
+use std::net::SocketAddr;
 use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
@@ -12,15 +14,20 @@ use crate::interface::setup_interface_router;
 use crate::service::user::UserService;
 use api::AuthServiceData;
 
-use axum::extract::FromRef;
+use axum::extract::{FromRef, MatchedPath};
+use axum::middleware::{self, Next};
+use axum::response::IntoResponse;
 use axum::routing::get;
 use axum::Router;
 use handlebars::Handlebars;
 
+use http::Request;
 use jsonwebtoken::{DecodingKey, EncodingKey};
+use metrics_exporter_prometheus::{Matcher, PrometheusBuilder};
 use model::{Flow, Reference, Tenant};
 use sqlx::query;
 use sqlx::{migrate::Migrator, postgres::PgConnectOptions, ConnectOptions, PgPool};
+use tokio::time::Instant;
 use tower::ServiceBuilder;
 use tower_cookies::CookieManagerLayer;
 use tower_http::trace::TraceLayer;
@@ -58,13 +65,16 @@ async fn setup() {
             .install_simple()
             .expect("Faield to install opentelemetry jaeger tracer");
         let opentelemetry = tracing_opentelemetry::layer().with_tracer(tracer);
+        println!("Enabling OTEL Jaeger");
         Some(opentelemetry)
     } else {
         None
     };
     let layer = tracing_subscriber::fmt::Layer::new().with_filter(EnvFilter::from_default_env());
     let registry = tracing_subscriber::registry()
-        .with(EnvFilter::new("tokio=trace,runtime=trace,trace"))
+        .with(EnvFilter::new(
+            "tokio=trace,runtime=trace,trace,hyper=trace",
+        ))
         .with(opentelemetry)
         .with(ErrorLayer::default())
         .with(layer);
@@ -73,7 +83,9 @@ async fn setup() {
     let pool = setup_database(&configuration.postgres, &password)
         .await
         .expect("Failed to connect to database");
-    start_server(configuration, pool).await;
+    let metrics_future = start_metrics_server(configuration.listen.metrics);
+    let app_future = start_server(configuration, pool);
+    tokio::join!(metrics_future, app_future);
     opentelemetry::global::shutdown_tracer_provider();
 }
 
@@ -153,7 +165,7 @@ async fn preload(pool: &PgPool, storage: &FlowStorage) -> Result<(), sqlx::Error
 }
 
 #[derive(Clone)]
-pub struct SharedState(Arc<InternalSharedState>);
+pub struct SharedState(Arc<InternalSharedState>, PgPool);
 
 impl SharedState {
     pub fn users(&self) -> &UserService {
@@ -173,6 +185,12 @@ impl SharedState {
     }
     pub fn defaults(&self) -> &Defaults {
         &self.0.defaults.as_ref()
+    }
+}
+
+impl FromRef<SharedState> for PgPool {
+    fn from_ref(input: &SharedState) -> Self {
+        input.1.clone()
     }
 }
 
@@ -242,8 +260,9 @@ async fn start_server(config: InternalAuthustConfiguration, pool: PgPool) {
         storage,
         defaults: Arc::new(defaults),
     };
-    let state = SharedState(Arc::new(internal_state));
+    let state = SharedState(Arc::new(internal_state), pool.clone());
     let service = ServiceBuilder::new()
+        .layer(middleware::from_fn(track_metrics))
         .layer(TraceLayer::new_for_http())
         .layer(CookieManagerLayer::new())
         .layer(TxLayer::new(pool));
@@ -264,6 +283,52 @@ async fn start_server(config: InternalAuthustConfiguration, pool: PgPool) {
     // server.await.expect("Server crashed");
 }
 
+async fn start_metrics_server(addr: SocketAddr) {
+    const EXPONENTIAL_SECONDS: &[f64] = &[
+        0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0,
+    ];
+
+    let recorder = PrometheusBuilder::new()
+        .set_buckets_for_metric(
+            Matcher::Full("http_requests_duration_seconds".to_string()),
+            EXPONENTIAL_SECONDS,
+        )
+        .unwrap()
+        .install_recorder()
+        .unwrap();
+    let app = Router::new().route("/metrics", get(move || ready(recorder.render())));
+    axum::Server::bind(&addr)
+        .serve(app.into_make_service())
+        .await
+        .unwrap()
+}
+
 async fn hello_world() -> &'static str {
     "Hello, World!"
+}
+
+async fn track_metrics<B>(req: Request<B>, next: Next<B>) -> impl IntoResponse {
+    let start = Instant::now();
+    let path = if let Some(matched_path) = req.extensions().get::<MatchedPath>() {
+        matched_path.as_str().to_owned()
+    } else {
+        req.uri().path().to_owned()
+    };
+    let method = req.method().clone();
+
+    let response = next.run(req).await;
+
+    let latency = start.elapsed().as_secs_f64();
+    let status = response.status().as_u16().to_string();
+
+    let labels = [
+        ("method", method.to_string()),
+        ("path", path),
+        ("status", status),
+    ];
+
+    metrics::increment_counter!("http_requests_total", &labels);
+    metrics::histogram!("http_requests_duration_seconds", latency, &labels);
+
+    response
 }

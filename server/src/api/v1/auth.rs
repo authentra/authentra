@@ -21,6 +21,7 @@ use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use sqlx::{query, Postgres};
 use tower::{Layer, Service};
 use tower_cookies::{cookie::SameSite, Cookie, Cookies};
+use tracing::instrument;
 use uuid::Uuid;
 
 use crate::{
@@ -243,6 +244,7 @@ async fn make_new_session(
 impl FromRequestParts<SharedState> for Session {
     type Rejection = ApiError;
 
+    #[instrument(skip(parts, state), name = "session")]
     async fn from_request_parts(
         parts: &mut Parts,
         state: &SharedState,

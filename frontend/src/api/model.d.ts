@@ -80,3 +80,7 @@ export interface PartialUser {
     name: string,
     avatar_url: string | null
 }
+
+export interface CheckAuthResponse {
+    user: PartialUser | null
+}

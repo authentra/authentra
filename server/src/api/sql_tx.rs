@@ -15,6 +15,7 @@ use http::{request::Parts, Request, StatusCode};
 use parking_lot::Mutex;
 use sqlx::{Database, Executor, Pool, Postgres, Transaction};
 use tower::{Layer, Service};
+use tracing::instrument;
 
 #[derive(Debug)]
 pub struct Tx<Db: Database>(Lease<sqlx::Transaction<'static, Db>>);
@@ -88,6 +89,7 @@ where
         self.inner.poll_ready(cx)
     }
 
+    #[instrument(skip(self, req), name = "sqlx-transaction")]
     fn call(&mut self, mut req: Request<ReqBody>) -> Self::Future {
         let mut inner = self.inner.clone();
         let pool = self.pool.clone();
@@ -99,9 +101,12 @@ where
 
             if res.status().is_success() {
                 if let Some(tx) = slot.into_inner().flatten().and_then(Slot::into_inner) {
+                    tracing::trace!("Committing sql transaction");
                     if let Err(err) = tx.commit().await {
                         tracing::error!("{err}");
                         return Ok(StatusCode::INTERNAL_SERVER_ERROR.into_response());
+                    } else {
+                        tracing::trace!("Committed transaction");
                     }
                 }
             }
