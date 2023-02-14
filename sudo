@@ -1,0 +1,5 @@
+[33mWARN[0m[0000] The cgroupv2 manager is set to systemd but there is no systemd user session available 
+[33mWARN[0m[0000] For using systemd, you may need to login using an user session 
+[33mWARN[0m[0000] Alternatively, you can enable lingering with: `loginctl enable-linger 1000` (possibly as root) 
+[33mWARN[0m[0000] Falling back to --cgroup-manager=cgroupfs    
+Error: command required for rootless mode with multiple IDs: exec: "newuidmap": executable file not found in $PATH
