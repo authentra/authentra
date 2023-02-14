@@ -1,5 +1,5 @@
 [workspace]
-members = ["model", "server", "tools"]
+members = ["model", "server", "tools", "policy-engine"]
 
 [workspace.dependencies]
 axum = ">=0.6.4"
@@ -15,5 +15,8 @@ uuid = ">=1.2.2"
 time = { version = "0.3.17" }
 impl-tools = ">=0.8.0"
 async-trait = ">=0.1.63"
-schemars = "0.8.11"
+schemars = ">=0.8.11"
 derive_more = { git = "https://github.com/JelteF/derive_more" }
+rhai = ">=1.12.0"
+http = "0.2.8"
+parking_lot = { version = "0.12.1", features = ["send_guard"] }

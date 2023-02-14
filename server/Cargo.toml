@@ -23,10 +23,10 @@ sqlx = { workspace = true, features = [
   "time",
   "offline",
 ] }
-http = "0.2.8"
+http.workspace = true
 uuid = { workspace = true, features = ["serde"] }
 time = { workspace = true, features = ["serde"] }
-parking_lot = { version = "0.12.1", features = ["send_guard"] }
+parking_lot.workspace = true
 jsonwebtoken = "8.2.0"
 rand = "0.8.5"
 futures-util = "0.3.25"
