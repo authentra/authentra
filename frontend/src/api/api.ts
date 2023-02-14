@@ -2,7 +2,7 @@ import axios from 'axios';
 import type { FlowData, CheckAuthResponse } from './model';
 
 export const axios_instance = axios.create({
-    baseURL: 'http://127.0.0.1:8080/api/v1',
+    baseURL: import.meta.env.VITE_API_BASE,
     withCredentials: true
 })
 
