@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use crate::TryAsRef;
 
-#[derive(Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct RhaiUri {
     uri: ImmutableString,
     scheme: Scheme,
@@ -17,7 +17,7 @@ pub struct RhaiUri {
     query: Option<ImmutableString>,
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Scheme {
     Http,
     Https,
@@ -101,3 +101,5 @@ mod uri_module {
         obj.query.clone()
     }
 }
+
+mod test {}

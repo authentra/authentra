@@ -1,2 +1,10 @@
 image:
+  repository: harbor.dseelp.one/library/authust
   tag: "latest"
+ingress:
+  enabled: true
+  hosts:
+    - host: authust.dseelp.one
+      paths:
+        - path: /
+          pathType: ImplementationSpecific
