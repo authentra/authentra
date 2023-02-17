@@ -1,11 +1,11 @@
 use ::rhai::{
     packages::{
-        ArithmeticPackage, BasicFnPackage, BasicStringPackage, CorePackage, LanguageCorePackage,
-        Package,
+        ArithmeticPackage, BasicFnPackage, BasicStringPackage, LanguageCorePackage, Package,
     },
     Engine, EvalAltResult, ParseError, Position, Scope, AST,
 };
 use base64::{prelude::BASE64_URL_SAFE_NO_PAD, Engine as _};
+use network::NetworkPackage;
 use once_cell::sync::Lazy;
 use parking_lot::Mutex;
 use std::sync::Arc;
@@ -33,7 +33,7 @@ pub fn create_engine() -> Engine {
         .set_allow_looping(false)
         .set_strict_variables(true);
     engine.set_max_string_size(128).set_max_operations(1000);
-    engine.register_global_module(uri::MODULE.clone());
+    register_packages(&mut engine);
     engine
 }
 
@@ -69,6 +69,7 @@ fn register_packages(engine: &mut Engine) {
     ArithmeticPackage::new().register_into_engine(engine);
     BasicStringPackage::new().register_into_engine(engine);
     BasicFnPackage::new().register_into_engine(engine);
+    NetworkPackage::new().register_into_engine(engine);
 }
 
 pub fn execute(ast: &AST) -> ExecutionResult {
@@ -89,7 +90,6 @@ pub fn execute(ast: &AST) -> ExecutionResult {
         });
     }
 
-    register_packages(&mut engine);
     let engine = engine;
 
     let mut scope = Scope::new();
@@ -137,39 +137,44 @@ macro_rules! register_package {
 
 #[cfg(test)]
 macro_rules! eval_test {
-        ($fn_name:ident, $rt:ty, ($rt_expr:expr): $expr:literal, $($package:ty),+ ) => {
-            #[test]
-            fn $fn_name() {
-                let mut engine = Engine::new_raw();
-                register_package!(&mut engine, $($package),+);
-                let mut scope = concat_idents::concat_idents!(fn_name = $fn_name, _scope {
-                    fn_name()
-                });
-                let res = engine.eval_with_scope::<$rt>(&mut scope, $expr).expect("Rhai execution failed");
-                assert_eq!($rt_expr, res);
-            }
-        };
-        ($fn_name:ident -> $rt:ty | ($rt_expr:expr): $expr:literal, $($package:ty),+ ) => {
-            #[test]
-            fn $fn_name() {
-                let mut engine = Engine::new_raw();
-                register_package!(&mut engine, $($package),+);
-                let mut scope = Scope::new();
-                let res = engine.eval_with_scope::<$rt>(&mut scope, $expr).expect("Rhai execution failed");
-            }
-        };
-        ($fn_name:ident($value_name:literal: $value:expr) -> $rt:ty | ($rt_expr:expr): $expr:literal, $($package:ty),+ ) => {
-            #[test]
-            fn $fn_name() {
-                let mut engine = Engine::new_raw();
-                register_package!(&mut engine, $($package),+);
-                let mut scope = Scope::new();
-                scope.push_constant($value_name, $value);
-                let res = engine.eval_with_scope::<$rt>(&mut scope, $expr).expect("Rhai execution failed");
-                assert_eq!($rt_expr, res);
-            }
+    ($fn_name:ident, $rt:ty, ($rt_expr:expr): $expr:literal, $($package:ty),+ ) => {
+        #[test]
+        fn $fn_name() {
+            let mut engine = Engine::new_raw();
+            register_package!(&mut engine, $($package),+);
+            let mut scope = concat_idents::concat_idents!(fn_name = $fn_name, _scope {
+                fn_name()
+            });
+            let res = engine.eval_with_scope::<$rt>(&mut scope, $expr).expect("Rhai execution failed");
+            assert_eq!($rt_expr, res);
+        }
+    };
+    ($fn_name:ident -> $rt:ty | ($rt_expr:expr): $expr:literal, $($package:ty),+ ) => {
+        #[test]
+        fn $fn_name() {
+            let mut engine = Engine::new_raw();
+            register_package!(&mut engine, $($package),+);
+            let mut scope = Scope::new();
+            let res = engine.eval_with_scope::<$rt>(&mut scope, $expr).expect("Rhai execution failed");
+        }
+    };
+    ($fn_name:ident($value_name:literal: $value:expr) -> $rt:ty | ($rt_expr:expr): $expr:literal, $($package:ty),+ ) => {
+        #[test]
+        fn $fn_name() {
+            let mut engine = Engine::new_raw();
+            register_package!(&mut engine, $($package),+);
+            let mut scope = Scope::new();
+            scope.push_constant($value_name, $value);
+            let res = engine.eval_with_scope::<$rt>(&mut scope, $expr).expect("Rhai execution failed");
+            assert_eq!($rt_expr, res);
         }
     }
+}
+
+#[cfg(test)]
+pub(crate) use eval_test;
+#[cfg(test)]
+pub(crate) use register_package;
 
 #[cfg(test)]
 pub(crate) fn simple_eval(expr: &str) -> crate::ExecutionResult {
@@ -180,6 +185,11 @@ pub(crate) fn simple_eval(expr: &str) -> crate::ExecutionResult {
 #[cfg(test)]
 mod tests {
     use crate::{simple_eval, LogEntry};
+
+    pub mod preload {
+        pub(crate) use crate::{eval_test, register_package};
+        pub(crate) use rhai::{Engine, Scope};
+    }
 
     #[test]
     fn hello_world() {

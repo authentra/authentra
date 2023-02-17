@@ -1,7 +1,9 @@
 use rhai::{def_package, plugin::*};
 
+use crate::uri::UriPackage;
+
 def_package! {
-    pub NetworkPackage(module) {
+    pub NetworkPackage(module): UriPackage {
         combine_with_exported_module!(module, "IpAddr", ip_module);
         combine_with_exported_module!(module, "Ipv4Addr", ipv4_module);
         combine_with_exported_module!(module, "Ipv6Addr", ipv6_module);
@@ -130,6 +132,7 @@ mod tests {
     use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
     use super::NetworkPackage;
+    use crate::{eval_test, register_package};
     use rhai::{Engine, Scope};
 
     eval_test!(test_generic_loopback("addr": IpAddr::V4(Ipv4Addr::LOCALHOST)) -> bool | (true): "addr.is_loopback()", NetworkPackage);
