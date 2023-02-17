@@ -72,7 +72,7 @@ fn register_packages(engine: &mut Engine) {
     NetworkPackage::new().register_into_engine(engine);
 }
 
-pub fn execute(ast: &AST) -> ExecutionResult {
+pub fn execute<'a, F: FnOnce() -> Scope<'a>>(ast: &AST, create_scope: F) -> ExecutionResult {
     let mut engine = create_engine();
     let out: Arc<Mutex<Vec<LogEntry>>> = Arc::new(Mutex::new(Vec::new()));
     {
@@ -92,7 +92,7 @@ pub fn execute(ast: &AST) -> ExecutionResult {
 
     let engine = engine;
 
-    let mut scope = Scope::new();
+    let mut scope = create_scope();
     let result = engine.eval_ast_with_scope::<bool>(&mut scope, ast);
     let output: Vec<LogEntry> = out.lock().iter().cloned().collect();
     ExecutionResult { output, result }
@@ -179,7 +179,7 @@ pub(crate) use register_package;
 #[cfg(test)]
 pub(crate) fn simple_eval(expr: &str) -> crate::ExecutionResult {
     let ast = compile(BASE64_URL_SAFE_NO_PAD.encode(expr).as_str()).expect("Compilation failed");
-    execute(&ast)
+    execute(&ast, Scope::new)
 }
 
 #[cfg(test)]
