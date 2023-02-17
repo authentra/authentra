@@ -211,7 +211,8 @@ pub(self) fn generate_csrf() -> String {
 pub(self) fn mask_csrf(secret: &str) -> String {
     let mask_str = generate_csrf();
     let out = mask_op(mask_str.chars(), secret.chars(), true);
-    mask_str + &out
+    // See https://github.com/rhaiscript/rhai/issues/707
+    mask_str + out.as_str()
 }
 
 fn mask_op(mask: Chars, chars: Chars, add: bool) -> String {
