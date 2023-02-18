@@ -5,13 +5,14 @@ create table users
     email                varchar(64) unique,
     display_name         varchar(32),
     password             varchar(255)                                    not null,
-    password_change_date timestamp default now()                         not null
+    password_change_date timestamp default now()                         not null,
+    administrator             boolean   default false                         not null
 );
 
 create table sessions
 (
     uid     char(96) primary key,
-    user_id uuid     references users
+    user_id uuid references users
 );
 
 create type policy_kind as enum ('password_expiry', 'password_strength', 'expression');
@@ -29,7 +30,8 @@ create table password_strength_policies
 
 create table expression_policies
 (
-    uid serial primary key
+    uid        serial primary key,
+    expression text not null
 );
 
 create table policies
@@ -89,7 +91,7 @@ create table stages
     uid                           serial primary key,
     slug                          varchar(128) not null unique,
     kind                          stage_kind   not null,
-    timeout                       int4        not null,
+    timeout                       int4         not null,
     identification_password_stage int4 references stages,
     identification_stage          int4 references stages,
     consent_stage                 int4 references consent_stages
@@ -155,19 +157,20 @@ create table applications
     provider     int4        not null references providers
 );
 
-create table tenants(
-    uid serial primary key,
-    host varchar(255) not null unique,
-    is_default bool not null,
-    title varchar(64) not null,
-    logo varchar(255) not null,
-    favicon varchar(255) not null,
+create table tenants
+(
+    uid                 serial primary key,
+    host                varchar(255) not null unique,
+    is_default          bool         not null,
+    title               varchar(64)  not null,
+    logo                varchar(255) not null,
+    favicon             varchar(255) not null,
 
-    invalidation_flow int4 references flows,
+    invalidation_flow   int4 references flows,
     authentication_flow int4 references flows,
-    authorization_flow int4 references flows,
-    enrollment_flow int4 references flows,
-    recovery_flow int4 references flows,
-    unenrollment_flow int4 references flows,
-    configuration_flow int4 references flows
+    authorization_flow  int4 references flows,
+    enrollment_flow     int4 references flows,
+    recovery_flow       int4 references flows,
+    unenrollment_flow   int4 references flows,
+    configuration_flow  int4 references flows
 );
