@@ -1,7 +1,7 @@
 INSERT INTO users (name, display_name, password, administrator) VALUES ('admin', 'Admin', '$argon2id$v=19$m=4096,t=3,p=1$SFh24ZI4Bh5ZG4nDQ+Jawg$LDmw0mjZr29cP1kf9T9iluWFzhqOYqWloj1iaM2ebDw', true);
 
 insert into flows(slug, title, designation, authentication)
-values ('test-flow', 'Test Flow', 'authentication', 'ignored');
+values ('test-flow', 'Test Flow', 'authentication', 'none');
 insert into identification_stages(fields)
 values (array ['email', 'name']::userid_fields[]);
 insert into stages(slug, kind, timeout, identification_stage)
