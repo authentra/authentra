@@ -1,3 +1,4 @@
+use deadpool_postgres::GenericClient;
 use model::user::PartialUser;
 use sqlx::{query, Postgres};
 use uuid::Uuid;
@@ -18,27 +19,23 @@ impl UserService {
 
     pub async fn lookup_user_uid(
         &self,
-        tx: &mut Tx<Postgres>,
+        client: &impl GenericClient,
         uid: Uuid,
     ) -> Result<Option<PartialUser>, ApiError> {
-        Ok(
-            if let Some(res) = query!(
-                "select uid,name,administrator from users where uid = $1",
-                uid
-            )
-            .fetch_optional(&mut *tx)
-            .await?
-            {
-                Some(PartialUser {
-                    uid: res.uid,
-                    name: res.name,
-                    avatar_url: None,
-                    is_admin: res.administrator,
-                })
-            } else {
-                None
-            },
-        )
+        let statement = client
+            .prepare_cached("select uid,name,administrator from users where uid = $1")
+            .await?;
+        let result = client.query_opt(&statement, &[&uid]).await?;
+        Ok(if let Some(res) = result {
+            Some(PartialUser {
+                uid: res.get("uid"),
+                name: res.get("name"),
+                avatar_url: None,
+                is_admin: res.get("administrator"),
+            })
+        } else {
+            None
+        })
     }
 
     pub async fn lookup_user(

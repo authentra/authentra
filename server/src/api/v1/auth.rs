@@ -19,14 +19,14 @@ use rand::{
     rngs::OsRng,
 };
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
-use sqlx::Postgres;
+
 use tower::{Layer, Service};
 use tower_cookies::{cookie::SameSite, Cookie, Cookies};
 use tracing::instrument;
 use uuid::Uuid;
 
 use crate::{
-    api::{sql_tx::Tx, ApiError, ApiErrorKind, AuthServiceData},
+    api::{ApiError, ApiErrorKind, AuthServiceData},
     auth::Session,
     SharedState,
 };
@@ -45,14 +45,11 @@ pub struct SessionResponse {
 #[axum::debug_handler]
 pub async fn user_info(
     session: Session,
-    mut tx: Tx<Postgres>,
     State(state): State<SharedState>,
 ) -> Result<Json<SessionResponse>, ApiError> {
-    if let Some(uid) = session.user_id {
-        let user = state.users().lookup_user_uid(&mut tx, uid).await?;
-        return Ok(Json(SessionResponse { user }));
-    }
-    Ok(Json(SessionResponse { user: None }))
+    let connection = state.defaults().connection().await?;
+    let user = session.get_user(&connection, &state).await?;
+    Ok(Json(SessionResponse { user }))
 }
 
 #[derive(Debug, Clone)]

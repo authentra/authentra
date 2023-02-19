@@ -16,7 +16,10 @@ use tracing::instrument;
 use crate::{
     api::{sql_tx::Tx, ApiError, ApiErrorKind, AuthServiceData, ExecutorQuery},
     auth::Session,
-    executor::{flow::FlowExecution, ExecutionError, FlowExecutor},
+    executor::{
+        flow::{CheckContextRequest, FlowExecution},
+        ExecutionError, FlowExecutor,
+    },
     service::user::UserService,
     SharedState,
 };
@@ -43,6 +46,7 @@ async fn get_flow(
     flow: Reference<Flow>,
     State(state): State<SharedState>,
     query: Option<ExecutorQuery>,
+    OriginalUri(uri): OriginalUri,
 ) -> Result<Json<FlowData>, ApiError> {
     let executor = state.executor();
     let key = executor
@@ -52,7 +56,13 @@ async fn get_flow(
         .get_execution(&key, true)
         .await
         .ok_or(ApiErrorKind::NotFound.into_api())?;
-    let data = execution.data(None, query.unwrap_or_default()).await;
+    let connection = state.defaults().connection().await?;
+    let context = CheckContextRequest {
+        uri,
+        query: query.unwrap_or_default(),
+        user: session.get_user(&connection, &state).await?,
+    };
+    let data = execution.data(None, context).await;
     Ok(Json(data))
 }
 
@@ -75,14 +85,17 @@ async fn post_flow(
         .get_execution(&key, false)
         .await
         .ok_or(ApiErrorKind::NotFound.into_api())?;
+    let connection = state.defaults().connection().await?;
+    let context = CheckContextRequest {
+        uri: uri.clone(),
+        query: query.unwrap_or_default(),
+        user: session.get_user(&connection, &state).await?,
+    };
     if let Err(err) = handle_submission(form, &mut tx, executor, &state.users(), &execution).await {
         match &err.kind {
-            ApiErrorKind::SubmissionError(err) => Ok(Json(
-                execution
-                    .data(Some(err.clone()), query.unwrap_or_default())
-                    .await,
-            )
-            .into_response()),
+            ApiErrorKind::SubmissionError(err) => {
+                Ok(Json(execution.data(Some(err.clone()), context).await).into_response())
+            }
             _ => Err(err),
         }
     } else {

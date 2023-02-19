@@ -1,13 +1,19 @@
-use std::sync::{
-    atomic::{AtomicBool, Ordering},
-    Arc,
+use std::{
+    ops::Deref,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
 };
 
+use http::Uri;
 use parking_lot::{lock_api::RwLockReadGuard, Mutex, RawRwLock, RwLock};
+use uuid::Uuid;
 
 use crate::{api::ExecutorQuery, flow_storage::ReferenceLookup};
 use model::{
-    error::SubmissionError, Flow, FlowComponent, FlowData, FlowEntry, FlowInfo, Reference, Stage,
+    error::SubmissionError, user::PartialUser, AuthenticationRequirement, Flow, FlowBindingKind,
+    FlowComponent, FlowData, FlowEntry, FlowInfo, PendingUser, Policy, Reference, Stage,
 };
 
 use super::{data::AsComponent, ExecutionContext, ExecutionError, FlowExecutor, FlowKey};
@@ -27,15 +33,38 @@ impl FlowExecution {
         self.use_mut_context(|ctx| ctx.error = Some(error));
     }
 
-    pub async fn data(&self, error: Option<SubmissionError>, query: ExecutorQuery) -> FlowData {
+    pub async fn data(
+        &self,
+        error: Option<SubmissionError>,
+        context: CheckContextRequest,
+    ) -> FlowData {
+        let pending_user = self.get_context().pending.clone();
+        let context = CheckContext {
+            inner: CheckContextData {
+                request: context,
+                pending_user,
+            },
+            execution: self.clone(),
+        };
         let flow = self.0.flow.as_ref();
         let entry = self.get_entry();
         let stage = self.lookup_stage(&entry.stage).await;
+        let flow_info = FlowInfo {
+            title: flow.title.clone(),
+        };
+        if let Some(message) = self.check(&context).await.expect("FlowCheck failed") {
+            return FlowData {
+                flow: flow_info,
+                error,
+                pending_user: None,
+                component: FlowComponent::AccessDenied { message },
+            };
+        }
         let component = if self.0.is_completed.load(Ordering::Relaxed) {
-            match query.next {
+            match &context.request.query.next {
                 Some(to) => {
                     self.0.executor.invalidate_flow(&self.0.key);
-                    FlowComponent::Redirect { to }
+                    FlowComponent::Redirect { to: to.clone() }
                 }
                 None => FlowComponent::Error {
                     message: "Missing Redirect".to_owned(),
@@ -55,9 +84,7 @@ impl FlowExecution {
             }
         };
         FlowData {
-            flow: FlowInfo {
-                title: flow.title.clone(),
-            },
+            flow: flow_info,
             component,
             pending_user: self.0.context.read().pending.clone(),
             error,
@@ -91,6 +118,158 @@ impl FlowExecution {
             None => panic!("Missing stage in storage {reference:?}"),
         }
     }
+
+    pub async fn check(&self, context: &CheckContext) -> Result<Option<String>, ()> {
+        let flow = &self.0.flow;
+        let auth_check = FlowCheck::Authentication(flow.authentication.clone());
+        if !*auth_check.check(context) {
+            return Ok(Some(auth_check.message(context)));
+        }
+        let entry = self.get_entry();
+        for binding in &entry.bindings {
+            let check = FlowCheck::from(binding.kind.clone());
+            let result = check.check(context);
+            let result = if binding.negate {
+                result.negate()
+            } else {
+                result
+            };
+            if !*result {
+                return Ok(Some(check.message(&context)));
+            }
+        }
+        Ok(None)
+    }
+}
+
+pub enum FlowCheckOutput {
+    Passed,
+    Failed,
+    FailedHard,
+    Neutral,
+}
+
+impl FlowCheckOutput {
+    pub fn negate(self) -> Self {
+        match self {
+            FlowCheckOutput::Passed => Self::Failed,
+            FlowCheckOutput::Failed => Self::Passed,
+            FlowCheckOutput::FailedHard => Self::FailedHard,
+            FlowCheckOutput::Neutral => Self::Neutral,
+        }
+    }
+}
+
+impl Deref for FlowCheckOutput {
+    type Target = bool;
+
+    fn deref(&self) -> &Self::Target {
+        match &self {
+            FlowCheckOutput::Passed | FlowCheckOutput::Neutral => &true,
+            FlowCheckOutput::Failed | FlowCheckOutput::FailedHard => &false,
+        }
+    }
+}
+
+pub trait IntoFlowCheckOutput {
+    fn into_output(self) -> FlowCheckOutput;
+}
+
+impl IntoFlowCheckOutput for bool {
+    fn into_output(self) -> FlowCheckOutput {
+        if self {
+            FlowCheckOutput::Passed
+        } else {
+            FlowCheckOutput::Failed
+        }
+    }
+}
+
+pub enum FlowCheck {
+    Authentication(AuthenticationRequirement),
+    IsUser(Uuid),
+    Policy(Reference<Policy>),
+}
+
+impl FlowCheck {
+    pub fn check(&self, context: &CheckContext) -> FlowCheckOutput {
+        match self {
+            FlowCheck::Authentication(requirement) => match requirement {
+                AuthenticationRequirement::Superuser => {
+                    if let Some(user) = &context.request.user {
+                        user.is_admin.into_output()
+                    } else {
+                        FlowCheckOutput::Failed
+                    }
+                }
+                AuthenticationRequirement::Required => context.request.user.is_some().into_output(),
+                AuthenticationRequirement::None => context.request.user.is_none().into_output(),
+                AuthenticationRequirement::Ignored => FlowCheckOutput::Neutral,
+            },
+            FlowCheck::IsUser(id) => {
+                (context.request.user.as_ref().map(|v| &v.uid) == Some(id)).into_output()
+            }
+            FlowCheck::Policy(_) => todo!(),
+        }
+    }
+
+    pub fn message(&self, _context: &CheckContext) -> String {
+        match self {
+            FlowCheck::Authentication(requirement) => match requirement {
+                AuthenticationRequirement::Superuser => {
+                    "You must be a superuser to access this flow"
+                }
+                AuthenticationRequirement::Required => "You must be logged in to access this flow",
+                AuthenticationRequirement::None => "You must not be logged in to access this flow",
+                AuthenticationRequirement::Ignored => "This is an error! ",
+            }
+            .into(),
+            FlowCheck::IsUser(_) => "Access denied".into(),
+            FlowCheck::Policy(_) => "Access denied".into(),
+        }
+    }
+
+    pub fn negated_message(&self, context: &CheckContext) -> String {
+        match self {
+            FlowCheck::Authentication(_) => self.message(context),
+            FlowCheck::IsUser(_) => self.message(context),
+            FlowCheck::Policy(_) => self.message(context),
+        }
+    }
+}
+
+impl From<FlowBindingKind> for FlowCheck {
+    fn from(value: FlowBindingKind) -> Self {
+        match value {
+            FlowBindingKind::Group(_) => todo!(),
+            FlowBindingKind::User(id) => FlowCheck::IsUser(id),
+            FlowBindingKind::Policy(policy) => FlowCheck::Policy(policy),
+        }
+    }
+}
+
+pub struct CheckContext {
+    inner: CheckContextData,
+    pub execution: FlowExecution,
+}
+
+impl Deref for CheckContext {
+    type Target = CheckContextData;
+
+    fn deref(&self) -> &Self::Target {
+        &self.inner
+    }
+}
+
+pub struct CheckContextData {
+    pub request: CheckContextRequest,
+    pub pending_user: Option<PendingUser>,
+}
+
+pub struct CheckContextRequest {
+    pub uri: Uri,
+    pub query: ExecutorQuery,
+    pub user: Option<PartialUser>,
 }
 
 pub(super) struct FlowExecutionInternal {
