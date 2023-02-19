@@ -1,9 +1,8 @@
 use deadpool_postgres::GenericClient;
 use model::user::PartialUser;
-use sqlx::{query, Postgres};
 use uuid::Uuid;
 
-use crate::api::{sql_tx::Tx, ApiError};
+use crate::api::ApiError;
 
 #[derive(Clone)]
 pub struct UserService {}
@@ -23,7 +22,9 @@ impl UserService {
         uid: Uuid,
     ) -> Result<Option<PartialUser>, ApiError> {
         let statement = client
-            .prepare_cached("select uid,name,administrator from users where uid = $1")
+            .prepare_cached(
+                "select uid,name,administrator,password_change_date from users where uid = $1",
+            )
             .await?;
         let result = client.query_opt(&statement, &[&uid]).await?;
         Ok(if let Some(res) = result {
@@ -32,6 +33,7 @@ impl UserService {
                 name: res.get("name"),
                 avatar_url: None,
                 is_admin: res.get("administrator"),
+                password_change_date: res.get("password_change_date"),
             })
         } else {
             None
@@ -40,41 +42,43 @@ impl UserService {
 
     pub async fn lookup_user(
         &self,
-        tx: &mut Tx<Postgres>,
+        client: &impl GenericClient,
         text: &str,
         use_name: bool,
         use_email: bool,
         use_uuid: bool,
     ) -> Result<Option<PartialUser>, ApiError> {
         if use_name {
-            if let Some(res) = query!(
-                "select uid,name,administrator from users where name = $1",
-                text
-            )
-            .fetch_optional(&mut *tx)
-            .await?
-            {
+            let statement = client
+                .prepare_cached(
+                    "select uid,name,administrator,password_change_date from users where name = $1",
+                )
+                .await?;
+            let result = client.query_opt(&statement, &[&text]).await?;
+            if let Some(res) = result {
                 return Ok(Some(PartialUser {
-                    uid: res.uid,
-                    name: res.name,
+                    uid: res.get("uid"),
+                    name: res.get("name"),
                     avatar_url: None,
-                    is_admin: res.administrator,
+                    is_admin: res.get("administrator"),
+                    password_change_date: res.get("password_change_date"),
                 }));
             }
         }
         if use_email {
-            if let Some(res) = query!(
-                "select uid,name,administrator from users where email = $1",
-                text
-            )
-            .fetch_optional(&mut *tx)
-            .await?
-            {
+            let statement = client
+                .prepare_cached(
+                    "select uid,name,administrator,password_change_date from users where email = $1",
+                )
+                .await?;
+            let result = client.query_opt(&statement, &[&text]).await?;
+            if let Some(res) = result {
                 return Ok(Some(PartialUser {
-                    uid: res.uid,
-                    name: res.name,
+                    uid: res.get("uid"),
+                    name: res.get("name"),
                     avatar_url: None,
-                    is_admin: res.administrator,
+                    is_admin: res.get("administrator"),
+                    password_change_date: res.get("password_change_date"),
                 }));
             }
         }
@@ -83,18 +87,19 @@ impl UserService {
                 Ok(v) => v,
                 Err(_) => return Ok(None),
             };
-            if let Some(res) = query!(
-                "select uid,name,administrator from users where uid = $1",
-                uuid
-            )
-            .fetch_optional(&mut *tx)
-            .await?
-            {
+            let statement = client
+                .prepare_cached(
+                    "select uid,name,administrator,password_change_date from users where uid = $1",
+                )
+                .await?;
+            let result = client.query_opt(&statement, &[&uuid]).await?;
+            if let Some(res) = result {
                 return Ok(Some(PartialUser {
-                    uid: res.uid,
-                    name: res.name,
+                    uid: res.get("uid"),
+                    name: res.get("name"),
                     avatar_url: None,
-                    is_admin: res.administrator,
+                    is_admin: res.get("administrator"),
+                    password_change_date: res.get("password_change_date"),
                 }));
             }
         }

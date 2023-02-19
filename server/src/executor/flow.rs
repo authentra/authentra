@@ -124,21 +124,29 @@ impl FlowExecution {
             None => panic!("Missing stage in storage {reference:?}"),
         }
     }
+    pub async fn lookup_policy(&self, reference: &Reference<Policy>) -> Arc<Policy> {
+        let lock = self.0.context.read();
+        let storage = &lock.storage;
+        match storage.lookup_reference(reference).await {
+            Some(v) => v,
+            None => panic!("Missing policy in storage {reference:?}"),
+        }
+    }
 
     pub async fn check(&self, context: &CheckContext) -> Result<Option<String>, ()> {
         let flow = &self.0.flow;
         let auth_check = FlowCheck::Authentication(flow.authentication.clone());
-        if !*auth_check.check(context) {
+        if !*auth_check.check(context).await {
             return Ok(Some(auth_check.message(context)));
         }
         for binding in &flow.bindings {
-            if let Some(message) = check_binding(&binding, context)? {
+            if let Some(message) = check_binding(&binding, context).await? {
                 return Ok(Some(message));
             }
         }
         let entry = self.get_entry();
         for binding in &entry.bindings {
-            if let Some(message) = check_binding(&binding, context)? {
+            if let Some(message) = check_binding(&binding, context).await? {
                 return Ok(Some(message));
             }
         }
@@ -146,9 +154,12 @@ impl FlowExecution {
     }
 }
 
-fn check_binding(binding: &FlowBinding, context: &CheckContext) -> Result<Option<String>, ()> {
+async fn check_binding(
+    binding: &FlowBinding,
+    context: &CheckContext,
+) -> Result<Option<String>, ()> {
     let check = FlowCheck::from(binding.kind.clone());
-    let result = check.check(context);
+    let result = check.check(context).await;
     let result = if binding.negate {
         result.negate()
     } else {
@@ -211,7 +222,7 @@ pub enum FlowCheck {
 }
 
 impl FlowCheck {
-    pub fn check(&self, context: &CheckContext) -> FlowCheckOutput {
+    pub async fn check(&self, context: &CheckContext) -> FlowCheckOutput {
         match self {
             FlowCheck::Authentication(requirement) => match requirement {
                 AuthenticationRequirement::Superuser => {
@@ -228,7 +239,10 @@ impl FlowCheck {
             FlowCheck::IsUser(id) => {
                 (context.request.user.as_ref().map(|v| &v.uid) == Some(id)).into_output()
             }
-            FlowCheck::Policy(_) => todo!(),
+            FlowCheck::Policy(policy) => {
+                let policy = context.execution.lookup_policy(policy).await;
+                check_policy(context, &policy)
+            }
         }
     }
 
@@ -254,6 +268,24 @@ impl FlowCheck {
             FlowCheck::IsUser(_) => self.message(context),
             FlowCheck::Policy(_) => self.message(context),
         }
+    }
+}
+
+fn check_policy(context: &CheckContext, policy: &Policy) -> FlowCheckOutput {
+    match policy.kind {
+        model::PolicyKind::PasswordExpiry { max_age } => {
+            let duration = time::Duration::seconds(max_age as i64);
+            let start_time = context.execution.get_context().start_time.clone();
+            context
+                .request
+                .user
+                .as_ref()
+                .map(|user| user.password_change_date)
+                .map(|date| ((start_time - date) > duration).into_output())
+                .unwrap_or(FlowCheckOutput::Neutral)
+        }
+        model::PolicyKind::PasswordStrength => FlowCheckOutput::Neutral,
+        model::PolicyKind::Expression(_) => todo!(),
     }
 }
 
