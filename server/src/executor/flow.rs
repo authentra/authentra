@@ -52,15 +52,20 @@ impl FlowExecution {
         let flow_info = FlowInfo {
             title: flow.title.clone(),
         };
-        if let Some(message) = self.check(&context).await.expect("FlowCheck failed") {
-            return FlowData {
-                flow: flow_info,
-                error,
-                pending_user: None,
-                component: FlowComponent::AccessDenied { message },
-            };
+        let is_completed = self.0.is_completed.load(Ordering::Relaxed);
+        if let Some(_) = self.check(&context).await.expect("FlowCheck failed") {
+            if !is_completed {
+                return FlowData {
+                    flow: flow_info,
+                    error,
+                    pending_user: None,
+                    component: FlowComponent::AccessDenied {
+                        message: "Flow does not apply to current user".into(),
+                    },
+                };
+            }
         }
-        let component = if self.0.is_completed.load(Ordering::Relaxed) {
+        let component = if is_completed {
             match &context.request.query.next {
                 Some(to) => {
                     self.0.executor.invalidate_flow(&self.0.key);

@@ -114,6 +114,9 @@ async fn handle_submission(
     users: &UserService,
     execution: &FlowExecution,
 ) -> Result<(), ApiError> {
+    if execution.is_completed() {
+        return Ok(());
+    }
     let entry = execution.get_entry();
     let stage = execution.lookup_stage(&entry.stage).await;
     handle_stage(form, tx, executor, users, execution, stage).await
