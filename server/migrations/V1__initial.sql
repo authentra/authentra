@@ -1,13 +1,15 @@
 create table users
 (
     uid                  uuid      default gen_random_uuid() primary key not null,
-    name                 varchar(32) unique                              not null,
+    name                 varchar(32) unique                              not null check ( name = lower(name) ),
     email                varchar(64) unique,
     display_name         varchar(32),
     password             varchar(255)                                    not null,
     password_change_date timestamp default now()                         not null,
-    administrator             boolean   default false                         not null
+    administrator        boolean   default false                         not null
 );
+
+create unique index users_name_lower on users ((lower(name)));
 
 create table sessions
 (
@@ -37,14 +39,14 @@ create table expression_policies
 create table policies
 (
     uid                 serial primary key,
-    slug                varchar(128) not null unique,
+    slug                varchar(128) not null unique check ( slug = lower(slug) ),
     kind                policy_kind  not null,
     password_expiration int4 references password_expiration_policies,
     password_strength   int4 references password_strength_policies,
     expression          int4 references expression_policies
 );
 
-create unique index policy_slug ON policies (slug);
+create unique index policy_slug ON policies ((lower(slug)));
 
 create table policy_bindings
 (
@@ -89,13 +91,15 @@ create table identification_stages
 create table stages
 (
     uid                           serial primary key,
-    slug                          varchar(128) not null unique,
+    slug                          varchar(128) not null check ( slug = lower(slug) ),
     kind                          stage_kind   not null,
     timeout                       int4         not null,
     identification_password_stage int4 references stages,
     identification_stage          int4 references stages,
     consent_stage                 int4 references consent_stages
 );
+
+create unique index stage_slug on stages ((lower(slug)));
 
 create table stage_prompt_bindings
 (
@@ -111,12 +115,14 @@ create type flow_designation as enum ('invalidation', 'authentication', 'authori
 create table flows
 (
     uid            serial primary key,
-    slug           varchar(128)               not null unique,
+    slug           varchar(128)               not null check ( slug = lower(slug) ),
     title          varchar(128)               not null unique,
     designation    flow_designation           not null,
     authentication authentication_requirement not null
 
 );
+
+create unique index flow_slug on flows ((lower(slug)));
 
 create table flow_entries
 (
@@ -145,17 +151,21 @@ create table flow_bindings
 create table providers
 (
     uid          serial primary key,
-    slug         varchar(64) not null,
+    slug         varchar(64) not null check ( slug = lower(slug) ),
     display_name varchar(64) not null
 );
+
+create unique index provider_slug on providers ((lower(slug)));
 
 create table applications
 (
     uid          serial primary key,
-    slug         varchar(64) not null,
+    slug         varchar(64) not null check ( slug = lower(slug) ),
     display_name varchar(64) not null,
     provider     int4        not null references providers
 );
+
+create unique index application_slug on applications ((lower(slug)));
 
 create table tenants
 (

@@ -6,6 +6,7 @@ use axum::{
     response::{IntoResponse, Response},
     Json,
 };
+use deadpool_postgres::PoolError;
 use derive_more::{Display, Error, From};
 use http::{header::HeaderName, request::Parts, StatusCode};
 
@@ -53,6 +54,7 @@ impl<T: Into<ApiErrorKind>> From<T> for ApiError {
 
 #[derive(Debug, Display, Error, From)]
 pub enum ApiErrorKind {
+    Axum(#[error(source)] axum::Error),
     Database(#[error(source)] sqlx::Error),
 
     InvalidLoginData,
@@ -61,6 +63,8 @@ pub enum ApiErrorKind {
     NotFound,
     MiscInternal,
     Unauthorized,
+    Forbidden,
+    Conflict,
 
     #[display("Missing middleware: '{}'", 0)]
     MissingMiddleware(#[error(not(source))] &'static str),
@@ -69,6 +73,9 @@ pub enum ApiErrorKind {
     #[display("{}", 0)]
     PwHash(#[error(not(source))] argon2::password_hash::Error),
     Tx(#[error(source)] TxError),
+    PoolError(#[error(source)] PoolError),
+    #[from(ignore)]
+    PostgresError(#[error(source)] tokio_postgres::Error),
 
     #[from]
     SubmissionError(#[error(source)] SubmissionError),
@@ -92,6 +99,17 @@ impl From<jsonwebtoken::errors::Error> for ApiErrorKind {
     }
 }
 
+impl From<tokio_postgres::Error> for ApiErrorKind {
+    fn from(value: tokio_postgres::Error) -> Self {
+        if let Some(db_error) = value.as_db_error() {
+            if db_error.routine() == Some("_bt_check_unique") {
+                return Self::Conflict;
+            }
+        }
+        Self::PostgresError(value)
+    }
+}
+
 impl ApiErrorKind {
     pub fn is_internal(&self) -> bool {
         match self {
@@ -107,6 +125,11 @@ impl ApiErrorKind {
             ApiErrorKind::MissingMiddleware(_) => true,
             ApiErrorKind::Unauthorized => false,
             ApiErrorKind::JsonWebToken(_) => true,
+            ApiErrorKind::Forbidden => false,
+            ApiErrorKind::Conflict => false,
+            ApiErrorKind::PoolError(_) => true,
+            ApiErrorKind::PostgresError(_) => true,
+            ApiErrorKind::Axum(_) => true,
         }
     }
 
@@ -127,12 +150,15 @@ impl From<argon2::password_hash::Error> for ApiErrorKind {
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
         if self.kind.is_internal() {
-            tracing::error!("{self}");
+            tracing::error!("{self:?}");
         }
         match self.kind {
             ApiErrorKind::Database(_)
+            | ApiErrorKind::Axum(_)
             | ApiErrorKind::PwHash(_)
             | ApiErrorKind::Tx(_)
+            | ApiErrorKind::PoolError(_)
+            | ApiErrorKind::PostgresError(_)
             | ApiErrorKind::MiscInternal
             | ApiErrorKind::MissingMiddleware(_)
             | ApiErrorKind::JsonWebToken(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
@@ -149,6 +175,8 @@ impl IntoResponse for ApiError {
             ApiErrorKind::InvalidSessionCookie => {
                 (StatusCode::UNAUTHORIZED, "Invalid session cookie").into_response()
             }
+            ApiErrorKind::Forbidden => StatusCode::FORBIDDEN.into_response(),
+            ApiErrorKind::Conflict => StatusCode::CONFLICT.into_response(),
         }
     }
 }

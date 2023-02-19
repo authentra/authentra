@@ -3,41 +3,55 @@ use axum::{
     extract::{rejection::PathRejection, Path},
     http::request::Parts,
 };
+use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use super::{Policy, Reference, Stage};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSql, FromSql)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[cfg_attr(feature = "sqlx", derive(sqlx::Type))]
 #[cfg_attr(
     feature = "sqlx",
     sqlx(type_name = "authentication_requirement", rename_all = "snake_case")
 )]
+#[postgres(name = "authentication_requirement")]
 #[serde(rename_all = "snake_case")]
 pub enum AuthenticationRequirement {
+    #[postgres(name = "superuser")]
     Superuser,
+    #[postgres(name = "required")]
     Required,
+    #[postgres(name = "none")]
     None,
+    #[postgres(name = "ignored")]
     Ignored,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSql, FromSql)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[cfg_attr(feature = "sqlx", derive(sqlx::Type))]
 #[cfg_attr(
     feature = "sqlx",
     sqlx(type_name = "flow_designation", rename_all = "snake_case")
 )]
+#[postgres(name = "flow_designation")]
 #[serde(rename_all = "snake_case")]
 pub enum FlowDesignation {
+    #[postgres(name = "invalidation")]
     Invalidation,
+    #[postgres(name = "authentication")]
     Authentication,
+    #[postgres(name = "authorization")]
     Authorization,
+    #[postgres(name = "enrollment")]
     Enrollment,
+    #[postgres(name = "recovery")]
     Recovery,
+    #[postgres(name = "unenrollment")]
     Unenrollment,
+    #[postgres(name = "configuration")]
     Configuration,
 }
 

@@ -6,5 +6,6 @@ use uuid::Uuid;
 pub struct PartialUser {
     pub uid: Uuid,
     pub name: String,
-    pub icon_url: Option<String>,
+    pub avatar_url: Option<String>,
+    pub is_admin: bool,
 }

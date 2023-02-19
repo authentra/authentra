@@ -4,9 +4,10 @@ use async_trait::async_trait;
 use axum::{
     extract::{FromRequestParts, State},
     response::{IntoResponse, Response},
-    routing::{get, post},
+    routing::get,
     Json, Router,
 };
+use deadpool_postgres::GenericClient;
 use futures::future::BoxFuture;
 
 use http::{request::Parts, Request};
@@ -18,7 +19,7 @@ use rand::{
     rngs::OsRng,
 };
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
-use sqlx::{query, Postgres};
+use sqlx::Postgres;
 use tower::{Layer, Service};
 use tower_cookies::{cookie::SameSite, Cookie, Cookies};
 use tracing::instrument;
@@ -30,14 +31,10 @@ use crate::{
     SharedState,
 };
 
-mod register;
-
 pub const SESSION_COOKIE_NAME: &str = "session";
 
 pub(super) fn setup_auth_router() -> Router<SharedState> {
-    Router::new()
-        .route("/register", post(register::register))
-        .route("/", get(user_info))
+    Router::new().route("/", get(user_info))
 }
 
 #[derive(Serialize)]
@@ -154,6 +151,7 @@ pub struct Claims {
     pub iss: String,
     pub sub: Option<Uuid>,
     pub authenticated: bool,
+    pub is_admin: bool,
 }
 
 const VALIDATION: Lazy<Validation> = Lazy::new(|| {
@@ -217,26 +215,29 @@ fn get_auth_extension_data(req: &mut Parts) -> Result<AuthExtensionData, ApiErro
     Ok(data.to_owned())
 }
 
-async fn make_new_session(
-    tx: &mut Tx<Postgres>,
+async fn make_new_session<C: GenericClient>(
+    client: &C,
     parts: &mut Parts,
     data: &AuthServiceData,
 ) -> Result<Session, ApiError> {
     let session_key = Alphanumeric.sample_string(&mut OsRng, 96);
-    query!("insert into sessions(uid) values ($1)", session_key,)
-        .execute(tx)
+    let statement = client
+        .prepare_cached("insert into sessions(uid) values($1)")
         .await?;
+    client.execute(&statement, &[&session_key]).await?;
     let claims = Claims {
         sid: session_key.clone(),
         iss: "authust".to_owned(),
         sub: None,
         authenticated: false,
+        is_admin: false,
     };
     let cookies: &Cookies = parts.extensions.get().expect("Cookie layer is missing");
     set_session_cookie(&data.encoding_key, &cookies, &claims)?;
     Ok(Session {
         session_id: session_key,
         user_id: None,
+        is_admin: false,
     })
 }
 
@@ -249,30 +250,52 @@ impl FromRequestParts<SharedState> for Session {
         parts: &mut Parts,
         state: &SharedState,
     ) -> Result<Self, Self::Rejection> {
-        let mut tx: Tx<Postgres> = Tx::from_request_parts(parts, state).await?;
+        let connection = state.defaults().connection().await?;
         let data = match get_auth_extension_data(parts) {
             Ok(v) => Ok(v),
             Err(err) => match &err.kind {
                 ApiErrorKind::SessionCookieMissing => {
-                    return make_new_session(&mut tx, parts, state.auth_data()).await;
+                    return make_new_session(&connection, parts, state.auth_data()).await;
                 }
                 _ => Err(err),
             },
         }?;
         let claims = data.claims;
-        let res = query!(
-            "select user_id as \"user_id?: Uuid\" from sessions where uid = $1",
-            claims.sid
-        )
-        .fetch_optional(&mut tx)
-        .await?;
-        if let Some(res) = res {
+        let statement = connection
+            .prepare_cached("select user_id from sessions where uid = $1")
+            .await?;
+        let res = connection
+            .query_opt(&statement, &[&claims.sid])
+            .await?
+            .map(|v| v.get::<_, Option<Uuid>>(0));
+        if let Some(user_id) = res {
             Ok(Session {
                 session_id: claims.sid,
-                user_id: res.user_id,
+                user_id,
+                is_admin: claims.is_admin,
             })
         } else {
-            make_new_session(&mut tx, parts, state.auth_data()).await
+            make_new_session(&connection, parts, state.auth_data()).await
+        }
+    }
+}
+
+#[repr(transparent)]
+pub struct AdminSession(());
+
+#[async_trait]
+impl FromRequestParts<SharedState> for AdminSession {
+    type Rejection = ApiError;
+
+    async fn from_request_parts(
+        parts: &mut Parts,
+        state: &SharedState,
+    ) -> Result<Self, Self::Rejection> {
+        let session = Session::from_request_parts(parts, state).await?;
+        if session.user_id.is_some() && session.is_admin {
+            Ok(AdminSession(()))
+        } else {
+            Err(ApiErrorKind::Forbidden.into_api())
         }
     }
 }

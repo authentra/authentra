@@ -12,7 +12,6 @@ use serde_json::Value;
 use sqlx::{query, Postgres};
 use tower_cookies::Cookies;
 use tracing::instrument;
-use uuid::Uuid;
 
 use crate::{
     api::{sql_tx::Tx, ApiError, ApiErrorKind, AuthServiceData, ExecutorQuery},
@@ -145,8 +144,9 @@ async fn handle_stage(
                     ctx.pending = Some(PendingUser {
                         uid: user.uid,
                         name: user.name,
-                        avatar_url: "".into(),
+                        avatar_url: None,
                         authenticated: false,
+                        is_admin: user.is_admin,
                     });
                 }),
                 None => {
@@ -268,13 +268,13 @@ async fn complete(
         iterations += 1;
         match stage.kind {
             StageKind::UserLogin => {
-                let (uid, is_authenticated): (Uuid, bool) = execution
+                let user = execution
                     .get_context()
                     .pending
                     .as_ref()
-                    .map(|v| (v.uid.clone(), v.authenticated))
+                    .cloned()
                     .ok_or(SubmissionError::NoPendingUser)?;
-                if !is_authenticated {
+                if !user.authenticated {
                     execution.set_error(ExecutionError {
                         stage: Some(entry.stage.clone()),
                         message: "Authentication of pending user failed".into(),
@@ -285,12 +285,13 @@ async fn complete(
                     .get(SESSION_COOKIE_NAME)
                     .ok_or(ApiErrorKind::InvalidSessionCookie)?;
                 let mut claims: Claims = decode_token(&keys.decoding_key, cookie.value())?.claims;
-                claims.sub = Some(uid);
+                claims.sub = Some(user.uid);
                 claims.authenticated = true;
+                claims.is_admin = user.is_admin;
                 set_session_cookie(&keys.encoding_key, cookies, &claims)?;
                 query!(
                     "update sessions set user_id = $1 where uid = $2",
-                    uid,
+                    user.uid,
                     session.session_id
                 )
                 .execute(&mut *tx)

@@ -1,15 +1,17 @@
+use ::base64::{prelude::BASE64_URL_SAFE_NO_PAD, Engine as _};
 use ::rhai::{
     packages::{
         ArithmeticPackage, BasicFnPackage, BasicStringPackage, LanguageCorePackage, Package,
     },
-    Engine, EvalAltResult, ParseError, Position, Scope, AST,
+    Engine, EvalAltResult, OptimizationLevel, ParseError, Position, Scope, AST,
 };
-use base64::{prelude::BASE64_URL_SAFE_NO_PAD, Engine as _};
 use network::NetworkPackage;
 use once_cell::sync::Lazy;
 use parking_lot::Mutex;
+use request::RequestPackage;
 use std::sync::Arc;
 use uri::RhaiUri;
+use user::UserPackage;
 
 pub mod context;
 pub mod network;
@@ -26,12 +28,17 @@ pub trait TryAsRef<T: Sized> {
     fn try_as_ref(&self) -> Result<T, Self::Error>;
 }
 
+pub fn encode_base64(txt: &str) -> String {
+    BASE64_URL_SAFE_NO_PAD.encode(txt)
+}
+
 pub fn create_engine() -> Engine {
     let mut engine = Engine::new_raw();
     engine
         .set_allow_loop_expressions(false)
         .set_allow_looping(false)
-        .set_strict_variables(true);
+        .set_strict_variables(true)
+        .set_optimization_level(OptimizationLevel::None);
     engine.set_max_string_size(128).set_max_operations(1000);
     register_packages(&mut engine);
     engine
@@ -57,10 +64,10 @@ impl From<ParseError> for ExpressionCompilationError {
     }
 }
 
-pub fn compile(expression: &str) -> Result<AST, ExpressionCompilationError> {
+pub fn compile(expression: &str, scope: &Scope) -> Result<AST, ExpressionCompilationError> {
     let bytes = BASE64_URL_SAFE_NO_PAD.decode(expression)?;
     let expression = String::from_utf8_lossy(&bytes);
-    let ast = DEFAULT_ENGINE.compile(expression)?;
+    let ast = DEFAULT_ENGINE.compile_with_scope(scope, expression)?;
     Ok(ast)
 }
 
@@ -70,6 +77,8 @@ fn register_packages(engine: &mut Engine) {
     BasicStringPackage::new().register_into_engine(engine);
     BasicFnPackage::new().register_into_engine(engine);
     NetworkPackage::new().register_into_engine(engine);
+    UserPackage::new().register_into_engine(engine);
+    RequestPackage::new().register_into_engine(engine);
 }
 
 pub fn execute<'a, F: FnOnce() -> Scope<'a>>(ast: &AST, create_scope: F) -> ExecutionResult {
@@ -178,8 +187,10 @@ pub(crate) use register_package;
 
 #[cfg(test)]
 pub(crate) fn simple_eval(expr: &str) -> crate::ExecutionResult {
-    let ast = compile(BASE64_URL_SAFE_NO_PAD.encode(expr).as_str()).expect("Compilation failed");
-    execute(&ast, Scope::new)
+    let scope = Scope::new();
+    let ast =
+        compile(BASE64_URL_SAFE_NO_PAD.encode(expr).as_str(), &scope).expect("Compilation failed");
+    execute(&ast, || scope)
 }
 
 #[cfg(test)]

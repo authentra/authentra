@@ -69,93 +69,6 @@
     },
     "query": "select uid,stage,ordering from flow_entries where flow = $1"
   },
-  "0546d30cae12154c694a9f2b3927666d8db83c4c1d9715db81af56ed293dbbdc": {
-    "describe": {
-      "columns": [
-        {
-          "name": "uid",
-          "ordinal": 0,
-          "type_info": "Uuid"
-        },
-        {
-          "name": "name",
-          "ordinal": 1,
-          "type_info": "Varchar"
-        }
-      ],
-      "nullable": [
-        false,
-        false
-      ],
-      "parameters": {
-        "Left": [
-          "Text"
-        ]
-      }
-    },
-    "query": "select uid,name from users where name = $1"
-  },
-  "0927ebb25d00327b105e271f2d4662b2d26b5e92972b71604891624fabba3b30": {
-    "describe": {
-      "columns": [
-        {
-          "name": "uid",
-          "ordinal": 0,
-          "type_info": "Int4"
-        },
-        {
-          "name": "slug",
-          "ordinal": 1,
-          "type_info": "Varchar"
-        },
-        {
-          "name": "kind: PgPolicyKind",
-          "ordinal": 2,
-          "type_info": {
-            "Custom": {
-              "kind": {
-                "Enum": [
-                  "password_expiry",
-                  "password_strength",
-                  "expression"
-                ]
-              },
-              "name": "policy_kind"
-            }
-          }
-        },
-        {
-          "name": "password_expiration",
-          "ordinal": 3,
-          "type_info": "Int4"
-        },
-        {
-          "name": "password_strength",
-          "ordinal": 4,
-          "type_info": "Int4"
-        },
-        {
-          "name": "expression",
-          "ordinal": 5,
-          "type_info": "Int4"
-        }
-      ],
-      "nullable": [
-        false,
-        false,
-        false,
-        true,
-        true,
-        true
-      ],
-      "parameters": {
-        "Left": [
-          "Int4"
-        ]
-      }
-    },
-    "query": "select uid, slug,kind as \"kind: PgPolicyKind\",password_expiration,password_strength,expression from policies where uid = $1"
-  },
   "0be548625791102fabdc46c019d1e9de8ca2bac0ee59d73ebd099c5c22b55f75": {
     "describe": {
       "columns": [
@@ -193,26 +106,6 @@
       }
     },
     "query": "select user_binding,enabled,negate_result,ordering from flow_bindings where flow = $1 and user_binding is not null"
-  },
-  "171ab3c1250913c28d6d543d05caa0bac92211a9c419a0595ef8507bd01d0e90": {
-    "describe": {
-      "columns": [
-        {
-          "name": "user_id?: Uuid",
-          "ordinal": 0,
-          "type_info": "Uuid"
-        }
-      ],
-      "nullable": [
-        true
-      ],
-      "parameters": {
-        "Left": [
-          "Bpchar"
-        ]
-      }
-    },
-    "query": "select user_id as \"user_id?: Uuid\" from sessions where uid = $1"
   },
   "175c750287bf0e52019714b1bcf48e1ac8cf7abd743c903b4329b049cded9276": {
     "describe": {
@@ -289,6 +182,38 @@
       }
     },
     "query": "select policy,enabled,negate_result,ordering from flow_bindings where entry = $1"
+  },
+  "1d192227459519c29171a51a0147017709eb340aea29b59b553472cfaf7aad6d": {
+    "describe": {
+      "columns": [
+        {
+          "name": "uid",
+          "ordinal": 0,
+          "type_info": "Uuid"
+        },
+        {
+          "name": "name",
+          "ordinal": 1,
+          "type_info": "Varchar"
+        },
+        {
+          "name": "administrator",
+          "ordinal": 2,
+          "type_info": "Bool"
+        }
+      ],
+      "nullable": [
+        false,
+        false,
+        false
+      ],
+      "parameters": {
+        "Left": [
+          "Text"
+        ]
+      }
+    },
+    "query": "select uid,name,administrator from users where name = $1"
   },
   "22ce95c58726a601a8d1ce5533eb3f0efcb8a3eb6990047a6fb9f0cce30b9e6d": {
     "describe": {
@@ -433,27 +358,6 @@
     },
     "query": "select uid, slug, title, authentication as \"authentication: AuthenticationRequirement\", designation as \"designation: FlowDesignation\" from flows where slug = $1"
   },
-  "3d5c974482c7c8718280b5d7ea4464f91f8ac33f8dfce1f7545d8affb2246cb9": {
-    "describe": {
-      "columns": [
-        {
-          "name": "uid",
-          "ordinal": 0,
-          "type_info": "Uuid"
-        }
-      ],
-      "nullable": [
-        false
-      ],
-      "parameters": {
-        "Left": [
-          "Varchar",
-          "Varchar"
-        ]
-      }
-    },
-    "query": "insert into users(name, password) values($1, $2) returning uid"
-  },
   "4754da959c7bc8fd83b0a1e5d166dae3ef72b71fb5396ed1cf50a26e4e849fb9": {
     "describe": {
       "columns": [
@@ -526,6 +430,44 @@
     },
     "query": "select uid, slug, kind as \"kind: PgStageKind\", timeout, identification_password_stage, consent_stage, identification_stage from stages where slug = $1"
   },
+  "5610a53544673d7109e8e0a1867f03673fed8fc54fc61399b71494a7719b8dc9": {
+    "describe": {
+      "columns": [
+        {
+          "name": "uid",
+          "ordinal": 0,
+          "type_info": "Int4"
+        }
+      ],
+      "nullable": [
+        false
+      ],
+      "parameters": {
+        "Left": []
+      }
+    },
+    "query": "select uid from policies"
+  },
+  "600e0d9e5c1cfcaff40dceb6aef213d76ed76ce4181c7da67c359deaccce3582": {
+    "describe": {
+      "columns": [
+        {
+          "name": "expression",
+          "ordinal": 0,
+          "type_info": "Text"
+        }
+      ],
+      "nullable": [
+        false
+      ],
+      "parameters": {
+        "Left": [
+          "Int4"
+        ]
+      }
+    },
+    "query": "select expression from expression_policies where uid = $1"
+  },
   "6fb62ace26905244806ccad1baca5e489c07874edbf5e71902c4bb6f56385c97": {
     "describe": {
       "columns": [
@@ -544,31 +486,84 @@
     },
     "query": "select uid from tenants where is_default = true"
   },
-  "789db3f05af1ab7567528fc2db4ad221d8568e016a5ca3bd141a7b100ebc8f17": {
+  "754ca3bd5503018844be77404f9eeaa03a6c6f8fcb451939c45231415fe23ff3": {
     "describe": {
       "columns": [
         {
           "name": "uid",
           "ordinal": 0,
-          "type_info": "Uuid"
+          "type_info": "Int4"
+        }
+      ],
+      "nullable": [
+        false
+      ],
+      "parameters": {
+        "Left": []
+      }
+    },
+    "query": "select uid from tenants"
+  },
+  "7e9b8aa5da6fc61c2d6213b18f50a5f3b0c0a395aca12a993b3e4b3e69122877": {
+    "describe": {
+      "columns": [
+        {
+          "name": "uid",
+          "ordinal": 0,
+          "type_info": "Int4"
         },
         {
-          "name": "name",
+          "name": "slug",
           "ordinal": 1,
           "type_info": "Varchar"
+        },
+        {
+          "name": "kind: PolicyKindSimple",
+          "ordinal": 2,
+          "type_info": {
+            "Custom": {
+              "kind": {
+                "Enum": [
+                  "password_expiry",
+                  "password_strength",
+                  "expression"
+                ]
+              },
+              "name": "policy_kind"
+            }
+          }
+        },
+        {
+          "name": "password_expiration",
+          "ordinal": 3,
+          "type_info": "Int4"
+        },
+        {
+          "name": "password_strength",
+          "ordinal": 4,
+          "type_info": "Int4"
+        },
+        {
+          "name": "expression",
+          "ordinal": 5,
+          "type_info": "Int4"
         }
       ],
       "nullable": [
         false,
-        false
+        false,
+        false,
+        true,
+        true,
+        true
       ],
       "parameters": {
         "Left": [
-          "Uuid"
+          "Text"
         ]
       }
     },
-    "query": "select uid,name from users where uid = $1"
+    "query": "select uid, slug,kind as \"kind: PolicyKindSimple\",password_expiration,password_strength,expression from policies where slug = $1"
   },
   "9058c5bbba06e7c485fd7b44222a30d403cf7819028c1dce2fb64fb659ede714": {
     "describe": {
@@ -731,6 +726,70 @@
     },
     "query": "update sessions set user_id = $1 where uid = $2"
   },
+  "a9ac55f3a1f83b9ca8fb3a77e7d3daf8c98d9dffe01431f99891cae4742980ae": {
+    "describe": {
+      "columns": [
+        {
+          "name": "uid",
+          "ordinal": 0,
+          "type_info": "Uuid"
+        },
+        {
+          "name": "name",
+          "ordinal": 1,
+          "type_info": "Varchar"
+        },
+        {
+          "name": "administrator",
+          "ordinal": 2,
+          "type_info": "Bool"
+        }
+      ],
+      "nullable": [
+        false,
+        false,
+        false
+      ],
+      "parameters": {
+        "Left": [
+          "Text"
+        ]
+      }
+    },
+    "query": "select uid,name,administrator from users where email = $1"
+  },
+  "ad2be38e833bfd9453b38b1b0558901a9784a399818ff52cf24f60af689180a2": {
+    "describe": {
+      "columns": [
+        {
+          "name": "uid",
+          "ordinal": 0,
+          "type_info": "Uuid"
+        },
+        {
+          "name": "name",
+          "ordinal": 1,
+          "type_info": "Varchar"
+        },
+        {
+          "name": "administrator",
+          "ordinal": 2,
+          "type_info": "Bool"
+        }
+      ],
+      "nullable": [
+        false,
+        false,
+        false
+      ],
+      "parameters": {
+        "Left": [
+          "Uuid"
+        ]
+      }
+    },
+    "query": "select uid,name,administrator from users where uid = $1"
+  },
   "b2602a229690527f30aaf88fd76974eef0e6d6d749b5221df1e6bedaa45dba29": {
     "describe": {
       "columns": [
@@ -860,7 +919,7 @@
     },
     "query": "select max_age from password_expiration_policies where uid = $1"
   },
-  "cf756ae76c27adee237c03b1d7466f1570ea500f3485626a979042adaf063048": {
+  "d86665d05383a68fad2dfff68b759abea4149a09d8603707e6b6bf88fff5b6f2": {
     "describe": {
       "columns": [
         {
@@ -874,7 +933,7 @@
           "type_info": "Varchar"
         },
         {
-          "name": "kind: PgPolicyKind",
+          "name": "kind: PolicyKindSimple",
           "ordinal": 2,
           "type_info": {
             "Custom": {
@@ -915,37 +974,11 @@
       ],
       "parameters": {
         "Left": [
-          "Text"
+          "Int4"
         ]
       }
     },
-    "query": "select uid, slug,kind as \"kind: PgPolicyKind\",password_expiration,password_strength,expression from policies where slug = $1"
-  },
-  "d808e639e3bd10c24537b141d74c90d88f269784d0902beb53c4543dd3f906db": {
-    "describe": {
-      "columns": [
-        {
-          "name": "uid",
-          "ordinal": 0,
-          "type_info": "Uuid"
-        },
-        {
-          "name": "name",
-          "ordinal": 1,
-          "type_info": "Varchar"
-        }
-      ],
-      "nullable": [
-        false,
-        false
-      ],
-      "parameters": {
-        "Left": [
-          "Text"
-        ]
-      }
-    },
-    "query": "select uid,name from users where email = $1"
+    "query": "select uid, slug,kind as \"kind: PolicyKindSimple\",password_expiration,password_strength,expression from policies where uid = $1"
   },
   "d93119344d8b99202778518f50066615cef3507e748d4af7c34db7b02e94f804": {
     "describe": {
@@ -1174,18 +1207,6 @@
       }
     },
     "query": "select uid,\n       host,\n       is_default as \"default\",\n       title,\n       logo,\n       favicon,\n       invalidation_flow,\n       authentication_flow,\n       authorization_flow,\n       enrollment_flow,\n       recovery_flow,\n       unenrollment_flow,\n       configuration_flow\nfrom tenants\nwhere uid = $1"
-  },
-  "fc3ef55c9d040091a8d34f47e04a65c0e4d4fddc0e96e034933e18af95504794": {
-    "describe": {
-      "columns": [],
-      "nullable": [],
-      "parameters": {
-        "Left": [
-          "Bpchar"
-        ]
-      }
-    },
-    "query": "insert into sessions(uid) values ($1)"
   },
   "ff6cb8695f6c314ac6f524975e1c5220430b32439fabf4d429267c0af6c91489": {
     "describe": {

@@ -22,14 +22,18 @@ impl UserService {
         uid: Uuid,
     ) -> Result<Option<PartialUser>, ApiError> {
         Ok(
-            if let Some(res) = query!("select uid,name from users where uid = $1", uid)
-                .fetch_optional(&mut *tx)
-                .await?
+            if let Some(res) = query!(
+                "select uid,name,administrator from users where uid = $1",
+                uid
+            )
+            .fetch_optional(&mut *tx)
+            .await?
             {
                 Some(PartialUser {
                     uid: res.uid,
                     name: res.name,
-                    icon_url: None,
+                    avatar_url: None,
+                    is_admin: res.administrator,
                 })
             } else {
                 None
@@ -46,26 +50,34 @@ impl UserService {
         use_uuid: bool,
     ) -> Result<Option<PartialUser>, ApiError> {
         if use_name {
-            if let Some(res) = query!("select uid,name from users where name = $1", text)
-                .fetch_optional(&mut *tx)
-                .await?
+            if let Some(res) = query!(
+                "select uid,name,administrator from users where name = $1",
+                text
+            )
+            .fetch_optional(&mut *tx)
+            .await?
             {
                 return Ok(Some(PartialUser {
                     uid: res.uid,
                     name: res.name,
-                    icon_url: None,
+                    avatar_url: None,
+                    is_admin: res.administrator,
                 }));
             }
         }
         if use_email {
-            if let Some(res) = query!("select uid,name from users where email = $1", text)
-                .fetch_optional(&mut *tx)
-                .await?
+            if let Some(res) = query!(
+                "select uid,name,administrator from users where email = $1",
+                text
+            )
+            .fetch_optional(&mut *tx)
+            .await?
             {
                 return Ok(Some(PartialUser {
                     uid: res.uid,
                     name: res.name,
-                    icon_url: None,
+                    avatar_url: None,
+                    is_admin: res.administrator,
                 }));
             }
         }
@@ -74,14 +86,18 @@ impl UserService {
                 Ok(v) => v,
                 Err(_) => return Ok(None),
             };
-            if let Some(res) = query!("select uid,name from users where uid = $1", uuid)
-                .fetch_optional(&mut *tx)
-                .await?
+            if let Some(res) = query!(
+                "select uid,name,administrator from users where uid = $1",
+                uuid
+            )
+            .fetch_optional(&mut *tx)
+            .await?
             {
                 return Ok(Some(PartialUser {
                     uid: res.uid,
                     name: res.name,
-                    icon_url: None,
+                    avatar_url: None,
+                    is_admin: res.administrator,
                 }));
             }
         }
