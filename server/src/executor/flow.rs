@@ -12,8 +12,9 @@ use uuid::Uuid;
 
 use crate::{api::ExecutorQuery, flow_storage::ReferenceLookup};
 use model::{
-    error::SubmissionError, user::PartialUser, AuthenticationRequirement, Flow, FlowBindingKind,
-    FlowComponent, FlowData, FlowEntry, FlowInfo, PendingUser, Policy, Reference, Stage,
+    error::SubmissionError, user::PartialUser, AuthenticationRequirement, Flow, FlowBinding,
+    FlowBindingKind, FlowComponent, FlowData, FlowEntry, FlowInfo, PendingUser, Policy, Reference,
+    Stage,
 };
 
 use super::{data::AsComponent, ExecutionContext, ExecutionError, FlowExecutor, FlowKey};
@@ -130,19 +131,32 @@ impl FlowExecution {
         if !*auth_check.check(context) {
             return Ok(Some(auth_check.message(context)));
         }
-        let entry = self.get_entry();
-        for binding in &entry.bindings {
-            let check = FlowCheck::from(binding.kind.clone());
-            let result = check.check(context);
-            let result = if binding.negate {
-                result.negate()
-            } else {
-                result
-            };
-            if !*result {
-                return Ok(Some(check.message(&context)));
+        for binding in &flow.bindings {
+            if let Some(message) = check_binding(&binding, context)? {
+                return Ok(Some(message));
             }
         }
+        let entry = self.get_entry();
+        for binding in &entry.bindings {
+            if let Some(message) = check_binding(&binding, context)? {
+                return Ok(Some(message));
+            }
+        }
+        Ok(None)
+    }
+}
+
+fn check_binding(binding: &FlowBinding, context: &CheckContext) -> Result<Option<String>, ()> {
+    let check = FlowCheck::from(binding.kind.clone());
+    let result = check.check(context);
+    let result = if binding.negate {
+        result.negate()
+    } else {
+        result
+    };
+    if !*result {
+        Ok(Some(check.message(&context)))
+    } else {
         Ok(None)
     }
 }
