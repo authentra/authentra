@@ -22,7 +22,6 @@ use axum::response::IntoResponse;
 use axum::routing::get;
 use axum::{BoxError, Router};
 use deadpool_postgres::{Manager, ManagerConfig, Object, Pool, PoolError};
-use handlebars::Handlebars;
 
 use http::{Request, StatusCode};
 use jsonwebtoken::{DecodingKey, EncodingKey};
@@ -137,16 +136,6 @@ async fn setup_database(
 #[derive(Debug, Clone)]
 pub struct AuthustState {
     pub configuration: AuthustConfiguration,
-}
-
-fn setup_handlebars<'reg>() -> Handlebars<'reg> {
-    let mut handlebars = Handlebars::new();
-    fn register(_reg: &mut Handlebars, _name: &str, _path: impl AsRef<Path>) {
-        // reg.register_template_file(name, path)
-        //     .expect("Failed to register template");
-    }
-    register(&mut handlebars, "flow", "templates/flow.hbs");
-    handlebars
 }
 
 #[derive(Clone)]
@@ -307,7 +296,6 @@ async fn start_server(config: InternalAuthustConfiguration, sqlx_pool: PgPool, p
     let defaults = Defaults::new(storage.clone(), sqlx_pool.clone(), pool.clone()).await;
     let executor = FlowExecutor::new(storage.clone(), policies.clone());
     let users = UserService::new();
-    let _handlebars = setup_handlebars();
     let internal_state = InternalSharedState {
         users,
         executor,

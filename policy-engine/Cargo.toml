@@ -10,8 +10,8 @@ rhai = { workspace = true, features = ["sync", "no_float", "no_index", "no_funct
 http.workspace = true
 once_cell.workspace = true
 parking_lot.workspace = true
-base64 = "0.21.0"
-authust_model = { version = "0.1.0", path = "../model" }
+base64.workspace = true
+authust_model = { path = "../model" }
 
 [dev-dependencies]
 concat-idents = "1.1.4"
