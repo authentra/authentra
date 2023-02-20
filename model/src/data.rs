@@ -58,9 +58,11 @@ pub struct PendingUser {
     #[serde(skip)]
     pub uid: Uuid,
     pub name: String,
-    pub avatar_url: String,
+    pub avatar_url: Option<String>,
     #[serde(skip)]
     pub authenticated: bool,
+    #[serde(skip)]
+    pub is_admin: bool,
 }
 
 #[derive(Serialize)]

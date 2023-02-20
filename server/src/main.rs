@@ -1,5 +1,6 @@
 use std::future::ready;
 use std::net::SocketAddr;
+use std::ops::DerefMut;
 use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
@@ -14,25 +15,29 @@ use crate::interface::setup_interface_router;
 use crate::service::user::UserService;
 use api::AuthServiceData;
 
+use axum::error_handling::HandleErrorLayer;
 use axum::extract::{FromRef, MatchedPath};
 use axum::middleware::{self, Next};
 use axum::response::IntoResponse;
 use axum::routing::get;
-use axum::Router;
+use axum::{BoxError, Router};
+use deadpool_postgres::{Manager, ManagerConfig, Object, Pool, PoolError};
 use handlebars::Handlebars;
 
-use http::Request;
+use http::{Request, StatusCode};
 use jsonwebtoken::{DecodingKey, EncodingKey};
 use metrics_exporter_prometheus::{Matcher, PrometheusBuilder};
-use model::{Flow, Reference, Tenant};
+use model::{Flow, Policy, Reference, Tenant};
+use service::policy::PolicyService;
 use sqlx::query;
-use sqlx::{migrate::Migrator, postgres::PgConnectOptions, ConnectOptions, PgPool};
+use sqlx::{postgres::PgConnectOptions, ConnectOptions, PgPool};
 use tokio::time::Instant;
 use tower::ServiceBuilder;
 use tower_cookies::CookieManagerLayer;
 use tower_http::trace::TraceLayer;
 use tracing::info;
 use tracing_error::ErrorLayer;
+use tracing_log::LogTracer;
 use tracing_subscriber::{prelude::*, EnvFilter};
 
 pub mod api;
@@ -48,11 +53,14 @@ async fn main() {
     setup().await;
 }
 
-static MIGRATOR: Migrator = sqlx::migrate!("./migrations");
+mod embedded {
+    use refinery::embed_migrations;
+    embed_migrations!("./migrations/");
+}
 
 async fn setup() {
     if std::env::var("RUST_LOG").ok().is_none() {
-        std::env::set_var("RUST_LOG", "hyper=info,debug");
+        std::env::set_var("RUST_LOG", "hyper=info,info");
     }
     let mut configuration =
         InternalAuthustConfiguration::load().expect("Failed to load configuration");
@@ -79,12 +87,13 @@ async fn setup() {
         .with(ErrorLayer::default())
         .with(layer);
     tracing::subscriber::set_global_default(registry).unwrap();
+    LogTracer::init().unwrap();
     info!("Setting up database...");
-    let pool = setup_database(&configuration.postgres, &password)
+    let (sqlx_pool, pool) = setup_database(&configuration.postgres, &password)
         .await
         .expect("Failed to connect to database");
     let metrics_future = start_metrics_server(configuration.listen.metrics);
-    let app_future = start_server(configuration, pool);
+    let app_future = start_server(configuration, sqlx_pool, pool);
     tokio::join!(metrics_future, app_future);
     opentelemetry::global::shutdown_tracer_provider();
 }
@@ -92,7 +101,7 @@ async fn setup() {
 async fn setup_database(
     configuration: &PostgresConfiguration,
     password: &str,
-) -> Result<PgPool, sqlx::Error> {
+) -> Result<(PgPool, Pool), sqlx::Error> {
     let mut options = PgConnectOptions::new_without_pgpass()
         .host(&configuration.host)
         .port(configuration.port)
@@ -100,16 +109,29 @@ async fn setup_database(
         .username(&configuration.user)
         .password(password)
         .application_name("Authust");
-    options.log_statements(tracing::log::LevelFilter::Off);
-    options.log_slow_statements(tracing::log::LevelFilter::Warn, Duration::from_millis(100));
-    let pool = PgPool::connect_with(options).await?;
-    info!("Running migrations on database...");
-    MIGRATOR
-        .run(&pool)
+    options.log_statements(tracing::log::LevelFilter::Debug);
+    // options.log_slow_statements(tracing::log::LevelFilter::Warn, Duration::from_millis(100));
+    let sqlx_pool = PgPool::connect_with(options).await?;
+    let mut cfg = tokio_postgres::Config::new();
+    cfg.host(&configuration.host)
+        .port(configuration.port)
+        .dbname(&configuration.database)
+        .user(&configuration.user)
+        .password(&password)
+        .application_name("Authust");
+    let mgr_config = ManagerConfig {
+        recycling_method: deadpool_postgres::RecyclingMethod::Fast,
+    };
+    let manager = Manager::from_config(cfg, tokio_postgres::NoTls, mgr_config);
+    let pool = Pool::builder(manager).max_size(16).build().unwrap();
+    let mut client = pool.get().await.expect("Failed to get connection!");
+    embedded::migrations::runner()
+        .run_async(client.as_mut().deref_mut())
         .await
-        .expect("Failed to run migrations on database");
+        .expect("Failed to run migrations");
+    info!("Running migrations on database...");
     info!("Database setup complete");
-    Ok(pool)
+    Ok((sqlx_pool, pool))
 }
 
 #[derive(Debug, Clone)]
@@ -154,12 +176,29 @@ async fn preload(pool: &PgPool, storage: &FlowStorage) -> Result<(), sqlx::Error
             .expect("Failed to preload flow");
         flow.reverse_lookup(&freezed).await;
     }
-    // let tenants = query!("select uid from tenants")
-    //     .fetch_all(pool)
-    //     .await
-    //     .expect("Failed to load tenant ids")
-    //     .into_iter()
-    //     .map(|rec| Reference::<Tenant>::new_uid(rec.uid));
+    info!("Preloading tenants...");
+    let tenants: Vec<Reference<Tenant>> = query!("select uid from tenants")
+        .fetch_all(pool)
+        .await
+        .expect("Failed to load tenant ids")
+        .into_iter()
+        .map(|rec| Reference::new_uid(rec.uid))
+        .collect();
+    for reference in tenants {
+        storage.lookup_reference(&reference).await;
+    }
+    info!("Preloading policies...");
+    let policies: Vec<Reference<Policy>> = query!("select uid from policies")
+        .fetch_all(pool)
+        .await
+        .expect("Failed to load policy ids")
+        .into_iter()
+        .map(|rec| Reference::new_uid(rec.uid))
+        .collect();
+    for policy in policies {
+        storage.lookup_reference(&policy).await;
+    }
+
     info!("Preload complete");
     Ok(())
 }
@@ -186,6 +225,9 @@ impl SharedState {
     pub fn defaults(&self) -> &Defaults {
         &self.0.defaults.as_ref()
     }
+    pub fn policies(&self) -> &PolicyService {
+        &self.0.policies
+    }
 }
 
 impl FromRef<SharedState> for PgPool {
@@ -200,11 +242,13 @@ struct InternalSharedState {
     auth_data: AuthServiceData,
     storage: FlowStorage,
     defaults: Arc<Defaults>,
+    policies: PolicyService,
 }
 
 pub struct Defaults {
     storage: FlowStorage,
-    pool: PgPool,
+    sqlx_pool: PgPool,
+    pool: Pool,
     tenant: Option<Arc<Tenant>>,
 }
 
@@ -212,13 +256,24 @@ impl Defaults {
     pub fn tenant(&self) -> Option<Arc<Tenant>> {
         self.tenant.clone()
     }
+
+    pub fn sqlx_pool(&self) -> &PgPool {
+        &self.sqlx_pool
+    }
+    pub fn pool(&self) -> Pool {
+        self.pool.clone()
+    }
+    pub async fn connection(&self) -> Result<Object, PoolError> {
+        self.pool.get().await
+    }
 }
 
 impl Defaults {
-    pub async fn new(storage: FlowStorage, pool: PgPool) -> Self {
-        let default = Self::find_default(&storage, &pool).await;
+    pub async fn new(storage: FlowStorage, sqlx_pool: PgPool, pool: Pool) -> Self {
+        let default = Self::find_default(&storage, &sqlx_pool).await;
         Defaults {
             storage,
+            sqlx_pool,
             pool,
             tenant: default,
         }
@@ -240,14 +295,17 @@ impl Defaults {
     }
 }
 
-async fn start_server(config: InternalAuthustConfiguration, pool: PgPool) {
+async fn start_server(config: InternalAuthustConfiguration, sqlx_pool: PgPool, pool: Pool) {
     #[cfg(debug_assertions)]
     #[cfg(feature = "dev-mode")]
     let cors = tower_http::cors::CorsLayer::very_permissive();
-    let storage = FlowStorage::new(pool.clone());
-    preload(&pool, &storage).await.expect("Preloading failed");
-    let defaults = Defaults::new(storage.clone(), pool.clone()).await;
-    let executor = FlowExecutor::new(storage.clone());
+    let storage = FlowStorage::new(sqlx_pool.clone(), pool.clone());
+    preload(&sqlx_pool, &storage)
+        .await
+        .expect("Preloading failed");
+    let policies = PolicyService::new(storage.clone(), pool.clone());
+    let defaults = Defaults::new(storage.clone(), sqlx_pool.clone(), pool.clone()).await;
+    let executor = FlowExecutor::new(storage.clone(), policies.clone());
     let users = UserService::new();
     let _handlebars = setup_handlebars();
     let internal_state = InternalSharedState {
@@ -257,15 +315,18 @@ async fn start_server(config: InternalAuthustConfiguration, pool: PgPool) {
             encoding_key: EncodingKey::from_secret(config.secret.as_bytes()),
             decoding_key: DecodingKey::from_secret(config.secret.as_bytes()),
         },
-        storage,
+        storage: storage.clone(),
         defaults: Arc::new(defaults),
+        policies,
     };
-    let state = SharedState(Arc::new(internal_state), pool.clone());
+    let state = SharedState(Arc::new(internal_state), sqlx_pool.clone());
     let service = ServiceBuilder::new()
         .layer(middleware::from_fn(track_metrics))
         .layer(TraceLayer::new_for_http())
         .layer(CookieManagerLayer::new())
-        .layer(TxLayer::new(pool));
+        .layer(TxLayer::new(sqlx_pool))
+        .layer(HandleErrorLayer::new(handle_timeout_error))
+        .timeout(Duration::from_secs(1));
     #[cfg(debug_assertions)]
     #[cfg(feature = "dev-mode")]
     let service = service.layer(cors);
@@ -281,6 +342,20 @@ async fn start_server(config: InternalAuthustConfiguration, pool: PgPool) {
         .await
         .expect("Server crashed");
     // server.await.expect("Server crashed");
+}
+
+async fn handle_timeout_error(err: BoxError) -> (StatusCode, String) {
+    if err.is::<tower::timeout::error::Elapsed>() {
+        (
+            StatusCode::REQUEST_TIMEOUT,
+            "Request took too long".to_string(),
+        )
+    } else {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Unhandled internal error: {}", err),
+        )
+    }
 }
 
 async fn start_metrics_server(addr: SocketAddr) {

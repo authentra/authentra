@@ -39,7 +39,7 @@ pub async fn load_test(args: LoadTestArgs) {
 async fn make_request(client: &Client, request: Request, concurrent: &AtomicU32, n: u32) {
     let time = Instant::now();
     match client.execute(request).await {
-        Ok(res) => {
+        Ok(_res) => {
             let time = Instant::now() - time;
             println!("Completed request {n} Took: {}ms", time.as_millis());
         }

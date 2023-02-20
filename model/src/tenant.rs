@@ -39,6 +39,7 @@ impl Tenant {
     }
 }
 
+#[cfg(feature = "sqlx")]
 impl From<PgTenant> for Tenant {
     fn from(value: PgTenant) -> Self {
         Tenant {

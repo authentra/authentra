@@ -2,22 +2,25 @@ use std::sync::Arc;
 
 use argon2::{password_hash::Encoding, PasswordHash};
 use axum::{
-    extract::{OriginalUri, State},
+    extract::{Host, OriginalUri, State},
     response::{IntoResponse, Redirect, Response},
     routing::{get, MethodRouter},
     Form, Json, Router,
 };
 
+use deadpool_postgres::GenericClient;
+use policy_engine::uri::Scheme;
 use serde_json::Value;
-use sqlx::{query, Postgres};
 use tower_cookies::Cookies;
 use tracing::instrument;
-use uuid::Uuid;
 
 use crate::{
-    api::{sql_tx::Tx, ApiError, ApiErrorKind, AuthServiceData, ExecutorQuery},
+    api::{ApiError, ApiErrorKind, AuthServiceData, ExecutorQuery},
     auth::Session,
-    executor::{flow::FlowExecution, ExecutionError, FlowExecutor},
+    executor::{
+        flow::{CheckContextRequest, FlowExecution},
+        ExecutionError, FlowExecutor,
+    },
     service::user::UserService,
     SharedState,
 };
@@ -44,6 +47,8 @@ async fn get_flow(
     flow: Reference<Flow>,
     State(state): State<SharedState>,
     query: Option<ExecutorQuery>,
+    OriginalUri(uri): OriginalUri,
+    Host(host): Host,
 ) -> Result<Json<FlowData>, ApiError> {
     let executor = state.executor();
     let key = executor
@@ -53,19 +58,28 @@ async fn get_flow(
         .get_execution(&key, true)
         .await
         .ok_or(ApiErrorKind::NotFound.into_api())?;
-    let data = execution.data(None, query.unwrap_or_default()).await;
+    let connection = state.defaults().connection().await?;
+    let context = CheckContextRequest {
+        uri,
+        host,
+        scheme: Scheme::Http,
+        query: query.unwrap_or_default(),
+        user: session.get_user(&connection, &state).await?,
+    };
+    let context = execution.get_check_context(context);
+    let data = execution.data(None, &context).await;
     Ok(Json(data))
 }
 
-#[instrument(skip(state, session, form, cookies, uri, tx))]
+#[instrument(skip(state, session, form, cookies, uri))]
 async fn post_flow(
     session: Session,
-    mut tx: Tx<Postgres>,
     flow: Reference<Flow>,
     State(state): State<SharedState>,
     OriginalUri(uri): OriginalUri,
     cookies: Cookies,
     query: Option<ExecutorQuery>,
+    Host(host): Host,
     Form(form): Form<Value>,
 ) -> Result<Response, ApiError> {
     let executor = state.executor();
@@ -76,41 +90,63 @@ async fn post_flow(
         .get_execution(&key, false)
         .await
         .ok_or(ApiErrorKind::NotFound.into_api())?;
-    if let Err(err) = handle_submission(form, &mut tx, executor, &state.users(), &execution).await {
+    let mut connection = state.defaults().connection().await?;
+    let connection = connection.transaction().await?;
+    let context = CheckContextRequest {
+        uri: uri.clone(),
+        host,
+        scheme: Scheme::Http,
+        query: query.unwrap_or_default(),
+        user: session.get_user(&connection, &state).await?,
+    };
+    let context = execution.get_check_context(context);
+    if let Ok(Some(_)) = execution.check(&context).await {
+        return Ok(Json(execution.data(None, &context).await).into_response());
+    }
+    if let Err(err) =
+        handle_submission(&connection, form, executor, &state.users(), &execution).await
+    {
         match &err.kind {
-            ApiErrorKind::SubmissionError(err) => Ok(Json(
-                execution
-                    .data(Some(err.clone()), query.unwrap_or_default())
-                    .await,
-            )
-            .into_response()),
+            ApiErrorKind::SubmissionError(err) => {
+                Ok(Json(execution.data(Some(err.clone()), &context).await).into_response())
+            }
             _ => Err(err),
         }
     } else {
         execution.complete_current();
-        complete(&mut tx, &execution, &state.auth_data(), &cookies, session).await?;
-        tx.commit().await?;
+        complete(
+            &connection,
+            &execution,
+            &state.auth_data(),
+            &cookies,
+            session,
+        )
+        .await?;
+        connection.commit().await?;
         Ok(Redirect::to(uri.to_string().as_str()).into_response())
     }
 }
 
-#[instrument(skip(form, tx, executor, users, execution))]
+#[instrument(skip(form, client, executor, users, execution))]
 async fn handle_submission(
+    client: &impl GenericClient,
     form: Value,
-    tx: &mut Tx<Postgres>,
     executor: &FlowExecutor,
     users: &UserService,
     execution: &FlowExecution,
 ) -> Result<(), ApiError> {
+    if execution.is_completed() {
+        return Ok(());
+    }
     let entry = execution.get_entry();
     let stage = execution.lookup_stage(&entry.stage).await;
-    handle_stage(form, tx, executor, users, execution, stage).await
+    handle_stage(form, client, executor, users, execution, stage).await
 }
 
-#[instrument(skip(form, tx, _executor, users, execution))]
+#[instrument(skip(form, client, _executor, users, execution))]
 async fn handle_stage(
     form: Value,
-    tx: &mut Tx<Postgres>,
+    client: &impl GenericClient,
     _executor: &FlowExecutor,
     users: &UserService,
     execution: &FlowExecution,
@@ -133,7 +169,7 @@ async fn handle_stage(
             )?;
             let user = users
                 .lookup_user(
-                    &mut *tx,
+                    client,
                     uid,
                     user_fields.contains(&UserField::Name),
                     user_fields.contains(&UserField::Email),
@@ -145,8 +181,9 @@ async fn handle_stage(
                     ctx.pending = Some(PendingUser {
                         uid: user.uid,
                         name: user.name,
-                        avatar_url: "".into(),
+                        avatar_url: None,
                         authenticated: false,
+                        is_admin: user.is_admin,
                     });
                 }),
                 None => {
@@ -161,7 +198,7 @@ async fn handle_stage(
                 let password = execution.lookup_stage(password).await;
                 match &password.kind {
                     StageKind::Password { backends } => {
-                        return handle_password_stage(&form, tx, execution, &backends).await;
+                        return handle_password_stage(&form, client, execution, &backends).await;
                     }
                     _ => unreachable!("Is not password stage"),
                 };
@@ -172,16 +209,16 @@ async fn handle_stage(
         StageKind::UserLogout => return Ok(()),
         StageKind::UserWrite => return Ok(()),
         StageKind::Password { backends } => {
-            return handle_password_stage(&form, tx, execution, backends).await;
+            return handle_password_stage(&form, client, execution, backends).await;
         }
         StageKind::Consent { mode: _ } => return Ok(()),
     };
 }
 
-#[instrument(skip(form, tx, execution))]
+#[instrument(skip(form, client, execution))]
 async fn handle_password_stage(
     form: &Value,
-    tx: &mut Tx<Postgres>,
+    client: &impl GenericClient,
     execution: &FlowExecution,
     backends: &Vec<PasswordBackend>,
 ) -> Result<(), ApiError> {
@@ -198,12 +235,16 @@ async fn handle_password_stage(
             )))?,
     )?;
     if backends.contains(&PasswordBackend::Internal) {
-        let res = query!("select password from users where uid = $1", pending.uid)
-            .fetch_optional(&mut *tx)
+        let statement = client
+            .prepare_cached("select password from users where uid = $1")
             .await?;
+        let res: Option<String> = client
+            .query_opt(&statement, &[&pending.uid])
+            .await?
+            .map(|v| v.get(0));
         match res {
             Some(res) => {
-                let hash = PasswordHash::parse(&res.password, Encoding::B64)?;
+                let hash = PasswordHash::parse(&res, Encoding::B64)?;
                 let is_valid = match hash.verify_password(&[&argon2::Argon2::default()], password) {
                     Ok(_) => true,
                     Err(err) => match err {
@@ -240,9 +281,9 @@ fn str_from_field<'a>(name: &'static str, value: &'a Value) -> Result<&'a String
     }
 }
 
-#[instrument(skip(tx, execution, keys, cookies, session))]
+#[instrument(skip(client, execution, keys, cookies, session))]
 async fn complete(
-    tx: &mut Tx<Postgres>,
+    client: &impl GenericClient,
     execution: &FlowExecution,
     keys: &AuthServiceData,
     cookies: &Cookies,
@@ -268,13 +309,13 @@ async fn complete(
         iterations += 1;
         match stage.kind {
             StageKind::UserLogin => {
-                let (uid, is_authenticated): (Uuid, bool) = execution
+                let user = execution
                     .get_context()
                     .pending
                     .as_ref()
-                    .map(|v| (v.uid.clone(), v.authenticated))
+                    .cloned()
                     .ok_or(SubmissionError::NoPendingUser)?;
-                if !is_authenticated {
+                if !user.authenticated {
                     execution.set_error(ExecutionError {
                         stage: Some(entry.stage.clone()),
                         message: "Authentication of pending user failed".into(),
@@ -285,16 +326,16 @@ async fn complete(
                     .get(SESSION_COOKIE_NAME)
                     .ok_or(ApiErrorKind::InvalidSessionCookie)?;
                 let mut claims: Claims = decode_token(&keys.decoding_key, cookie.value())?.claims;
-                claims.sub = Some(uid);
+                claims.sub = Some(user.uid);
                 claims.authenticated = true;
+                claims.is_admin = user.is_admin;
                 set_session_cookie(&keys.encoding_key, cookies, &claims)?;
-                query!(
-                    "update sessions set user_id = $1 where uid = $2",
-                    uid,
-                    session.session_id
-                )
-                .execute(&mut *tx)
-                .await?;
+                let statement = client
+                    .prepare_cached("update sessions set user_id = $1 where uid = $2")
+                    .await?;
+                client
+                    .execute(&statement, &[&user.uid, &session.session_id])
+                    .await?;
             }
             StageKind::UserLogout => todo!(),
             StageKind::UserWrite => todo!(),

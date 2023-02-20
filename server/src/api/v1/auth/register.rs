@@ -7,6 +7,7 @@ use http::StatusCode;
 use rand::rngs::OsRng;
 use serde::Deserialize;
 use sqlx::{query, Postgres};
+use tracing::instrument;
 
 use crate::api::{sql_tx::Tx, ApiError};
 
@@ -16,6 +17,7 @@ pub struct RegisterForm {
     password: String,
 }
 
+#[instrument(skip(tx, form))]
 pub async fn register(
     mut tx: Tx<Postgres>,
     Form(form): Form<RegisterForm>,
@@ -29,6 +31,7 @@ pub async fn register(
     )
     .hash_password(form.password.as_bytes(), &salt)?
     .to_string();
+    tracing::trace!("Executing query");
     let _uid = query!(
         "insert into users(name, password) values($1, $2) returning uid",
         name,
@@ -37,5 +40,6 @@ pub async fn register(
     .fetch_one(&mut tx)
     .await?
     .uid;
+    tracing::trace!("Executed query");
     Ok(StatusCode::OK.into_response())
 }

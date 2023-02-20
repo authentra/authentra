@@ -78,7 +78,8 @@ export interface PendingUser {
 export interface PartialUser {
     uid: string,
     name: string,
-    avatar_url: string | null
+    avatar_url: string | null,
+    is_admin: boolean
 }
 
 export interface CheckAuthResponse {

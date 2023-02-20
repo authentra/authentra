@@ -10,6 +10,7 @@ use parking_lot::{Mutex, RwLock};
 use crate::{
     auth::Session,
     flow_storage::{FlowStorage, FreezedStorage, ReferenceLookup, ReverseLookup},
+    service::policy::PolicyService,
 };
 use model::{Flow, PolicyKind, PolicyResult, Reference, ReferenceKind};
 
@@ -49,24 +50,26 @@ pub struct FlowExecutor {
 struct FlowExecutorInternal {
     executions: Cache<FlowKey, FlowExecution>,
     storage: FlowStorage,
+    policy_service: PolicyService,
 }
 
 impl FlowExecutorInternal {
-    pub fn new(storage: FlowStorage) -> Self {
+    pub fn new(storage: FlowStorage, policy_service: PolicyService) -> Self {
         Self {
             executions: Cache::builder()
                 .time_to_idle(TIME_TO_IDLE.clone())
                 .time_to_live(TIME_TO_LIVE.clone())
                 .build(),
             storage,
+            policy_service,
         }
     }
 }
 
 impl FlowExecutor {
-    pub fn new(storage: FlowStorage) -> Self {
+    pub fn new(storage: FlowStorage, policy_service: PolicyService) -> Self {
         Self {
-            internal: Arc::new(FlowExecutorInternal::new(storage)),
+            internal: Arc::new(FlowExecutorInternal::new(storage, policy_service)),
         }
     }
 
@@ -119,6 +122,7 @@ impl FlowExecutor {
             is_completed: AtomicBool::new(false),
             executor: self.clone(),
             key: key.clone(),
+            policy_service: self.internal.policy_service.clone(),
         };
         let execution = FlowExecution(Arc::new(execution));
         self.internal
@@ -149,7 +153,7 @@ impl Validate for PolicyKind {
                         .into()
                 }),
             PolicyKind::PasswordStrength => todo!(),
-            PolicyKind::Expression => todo!(),
+            PolicyKind::Expression(..) => todo!(),
         }
     }
 }
