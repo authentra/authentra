@@ -39,11 +39,7 @@ impl FlowExecution {
         self.use_mut_context(|ctx| ctx.error = Some(error));
     }
 
-    pub async fn data(
-        &self,
-        error: Option<SubmissionError>,
-        context: CheckContextRequest,
-    ) -> FlowData {
+    pub fn get_check_context(&self, context: CheckContextRequest) -> CheckContext {
         let pending_user = self.get_context().pending.clone();
         let context = CheckContext {
             inner: CheckContextData {
@@ -52,6 +48,10 @@ impl FlowExecution {
             },
             execution: self.clone(),
         };
+        context
+    }
+
+    pub async fn data(&self, error: Option<SubmissionError>, context: &CheckContext) -> FlowData {
         let flow = self.0.flow.as_ref();
         let entry = self.get_entry();
         let stage = self.lookup_stage(&entry.stage).await;

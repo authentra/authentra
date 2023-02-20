@@ -5,7 +5,7 @@ use axum::{
     extract::{Host, OriginalUri, State},
     response::{IntoResponse, Redirect, Response},
     routing::{get, MethodRouter},
-    Extension, Form, Json, Router,
+    Form, Json, Router,
 };
 
 use deadpool_postgres::GenericClient;
@@ -66,7 +66,8 @@ async fn get_flow(
         query: query.unwrap_or_default(),
         user: session.get_user(&connection, &state).await?,
     };
-    let data = execution.data(None, context).await;
+    let context = execution.get_check_context(context);
+    let data = execution.data(None, &context).await;
     Ok(Json(data))
 }
 
@@ -98,12 +99,16 @@ async fn post_flow(
         query: query.unwrap_or_default(),
         user: session.get_user(&connection, &state).await?,
     };
+    let context = execution.get_check_context(context);
+    if let Ok(Some(_)) = execution.check(&context).await {
+        return Ok(Json(execution.data(None, &context).await).into_response());
+    }
     if let Err(err) =
         handle_submission(&connection, form, executor, &state.users(), &execution).await
     {
         match &err.kind {
             ApiErrorKind::SubmissionError(err) => {
-                Ok(Json(execution.data(Some(err.clone()), context).await).into_response())
+                Ok(Json(execution.data(Some(err.clone()), &context).await).into_response())
             }
             _ => Err(err),
         }
