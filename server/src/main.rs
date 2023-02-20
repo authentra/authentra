@@ -198,7 +198,6 @@ async fn preload(pool: &PgPool, storage: &FlowStorage) -> Result<(), sqlx::Error
     for policy in policies {
         storage.lookup_reference(&policy).await;
     }
-    // join_all(policies.iter().map(|r| storage.lookup_reference(r))).await;
 
     info!("Preload complete");
     Ok(())
@@ -304,8 +303,9 @@ async fn start_server(config: InternalAuthustConfiguration, sqlx_pool: PgPool, p
     preload(&sqlx_pool, &storage)
         .await
         .expect("Preloading failed");
+    let policies = PolicyService::new(storage.clone(), pool.clone());
     let defaults = Defaults::new(storage.clone(), sqlx_pool.clone(), pool.clone()).await;
-    let executor = FlowExecutor::new(storage.clone());
+    let executor = FlowExecutor::new(storage.clone(), policies.clone());
     let users = UserService::new();
     let _handlebars = setup_handlebars();
     let internal_state = InternalSharedState {
@@ -317,7 +317,7 @@ async fn start_server(config: InternalAuthustConfiguration, sqlx_pool: PgPool, p
         },
         storage: storage.clone(),
         defaults: Arc::new(defaults),
-        policies: PolicyService::new(storage, pool),
+        policies,
     };
     let state = SharedState(Arc::new(internal_state), sqlx_pool.clone());
     let service = ServiceBuilder::new()

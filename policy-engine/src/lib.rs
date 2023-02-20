@@ -1,17 +1,12 @@
 use ::base64::{prelude::BASE64_URL_SAFE_NO_PAD, Engine as _};
 use ::rhai::{
-    packages::{
-        ArithmeticPackage, BasicFnPackage, BasicStringPackage, LanguageCorePackage, Package,
-    },
-    Engine, EvalAltResult, OptimizationLevel, ParseError, Position, Scope, AST,
+    packages::Package, Engine, EvalAltResult, OptimizationLevel, ParseError, Position, Scope, AST,
 };
-use network::NetworkPackage;
+use context::ContextPackage;
 use once_cell::sync::Lazy;
 use parking_lot::Mutex;
-use request::RequestPackage;
-use std::sync::Arc;
+use std::{fmt::Display, sync::Arc};
 use uri::RhaiUri;
-use user::UserPackage;
 
 pub mod context;
 pub mod network;
@@ -52,6 +47,15 @@ pub enum ExpressionCompilationError {
     Parse(ParseError),
 }
 
+impl Display for ExpressionCompilationError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ExpressionCompilationError::InvalidBase64 => write!(f, "Invalid base64"),
+            ExpressionCompilationError::Parse(inner) => inner.fmt(f),
+        }
+    }
+}
+
 impl From<base64::DecodeError> for ExpressionCompilationError {
     fn from(_: base64::DecodeError) -> Self {
         Self::InvalidBase64
@@ -72,13 +76,7 @@ pub fn compile(expression: &str, scope: &Scope) -> Result<AST, ExpressionCompila
 }
 
 fn register_packages(engine: &mut Engine) {
-    LanguageCorePackage::new().register_into_engine(engine);
-    ArithmeticPackage::new().register_into_engine(engine);
-    BasicStringPackage::new().register_into_engine(engine);
-    BasicFnPackage::new().register_into_engine(engine);
-    NetworkPackage::new().register_into_engine(engine);
-    UserPackage::new().register_into_engine(engine);
-    RequestPackage::new().register_into_engine(engine);
+    ContextPackage::new().register_into_engine(engine);
 }
 
 pub fn execute<'a, F: FnOnce() -> Scope<'a>>(ast: &AST, create_scope: F) -> ExecutionResult {

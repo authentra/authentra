@@ -25,7 +25,6 @@ pub enum Scheme {
 pub enum RhaiUriError {
     MissingScheme,
     UnsupportedScheme,
-    MissingHost,
 }
 
 impl<'a> TryFrom<&'a http::uri::Scheme> for Scheme {
@@ -43,10 +42,7 @@ impl<'a> TryFrom<&'a http::uri::Scheme> for Scheme {
 }
 
 impl RhaiUri {
-    pub fn from_uri(uri: &Uri) -> Result<RhaiUri, RhaiUriError> {
-        let scheme = uri.scheme().ok_or(RhaiUriError::MissingScheme)?;
-        let scheme = Scheme::try_from(scheme)?;
-        let host = uri.host().ok_or(RhaiUriError::MissingHost)?;
+    pub fn create(scheme: Scheme, host: String, uri: &Uri) -> Result<RhaiUri, RhaiUriError> {
         let port = uri.port_u16();
         let path = uri.path();
         let query = uri.query();
@@ -132,7 +128,8 @@ mod test {
     use crate::{tests::preload::*, uri::UriPackage};
 
     fn uri(uri: &'static str) -> RhaiUri {
-        RhaiUri::from_uri(&Uri::from_static(uri)).expect("Failed to construct uri")
+        RhaiUri::create(Scheme::Http, "host".into(), &Uri::from_static(uri))
+            .expect("Failed to construct uri")
     }
 
     eval_test!(test_to_string("uri": uri("http://host/this/is/a/path")) -> String | ("http://host/this/is/a/path".to_owned()): "uri.to_string()", UriPackage);

@@ -8,9 +8,14 @@ use std::{
 
 use http::Uri;
 use parking_lot::{lock_api::RwLockReadGuard, Mutex, RawRwLock, RwLock};
+use policy_engine::{execute, uri::Scheme, LogEntry};
 use uuid::Uuid;
 
-use crate::{api::ExecutorQuery, flow_storage::ReferenceLookup};
+use crate::{
+    api::ExecutorQuery,
+    flow_storage::ReferenceLookup,
+    service::policy::{create_scope, PolicyService},
+};
 use model::{
     error::SubmissionError, user::PartialUser, AuthenticationRequirement, Flow, FlowBinding,
     FlowBindingKind, FlowComponent, FlowData, FlowEntry, FlowInfo, PendingUser, Policy, Reference,
@@ -158,6 +163,9 @@ async fn check_binding(
     binding: &FlowBinding,
     context: &CheckContext,
 ) -> Result<Option<String>, ()> {
+    if !binding.enabled {
+        return Ok(None);
+    }
     let check = FlowCheck::from(binding.kind.clone());
     let result = check.check(context).await;
     let result = if binding.negate {
@@ -165,7 +173,8 @@ async fn check_binding(
     } else {
         result
     };
-    if !*result {
+    let result = *result;
+    if !result {
         Ok(Some(check.message(&context)))
     } else {
         Ok(None)
@@ -241,7 +250,7 @@ impl FlowCheck {
             }
             FlowCheck::Policy(policy) => {
                 let policy = context.execution.lookup_policy(policy).await;
-                check_policy(context, &policy)
+                check_policy(context, &policy).await
             }
         }
     }
@@ -271,21 +280,76 @@ impl FlowCheck {
     }
 }
 
-fn check_policy(context: &CheckContext, policy: &Policy) -> FlowCheckOutput {
-    match policy.kind {
+async fn check_policy(context: &CheckContext, policy: &Policy) -> FlowCheckOutput {
+    match &policy.kind {
         model::PolicyKind::PasswordExpiry { max_age } => {
-            let duration = time::Duration::seconds(max_age as i64);
+            let duration = time::Duration::seconds(*max_age as i64);
             let start_time = context.execution.get_context().start_time.clone();
             context
                 .request
                 .user
                 .as_ref()
                 .map(|user| user.password_change_date)
-                .map(|date| ((start_time - date) > duration).into_output())
+                .map(|date| ((start_time - date) < duration).into_output())
                 .unwrap_or(FlowCheckOutput::Neutral)
         }
         model::PolicyKind::PasswordStrength => FlowCheckOutput::Neutral,
-        model::PolicyKind::Expression(_) => todo!(),
+        model::PolicyKind::Expression(_) => {
+            let reference = Reference::new_uid(policy.uid);
+            let ast = context
+                .execution
+                .0
+                .policy_service
+                .get_ast(reference.clone())
+                .await;
+            if let Some(ast) = ast {
+                let scope = create_scope(&context);
+                let result = execute(ast.as_ref(), || scope);
+                let passed = match result.result {
+                    Ok(res) => res,
+                    Err(err) => {
+                        tracing::warn!(policy = ?policy,"An error occurred while executing policy!, {err}");
+                        dispatch_expression_log_entries(&reference, result.output, true);
+                        return FlowCheckOutput::FailedHard;
+                    }
+                };
+                let output = if passed {
+                    FlowCheckOutput::Passed
+                } else {
+                    FlowCheckOutput::Failed
+                };
+                dispatch_expression_log_entries(&reference, result.output, false);
+                output
+            } else {
+                tracing::warn!("Failed to find ast for policy {reference:?}");
+                FlowCheckOutput::Neutral
+            }
+        }
+    }
+}
+
+fn dispatch_expression_log_entries(
+    policy: &Reference<Policy>,
+    entries: Vec<LogEntry>,
+    has_error: bool,
+) {
+    for entry in entries {
+        match entry {
+            LogEntry::Text(text) => {
+                if has_error {
+                    tracing::warn!(policy = ?policy, "INFO: {text}");
+                } else {
+                    tracing::debug!(policy = ?policy, "INFO: {text}");
+                }
+            }
+            LogEntry::Debug(entry) => {
+                if has_error {
+                    tracing::warn!(policy = ?policy, position = ?entry.position, source = ?entry.source, "DEBUG: {}", entry.text);
+                } else {
+                    tracing::debug!(policy = ?policy, position = ?entry.position, source = ?entry.source, "DEBUG: {}", entry.text);
+                }
+            }
+        }
     }
 }
 
@@ -319,6 +383,8 @@ pub struct CheckContextData {
 
 pub struct CheckContextRequest {
     pub uri: Uri,
+    pub host: String,
+    pub scheme: Scheme,
     pub query: ExecutorQuery,
     pub user: Option<PartialUser>,
 }
@@ -330,4 +396,5 @@ pub(super) struct FlowExecutionInternal {
     pub(super) current_entry_idx: Mutex<usize>,
     pub(super) is_completed: AtomicBool,
     pub(super) executor: FlowExecutor,
+    pub(super) policy_service: PolicyService,
 }

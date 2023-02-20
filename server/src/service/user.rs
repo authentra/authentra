@@ -1,7 +1,7 @@
 use deadpool_postgres::GenericClient;
 use model::user::PartialUser;
 use time::OffsetDateTime;
-use tokio_postgres::{types::Timestamp, Row};
+use tokio_postgres::Row;
 use uuid::Uuid;
 
 use crate::api::ApiError;

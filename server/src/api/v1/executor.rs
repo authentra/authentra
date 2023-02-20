@@ -2,13 +2,14 @@ use std::sync::Arc;
 
 use argon2::{password_hash::Encoding, PasswordHash};
 use axum::{
-    extract::{OriginalUri, State},
+    extract::{Host, OriginalUri, State},
     response::{IntoResponse, Redirect, Response},
     routing::{get, MethodRouter},
-    Form, Json, Router,
+    Extension, Form, Json, Router,
 };
 
 use deadpool_postgres::GenericClient;
+use policy_engine::uri::Scheme;
 use serde_json::Value;
 use tower_cookies::Cookies;
 use tracing::instrument;
@@ -47,6 +48,7 @@ async fn get_flow(
     State(state): State<SharedState>,
     query: Option<ExecutorQuery>,
     OriginalUri(uri): OriginalUri,
+    Host(host): Host,
 ) -> Result<Json<FlowData>, ApiError> {
     let executor = state.executor();
     let key = executor
@@ -59,6 +61,8 @@ async fn get_flow(
     let connection = state.defaults().connection().await?;
     let context = CheckContextRequest {
         uri,
+        host,
+        scheme: Scheme::Http,
         query: query.unwrap_or_default(),
         user: session.get_user(&connection, &state).await?,
     };
@@ -74,6 +78,7 @@ async fn post_flow(
     OriginalUri(uri): OriginalUri,
     cookies: Cookies,
     query: Option<ExecutorQuery>,
+    Host(host): Host,
     Form(form): Form<Value>,
 ) -> Result<Response, ApiError> {
     let executor = state.executor();
@@ -88,6 +93,8 @@ async fn post_flow(
     let connection = connection.transaction().await?;
     let context = CheckContextRequest {
         uri: uri.clone(),
+        host,
+        scheme: Scheme::Http,
         query: query.unwrap_or_default(),
         user: session.get_user(&connection, &state).await?,
     };

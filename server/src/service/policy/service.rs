@@ -3,12 +3,13 @@ use std::sync::Arc;
 use deadpool_postgres::{GenericClient, Pool};
 use model::{PartialPolicy, Policy, Reference};
 use moka::sync::Cache;
-use policy_engine::compile;
+use policy_engine::{compile, rhai::AST};
 
 use crate::flow_storage::{FlowStorage, ReferenceLookup};
 
-use super::{ASTResult, DUMMY_SCOPE};
+use super::DUMMY_SCOPE;
 
+#[derive(Clone)]
 #[repr(transparent)]
 pub struct PolicyService(Arc<InternalPolicyService>);
 
@@ -21,7 +22,7 @@ impl PolicyService {
         }))
     }
 
-    pub async fn get_ast(&self, policy: Reference<Policy>) -> Option<Arc<ASTResult>> {
+    pub async fn get_ast(&self, policy: Reference<Policy>) -> Option<Arc<AST>> {
         self.0.get_ast(policy).await
     }
 
@@ -40,17 +41,28 @@ impl PolicyService {
 struct InternalPolicyService {
     storage: FlowStorage,
     pool: Pool,
-    asts: Cache<i32, Arc<ASTResult>>,
+    asts: Cache<i32, Option<Arc<AST>>>,
 }
 
 impl InternalPolicyService {
-    pub async fn get_ast(&self, policy: Reference<Policy>) -> Option<Arc<ASTResult>> {
+    pub async fn get_ast(&self, policy: Reference<Policy>) -> Option<Arc<AST>> {
         let Some(policy) = self.storage.lookup_reference(&policy).await else { return None};
         self.asts
             .optionally_get_with(policy.uid, move || match &policy.kind {
-                model::PolicyKind::Expression(expr) => Some(Arc::new(compile(&expr, &DUMMY_SCOPE))),
+                model::PolicyKind::Expression(expr) => {
+                    let compiled = compile(&expr, &DUMMY_SCOPE);
+                    Some(match compiled {
+                        Ok(ast) => Some(Arc::new(ast)),
+                        Err(err) => {
+                            tracing::warn!(policy = ?policy, "Failed to compile policy! {err}");
+                            None
+                        }
+                    })
+                    // Some(Arc::new(compile(&expr, &DUMMY_SCOPE)))
+                }
                 _ => None,
             })
+            .flatten()
     }
 
     pub async fn list_all_references<C: GenericClient>(
