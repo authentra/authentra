@@ -1,5 +1,7 @@
 use deadpool_postgres::GenericClient;
 use model::user::PartialUser;
+use time::OffsetDateTime;
+use tokio_postgres::{types::Timestamp, Row};
 use uuid::Uuid;
 
 use crate::api::ApiError;
@@ -11,6 +13,11 @@ impl UserService {
     pub fn new() -> Self {
         Self {}
     }
+}
+
+fn get_password_change_date(row: &Row) -> OffsetDateTime {
+    let timestamp: OffsetDateTime = row.get("password_change_date");
+    timestamp
 }
 
 impl UserService {
@@ -33,7 +40,7 @@ impl UserService {
                 name: res.get("name"),
                 avatar_url: None,
                 is_admin: res.get("administrator"),
-                password_change_date: res.get("password_change_date"),
+                password_change_date: get_password_change_date(&res),
             })
         } else {
             None
@@ -61,7 +68,7 @@ impl UserService {
                     name: res.get("name"),
                     avatar_url: None,
                     is_admin: res.get("administrator"),
-                    password_change_date: res.get("password_change_date"),
+                    password_change_date: get_password_change_date(&res),
                 }));
             }
         }
@@ -78,7 +85,7 @@ impl UserService {
                     name: res.get("name"),
                     avatar_url: None,
                     is_admin: res.get("administrator"),
-                    password_change_date: res.get("password_change_date"),
+                    password_change_date: get_password_change_date(&res),
                 }));
             }
         }
@@ -99,7 +106,7 @@ impl UserService {
                     name: res.get("name"),
                     avatar_url: None,
                     is_admin: res.get("administrator"),
-                    password_change_date: res.get("password_change_date"),
+                    password_change_date: get_password_change_date(&res),
                 }));
             }
         }

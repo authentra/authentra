@@ -3,6 +3,7 @@ use std::net::SocketAddr;
 use std::ops::DerefMut;
 use std::path::Path;
 use std::sync::Arc;
+use std::time::Duration;
 
 use crate::api::setup_api_v1;
 use crate::api::sql_tx::TxLayer;
@@ -14,15 +15,16 @@ use crate::interface::setup_interface_router;
 use crate::service::user::UserService;
 use api::AuthServiceData;
 
+use axum::error_handling::HandleErrorLayer;
 use axum::extract::{FromRef, MatchedPath};
 use axum::middleware::{self, Next};
 use axum::response::IntoResponse;
 use axum::routing::get;
-use axum::Router;
+use axum::{BoxError, Router};
 use deadpool_postgres::{Manager, ManagerConfig, Object, Pool, PoolError};
 use handlebars::Handlebars;
 
-use http::Request;
+use http::{Request, StatusCode};
 use jsonwebtoken::{DecodingKey, EncodingKey};
 use metrics_exporter_prometheus::{Matcher, PrometheusBuilder};
 use model::{Flow, Policy, Reference, Tenant};
@@ -322,7 +324,9 @@ async fn start_server(config: InternalAuthustConfiguration, sqlx_pool: PgPool, p
         .layer(middleware::from_fn(track_metrics))
         .layer(TraceLayer::new_for_http())
         .layer(CookieManagerLayer::new())
-        .layer(TxLayer::new(sqlx_pool));
+        .layer(TxLayer::new(sqlx_pool))
+        .layer(HandleErrorLayer::new(handle_timeout_error))
+        .timeout(Duration::from_secs(1));
     #[cfg(debug_assertions)]
     #[cfg(feature = "dev-mode")]
     let service = service.layer(cors);
@@ -338,6 +342,20 @@ async fn start_server(config: InternalAuthustConfiguration, sqlx_pool: PgPool, p
         .await
         .expect("Server crashed");
     // server.await.expect("Server crashed");
+}
+
+async fn handle_timeout_error(err: BoxError) -> (StatusCode, String) {
+    if err.is::<tower::timeout::error::Elapsed>() {
+        (
+            StatusCode::REQUEST_TIMEOUT,
+            "Request took too long".to_string(),
+        )
+    } else {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Unhandled internal error: {}", err),
+        )
+    }
 }
 
 async fn start_metrics_server(addr: SocketAddr) {

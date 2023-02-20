@@ -5,7 +5,7 @@ create table users
     email                varchar(64) unique,
     display_name         varchar(32),
     password             varchar(255)                                    not null,
-    password_change_date timestamp default now()                         not null,
+    password_change_date timestamp with time zone default now()                         not null,
     administrator        boolean   default false                         not null
 );
 

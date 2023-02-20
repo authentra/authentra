@@ -8,4 +8,6 @@ pub struct PartialUser {
     pub name: String,
     pub avatar_url: Option<String>,
     pub is_admin: bool,
+    #[serde(skip)]
+    pub password_change_date: time::OffsetDateTime,
 }
