@@ -10,6 +10,7 @@ use axum::{
 use derive_more::From;
 use http::{header::LOCATION, request::Parts, StatusCode};
 use model::{FlowDesignation, Reference, Tenant};
+use once_cell::sync::Lazy;
 
 use crate::{flow_storage::ReferenceLookup, SharedState};
 
@@ -17,12 +18,12 @@ pub fn setup_flow_router() -> Router<SharedState> {
     Router::new().route("/:flow_designation", get(tenant_flow_redirect))
 }
 
-const INTERFACE_BASE_URI: &str = base_uri();
+static INTERFACE_BASE_URI: Lazy<&'static str> = Lazy::new(base_uri);
 
-const fn base_uri() -> &'static str {
-    let env = option_env!("INTERFACE_BASE_URI");
+fn base_uri() -> &'static str {
+    let env = std::env::var("INTERFACE_BASE_URI").ok();
     match env {
-        Some(v) => v,
+        Some(v) => Box::leak(v.into_boxed_str()),
         None => "",
     }
 }
@@ -36,8 +37,8 @@ pub async fn tenant_flow_redirect(
     if let Some(flow) = tenant.get_flow(&designation) {
         if let Some(flow) = state.storage().lookup_reference(&flow).await {
             let uri = match query {
-                Some(query) => format!("{INTERFACE_BASE_URI}/flow/{}?{query}", flow.slug),
-                None => format!("{INTERFACE_BASE_URI}/flow/{}", flow.slug),
+                Some(query) => format!("{}/flow/{}?{query}", *INTERFACE_BASE_URI, flow.slug),
+                None => format!("{}/flow/{}", *INTERFACE_BASE_URI, flow.slug),
             };
             return (StatusCode::FOUND, [(LOCATION, uri)]).into_response();
         }
