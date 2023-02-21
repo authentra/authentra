@@ -12,7 +12,7 @@ dev-mode = []
 [dependencies]
 serde = { workspace = true, features = ["derive"] }
 config = { workspace = true }
-tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "signal"] }
 once_cell = { workspace = true }
 tracing = { workspace = true, features = ["log"] }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
@@ -49,8 +49,7 @@ model = { path = "../model", features = [
   "axum",
   "sqlx",
 ], package = "authust_model" }
-opentelemetry-jaeger.workspace = true
-opentelemetry = { workspace = true, features = ["trace"] }
+opentelemetry = { workspace = true, features = ["trace", "rt-tokio"] }
 tracing-opentelemetry.workspace = true
 metrics.workspace = true
 metrics-exporter-prometheus.workspace = true
@@ -62,3 +61,4 @@ tokio-postgres = { workspace = true, features = [
   "with-uuid-1",
   "with-time-0_3",
 ] }
+opentelemetry-otlp = { version = "0.11.0", features = ["http-proto", "metrics"] }

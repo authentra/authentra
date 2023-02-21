@@ -1,7 +1,7 @@
 use std::future::ready;
 use std::net::SocketAddr;
 use std::ops::DerefMut;
-use std::path::Path;
+
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -9,31 +9,40 @@ use crate::api::setup_api_v1;
 use crate::api::sql_tx::TxLayer;
 use crate::config::PostgresConfiguration;
 use crate::config::{AuthustConfiguration, InternalAuthustConfiguration};
-use crate::executor::FlowExecutor;
 use crate::flow_storage::{FlowStorage, FreezedStorage, ReferenceLookup, ReverseLookup};
 use crate::interface::setup_interface_router;
+use crate::otel_middleware::{otel_layer, ExtensionLayer};
 use crate::service::user::UserService;
 use api::AuthServiceData;
 
 use axum::error_handling::HandleErrorLayer;
 use axum::extract::{FromRef, MatchedPath};
-use axum::middleware::{self, Next};
+use axum::middleware::Next;
 use axum::response::IntoResponse;
 use axum::routing::get;
 use axum::{BoxError, Router};
 use deadpool_postgres::{Manager, ManagerConfig, Object, Pool, PoolError};
 
+use executor::FlowExecutor;
+use futures::{Future, FutureExt};
 use http::{Request, StatusCode};
 use jsonwebtoken::{DecodingKey, EncodingKey};
 use metrics_exporter_prometheus::{Matcher, PrometheusBuilder};
 use model::{Flow, Policy, Reference, Tenant};
+use opentelemetry::sdk::resource::{EnvResourceDetector, ResourceDetector};
+
+use opentelemetry::sdk::Resource;
+use opentelemetry::{Key, KeyValue};
+use opentelemetry_otlp as otlp;
+use opentelemetry_otlp::ExportConfig;
+use otlp::{SpanExporterBuilder, WithExportConfig};
 use service::policy::PolicyService;
 use sqlx::query;
 use sqlx::{postgres::PgConnectOptions, ConnectOptions, PgPool};
+use tokio::signal;
 use tokio::time::Instant;
 use tower::ServiceBuilder;
 use tower_cookies::CookieManagerLayer;
-use tower_http::trace::TraceLayer;
 use tracing::info;
 use tracing_error::ErrorLayer;
 use tracing_log::LogTracer;
@@ -45,6 +54,7 @@ pub mod config;
 pub mod executor;
 pub mod flow_storage;
 pub mod interface;
+mod otel_middleware;
 pub mod service;
 
 #[tokio::main]
@@ -57,6 +67,34 @@ mod embedded {
     embed_migrations!("./migrations/");
 }
 
+fn setup_span_exporter(config: &ExportConfig) -> SpanExporterBuilder {
+    match config.protocol {
+        opentelemetry_otlp::Protocol::Grpc => otlp::new_exporter().tonic().with_env().into(),
+        opentelemetry_otlp::Protocol::HttpBinary => otlp::new_exporter().http().with_env().into(),
+    }
+}
+
+struct ServiceNameDetector;
+
+impl ResourceDetector for ServiceNameDetector {
+    fn detect(&self, _timeout: Duration) -> Resource {
+        Resource::new(vec![KeyValue::new(
+            "service.name",
+            std::env::var("OTEL_SERVICE_NAME")
+                .ok()
+                .filter(|s| !s.is_empty())
+                .unwrap_or_else(|| {
+                    EnvResourceDetector::new()
+                        .detect(Duration::from_secs(0))
+                        .get(Key::new("service.name"))
+                        .map(|v| v.to_string())
+                        .filter(|s| !s.is_empty())
+                        .unwrap_or_else(|| env!("CARGO_BIN_NAME").to_string())
+                }),
+        )])
+    }
+}
+
 async fn setup() {
     if std::env::var("RUST_LOG").ok().is_none() {
         std::env::set_var("RUST_LOG", "hyper=info,info");
@@ -65,22 +103,25 @@ async fn setup() {
         InternalAuthustConfiguration::load().expect("Failed to load configuration");
     let password = std::mem::replace(&mut configuration.postgres.password, String::new());
 
-    let opentelemetry = if let Some(endpoint) = &configuration.jaeger_endpoint {
-        let tracer = opentelemetry_jaeger::new_agent_pipeline()
-            .with_endpoint(endpoint)
-            .with_service_name("authust")
-            .install_simple()
-            .expect("Faield to install opentelemetry jaeger tracer");
-        let opentelemetry = tracing_opentelemetry::layer().with_tracer(tracer);
-        println!("Enabling OTEL Jaeger");
-        Some(opentelemetry)
-    } else {
-        None
-    };
+    let config = ExportConfig::default();
+    let resource = Resource::from_detectors(
+        Duration::from_secs(0),
+        vec![
+            Box::new(ServiceNameDetector),
+            Box::new(EnvResourceDetector::default()),
+        ],
+    );
+    let tracer = otlp::new_pipeline()
+        .tracing()
+        .with_exporter(setup_span_exporter(&config))
+        .with_trace_config(opentelemetry::sdk::trace::config().with_resource(resource))
+        .install_batch(opentelemetry::runtime::Tokio)
+        .expect("Failed to install opentelemetry tracer");
+    let opentelemetry = tracing_opentelemetry::layer().with_tracer(tracer);
     let layer = tracing_subscriber::fmt::Layer::new().with_filter(EnvFilter::from_default_env());
     let registry = tracing_subscriber::registry()
         .with(EnvFilter::new(
-            "tokio=trace,runtime=trace,trace,hyper=trace",
+            "tokio=trace,runtime=trace,trace,hyper=info,h2=info",
         ))
         .with(opentelemetry)
         .with(ErrorLayer::default())
@@ -88,13 +129,22 @@ async fn setup() {
     tracing::subscriber::set_global_default(registry).unwrap();
     LogTracer::init().unwrap();
     info!("Setting up database...");
+    let shutdown_future = signal::ctrl_c()
+        .map(|fut| {
+            fut.expect("Error occurred while waiting for Ctrl+C signal");
+            tracing::info!("Received shutdown signal");
+        })
+        .shared();
     let (sqlx_pool, pool) = setup_database(&configuration.postgres, &password)
         .await
         .expect("Failed to connect to database");
-    let metrics_future = start_metrics_server(configuration.listen.metrics);
-    let app_future = start_server(configuration, sqlx_pool, pool);
+    let metrics_future =
+        start_metrics_server(configuration.listen.metrics, shutdown_future.clone());
+    let app_future = start_server(configuration, sqlx_pool, pool, shutdown_future.clone());
     tokio::join!(metrics_future, app_future);
+    tracing::info!("Shutting down opentelemetry provider");
     opentelemetry::global::shutdown_tracer_provider();
+    tracing::info!("Shutdown complete");
 }
 
 async fn setup_database(
@@ -284,7 +334,12 @@ impl Defaults {
     }
 }
 
-async fn start_server(config: InternalAuthustConfiguration, sqlx_pool: PgPool, pool: Pool) {
+async fn start_server(
+    config: InternalAuthustConfiguration,
+    sqlx_pool: PgPool,
+    pool: Pool,
+    future: impl Future<Output = ()>,
+) {
     #[cfg(debug_assertions)]
     #[cfg(feature = "dev-mode")]
     let cors = tower_http::cors::CorsLayer::very_permissive();
@@ -309,8 +364,8 @@ async fn start_server(config: InternalAuthustConfiguration, sqlx_pool: PgPool, p
     };
     let state = SharedState(Arc::new(internal_state), sqlx_pool.clone());
     let service = ServiceBuilder::new()
-        .layer(middleware::from_fn(track_metrics))
-        .layer(TraceLayer::new_for_http())
+        .layer(ExtensionLayer)
+        .layer(otel_layer())
         .layer(CookieManagerLayer::new())
         .layer(TxLayer::new(sqlx_pool))
         .layer(HandleErrorLayer::new(handle_timeout_error))
@@ -327,6 +382,7 @@ async fn start_server(config: InternalAuthustConfiguration, sqlx_pool: PgPool, p
     let bind = axum::Server::bind(&config.listen.http);
     info!("Listening on {}...", config.listen.http);
     bind.serve(router.into_make_service())
+        .with_graceful_shutdown(future)
         .await
         .expect("Server crashed");
     // server.await.expect("Server crashed");
@@ -346,7 +402,7 @@ async fn handle_timeout_error(err: BoxError) -> (StatusCode, String) {
     }
 }
 
-async fn start_metrics_server(addr: SocketAddr) {
+async fn start_metrics_server(addr: SocketAddr, future: impl Future<Output = ()>) {
     const EXPONENTIAL_SECONDS: &[f64] = &[
         0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0,
     ];
@@ -362,6 +418,7 @@ async fn start_metrics_server(addr: SocketAddr) {
     let app = Router::new().route("/metrics", get(move || ready(recorder.render())));
     axum::Server::bind(&addr)
         .serve(app.into_make_service())
+        .with_graceful_shutdown(future)
         .await
         .unwrap()
 }
