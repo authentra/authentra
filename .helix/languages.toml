@@ -3,3 +3,4 @@ name = "rust"
 
 [language.config]
 cargo = { features = "all" }
+checkOnSave = { extraArgs = ["--profile", "rust-analyzer"] }

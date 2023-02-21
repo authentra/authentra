@@ -1,5 +1,3 @@
-use std::future::ready;
-use std::net::SocketAddr;
 use std::ops::DerefMut;
 
 use std::sync::Arc;
@@ -16,31 +14,26 @@ use crate::service::user::UserService;
 use api::AuthServiceData;
 
 use axum::error_handling::HandleErrorLayer;
-use axum::extract::{FromRef, MatchedPath};
-use axum::middleware::Next;
-use axum::response::IntoResponse;
+use axum::extract::FromRef;
 use axum::routing::get;
 use axum::{BoxError, Router};
 use deadpool_postgres::{Manager, ManagerConfig, Object, Pool, PoolError};
 
 use executor::FlowExecutor;
 use futures::{Future, FutureExt};
-use http::{Request, StatusCode};
+use http::StatusCode;
 use jsonwebtoken::{DecodingKey, EncodingKey};
-use metrics_exporter_prometheus::{Matcher, PrometheusBuilder};
 use model::{Flow, Policy, Reference, Tenant};
-use opentelemetry::sdk::resource::{EnvResourceDetector, ResourceDetector};
 
-use opentelemetry::sdk::Resource;
-use opentelemetry::{Key, KeyValue};
-use opentelemetry_otlp as otlp;
-use opentelemetry_otlp::ExportConfig;
-use otlp::{SpanExporterBuilder, WithExportConfig};
+use opentelemetry::sdk::resource::{EnvResourceDetector, ResourceDetector};
+use opentelemetry::{sdk::Resource, Key, KeyValue};
+use opentelemetry_otlp::{self as otlp, ExportConfig};
+
+use otlp::{SpanExporterBuilder, TonicExporterBuilder, WithExportConfig};
 use service::policy::PolicyService;
 use sqlx::query;
 use sqlx::{postgres::PgConnectOptions, ConnectOptions, PgPool};
 use tokio::signal;
-use tokio::time::Instant;
 use tower::ServiceBuilder;
 use tower_cookies::CookieManagerLayer;
 use tracing::info;
@@ -67,11 +60,20 @@ mod embedded {
     embed_migrations!("./migrations/");
 }
 
+fn setup_grpc_exporter() -> TonicExporterBuilder {
+    otlp::new_exporter().tonic().with_env()
+}
+
+#[cfg_attr(not(feature = "otlp-http-proto"), allow(unused))]
 fn setup_span_exporter(config: &ExportConfig) -> SpanExporterBuilder {
-    match config.protocol {
-        opentelemetry_otlp::Protocol::Grpc => otlp::new_exporter().tonic().with_env().into(),
+    #[cfg(not(feature = "otlp-http-proto"))]
+    return setup_grpc_exporter().into();
+
+    #[cfg(feature = "otlp-http-proto")]
+    return match config.protocol {
+        opentelemetry_otlp::Protocol::Grpc => setup_grpc_exporter().into(),
         opentelemetry_otlp::Protocol::HttpBinary => otlp::new_exporter().http().with_env().into(),
-    }
+    };
 }
 
 struct ServiceNameDetector;
@@ -129,19 +131,15 @@ async fn setup() {
     tracing::subscriber::set_global_default(registry).unwrap();
     LogTracer::init().unwrap();
     info!("Setting up database...");
-    let shutdown_future = signal::ctrl_c()
-        .map(|fut| {
-            fut.expect("Error occurred while waiting for Ctrl+C signal");
-            tracing::info!("Received shutdown signal");
-        })
-        .shared();
+    let shutdown_future = signal::ctrl_c().map(|fut| {
+        fut.expect("Error occurred while waiting for Ctrl+C signal");
+        tracing::info!("Received shutdown signal");
+    });
     let (sqlx_pool, pool) = setup_database(&configuration.postgres, &password)
         .await
         .expect("Failed to connect to database");
-    let metrics_future =
-        start_metrics_server(configuration.listen.metrics, shutdown_future.clone());
-    let app_future = start_server(configuration, sqlx_pool, pool, shutdown_future.clone());
-    tokio::join!(metrics_future, app_future);
+    let app_future = start_server(configuration, sqlx_pool, pool, shutdown_future);
+    app_future.await;
     tracing::info!("Shutting down opentelemetry provider");
     opentelemetry::global::shutdown_tracer_provider();
     tracing::info!("Shutdown complete");
@@ -402,53 +400,6 @@ async fn handle_timeout_error(err: BoxError) -> (StatusCode, String) {
     }
 }
 
-async fn start_metrics_server(addr: SocketAddr, future: impl Future<Output = ()>) {
-    const EXPONENTIAL_SECONDS: &[f64] = &[
-        0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0,
-    ];
-
-    let recorder = PrometheusBuilder::new()
-        .set_buckets_for_metric(
-            Matcher::Full("http_requests_duration_seconds".to_string()),
-            EXPONENTIAL_SECONDS,
-        )
-        .unwrap()
-        .install_recorder()
-        .unwrap();
-    let app = Router::new().route("/metrics", get(move || ready(recorder.render())));
-    axum::Server::bind(&addr)
-        .serve(app.into_make_service())
-        .with_graceful_shutdown(future)
-        .await
-        .unwrap()
-}
-
 async fn hello_world() -> &'static str {
     "Hello, World!"
-}
-
-async fn track_metrics<B>(req: Request<B>, next: Next<B>) -> impl IntoResponse {
-    let start = Instant::now();
-    let path = if let Some(matched_path) = req.extensions().get::<MatchedPath>() {
-        matched_path.as_str().to_owned()
-    } else {
-        req.uri().path().to_owned()
-    };
-    let method = req.method().clone();
-
-    let response = next.run(req).await;
-
-    let latency = start.elapsed().as_secs_f64();
-    let status = response.status().as_u16().to_string();
-
-    let labels = [
-        ("method", method.to_string()),
-        ("path", path),
-        ("status", status),
-    ];
-
-    metrics::increment_counter!("http_requests_total", &labels);
-    metrics::histogram!("http_requests_duration_seconds", latency, &labels);
-
-    response
 }

@@ -8,6 +8,7 @@ edition = "2021"
 [features]
 # This feature only has an effect when debug_assertions are turned on
 dev-mode = []
+otlp-http-proto = ["opentelemetry-otlp/http-proto"]
 
 [dependencies]
 serde = { workspace = true, features = ["derive"] }
@@ -36,7 +37,6 @@ argon2.workspace = true
 derive_more = { workspace = true, features = ["error", "display", "from"] }
 tracing-error.workspace = true
 moka.workspace = true
-impl-tools.workspace = true
 serde_json = { workspace = true, features = ["preserve_order"] }
 axum = { workspace = true, features = ["headers", "macros", "http2"] }
 tower = { workspace = true, features = ["timeout"] }
@@ -51,9 +51,7 @@ model = { path = "../model", features = [
 ], package = "authust_model" }
 opentelemetry = { workspace = true, features = ["trace", "rt-tokio"] }
 tracing-opentelemetry.workspace = true
-metrics.workspace = true
-metrics-exporter-prometheus.workspace = true
-policy-engine = { version = "0.1.0", path = "../policy-engine" }
+policy-engine = { path = "../policy-engine" }
 tracing-log.workspace = true
 refinery = { workspace = true, features = ["tokio-postgres"] }
 deadpool-postgres.workspace = true
@@ -61,4 +59,4 @@ tokio-postgres = { workspace = true, features = [
   "with-uuid-1",
   "with-time-0_3",
 ] }
-opentelemetry-otlp = { version = "0.11.0", features = ["http-proto", "metrics"] }
+opentelemetry-otlp = { version = "0.11.0" }
