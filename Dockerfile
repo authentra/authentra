@@ -1,7 +1,7 @@
 FROM rust:1.67.1-alpine AS chef 
 # We only pay the installation cost once, 
 # it will be cached from the second build onwards
-RUN apk add --no-cache musl-dev pkgconfig openssl-dev
+RUN apk add --no-cache musl-dev pkgconfig openssl-dev protoc clang mold
 RUN cargo install cargo-chef
 WORKDIR /app
 
