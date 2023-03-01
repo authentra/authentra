@@ -22,11 +22,9 @@ fn handle_error(_err: std::io::Error) -> Ready<StatusCode> {
 }
 
 fn spa_router() -> Router<SharedState> {
-    let asset_service = get_service(ServeDir::new("dist/assets")).handle_error(handle_error);
-    let favicon_service =
-        get_service(ServeFile::new("dist/favicon.ico")).handle_error(handle_error);
-    let fallback_service =
-        get_service(ServeFile::new("dist/index.html")).handle_error(handle_error);
+    let asset_service = get_service(ServeDir::new("dist/assets"));
+    let favicon_service = get_service(ServeFile::new("dist/favicon.ico"));
+    let fallback_service = get_service(ServeFile::new("dist/index.html"));
     Router::new()
         .nest_service("/assets", asset_service)
         .route_service("/favicon.ico", favicon_service)

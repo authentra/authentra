@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use super::{PromptBinding, Reference};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "datacache", derive(datacache::DataMarker))]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct Stage {
     pub uid: i32,

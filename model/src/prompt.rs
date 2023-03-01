@@ -10,6 +10,7 @@ pub struct PromptBinding {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "datacache", derive(datacache::DataMarker))]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct Prompt {
     pub uid: i32,

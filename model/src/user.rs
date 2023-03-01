@@ -2,6 +2,7 @@ use serde::Serialize;
 use uuid::Uuid;
 
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(feature = "datacache", derive(datacache::DataMarker))]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct PartialUser {
     pub uid: Uuid,

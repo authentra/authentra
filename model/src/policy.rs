@@ -10,6 +10,7 @@ pub struct PartialPolicy {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "datacache", derive(datacache::DataMarker))]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct Policy {
     pub uid: i32,

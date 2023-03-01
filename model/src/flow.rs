@@ -56,9 +56,12 @@ pub enum FlowDesignation {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "datacache", derive(datacache::DataMarker))]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct Flow {
+    #[cfg_attr(feature = "datacache", datacache(queryable))]
     pub uid: i32,
+    #[cfg_attr(feature = "datacache", datacache(queryable))]
     pub slug: String,
     pub title: String,
     pub designation: FlowDesignation,
@@ -68,6 +71,7 @@ pub struct Flow {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "datacache", derive(datacache::DataMarker))]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct FlowBinding {
     pub enabled: bool,

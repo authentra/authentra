@@ -8,6 +8,7 @@ use serde::Serialize;
 use crate::{Flow, FlowDesignation, Reference};
 
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(feature = "datacache", derive(datacache::DataMarker))]
 pub struct Tenant {
     pub uid: i32,
     pub host: String,

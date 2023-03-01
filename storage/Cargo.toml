@@ -1,0 +1,23 @@
+[package]
+name = "storage"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+tokio = { workspace = true, features = ["sync", "rt"] }
+futures.workspace = true
+moka = { workspace = true, features = ["future"] }
+serde = { workspace = true }
+uuid = { workspace = true, optional = true, default_features = false, features = ["serde"] }
+tracing = { workspace = true }
+model = { path = "../model", package = "authust_model", features = ["datacache"] }
+deadpool-postgres.workspace = true
+tokio-postgres = { workspace = true, features = [
+  "with-uuid-1",
+  "with-time-0_3",
+] }
+async-trait = "0.1.64"
+# datacache = { git = "https://github.com/authust/datacache" }
+datacache = { path = "../../datacache-with-macros" }
