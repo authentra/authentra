@@ -3,16 +3,16 @@ use std::{
     time::Duration,
 };
 
+use ::storage::{
+    datacache::{DataRef, LookupRef},
+    ReverseLookup, StorageManager,
+};
 use derive_more::Display;
 use moka::sync::Cache;
 use parking_lot::{Mutex, RwLock};
 
-use crate::{
-    auth::Session,
-    flow_storage::{FlowStorage, FreezedStorage, ReferenceLookup, ReverseLookup},
-    service::policy::PolicyService,
-};
-use model::{Flow, PolicyKind, PolicyResult, Reference, ReferenceKind};
+use crate::{auth::Session, service::policy::PolicyService};
+use model::{Flow, FlowQuery, PolicyKind, PolicyResult};
 
 use self::flow::{FlowExecution, FlowExecutionInternal};
 
@@ -30,11 +30,11 @@ const TIME_TO_LIVE: Duration = Duration::from_secs(60 * 60 * 36);
 #[derive(Debug, Display, Clone, Hash, PartialEq, Eq)]
 pub struct FlowKey {
     session: String,
-    flow: Reference<Flow>,
+    flow: DataRef<Flow>,
 }
 
 impl FlowKey {
-    fn new(session: &Session, flow: Reference<Flow>) -> Self {
+    fn new(session: &Session, flow: DataRef<Flow>) -> Self {
         Self {
             session: session.session_id.clone(),
             flow,
@@ -49,12 +49,12 @@ pub struct FlowExecutor {
 
 struct FlowExecutorInternal {
     executions: Cache<FlowKey, FlowExecution>,
-    storage: FlowStorage,
+    storage: StorageManager,
     policy_service: PolicyService,
 }
 
 impl FlowExecutorInternal {
-    pub fn new(storage: FlowStorage, policy_service: PolicyService) -> Self {
+    pub fn new(storage: StorageManager, policy_service: PolicyService) -> Self {
         Self {
             executions: Cache::builder()
                 .time_to_idle(TIME_TO_IDLE.clone())
@@ -67,7 +67,7 @@ impl FlowExecutorInternal {
 }
 
 impl FlowExecutor {
-    pub fn new(storage: FlowStorage, policy_service: PolicyService) -> Self {
+    pub fn new(storage: StorageManager, policy_service: PolicyService) -> Self {
         Self {
             internal: Arc::new(FlowExecutorInternal::new(storage, policy_service)),
         }
@@ -77,12 +77,13 @@ impl FlowExecutor {
         self.internal.executions.invalidate(key);
     }
 
-    pub fn get_key(&self, session: &Session, flow: Reference<Flow>) -> Option<FlowKey> {
-        if flow.kind() != ReferenceKind::Slug {
-            return None;
+    pub fn get_key(&self, session: &Session, flow: DataRef<Flow>) -> Option<FlowKey> {
+        if let FlowQuery::uid(_) = flow.0 {
+            let key = FlowKey::new(session, flow);
+            Some(key)
+        } else {
+            None
         }
-        let key = FlowKey::new(session, flow);
-        Some(key)
     }
 
     pub async fn get_execution(&self, key: &FlowKey, start: bool) -> Option<FlowExecution> {
@@ -99,21 +100,18 @@ impl FlowExecutor {
     }
 
     pub async fn start(&self, key: &FlowKey) -> Option<FlowExecution> {
-        let flow = match self.internal.storage.lookup_reference(&key.flow).await {
+        let flow = match self.internal.storage.lookup(&key.flow).await {
             Some(flow) => flow,
             None => {
                 return None;
             }
         };
-        let mut storage = FreezedStorage::new(self.internal.storage.clone());
+        let proxied = ::storage::create_proxied(&self.internal.storage);
         if flow.entries.is_empty() {
             return None;
         }
-        flow.reverse_lookup(&storage).await;
-        let errors = storage.freeze();
-        if !errors.is_empty() {
-            panic!("Unresolved references! {errors:?}");
-        }
+        proxied.reverse_lookup(&*flow).await;
+        let storage = ::storage::create_freezed(proxied);
         let context = ExecutionContext::new(key.session.clone(), storage);
         let execution = FlowExecutionInternal {
             flow,

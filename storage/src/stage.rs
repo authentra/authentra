@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use datacache::{Data, DataQueryExecutor, DataRef};
+use datacache::{Data, DataQueryExecutor, DataRef, LookupRef};
 use deadpool_postgres::GenericClient;
 use model::{
     ConsentMode, PasswordBackend, PgConsentMode, PromptBinding, PromptQuery, Stage, StageKind,
@@ -8,7 +8,7 @@ use model::{
 use postgres_types::FromSql;
 use tokio_postgres::Row;
 
-use crate::{include_sql, StorageError};
+use crate::{include_sql, ReverseLookup, StorageError, StorageManager};
 
 datacache::storage!(pub StageStorage(StageExecutor, Stage), id(uid: i32), unique(slug: String), fields());
 
@@ -23,7 +23,7 @@ impl DataQueryExecutor<Stage> for StageExecutor {
         data.uid
     }
 
-    async fn find_one(&self, query: StageQuery) -> Result<Stage, Self::Error> {
+    async fn find_one(&self, query: &StageQuery) -> Result<Stage, Self::Error> {
         let conn = self.get_conn().await?;
         let row = match query {
             StageQuery::uid(uid) => {
@@ -43,10 +43,10 @@ impl DataQueryExecutor<Stage> for StageExecutor {
         };
         from_row(&conn, row).await
     }
-    async fn find_all_ids(&self, query: Option<StageQuery>) -> Result<Vec<Self::Id>, Self::Error> {
+    async fn find_all_ids(&self, _query: Option<&StageQuery>) -> Result<Vec<Self::Id>, Self::Error> {
         todo!()
     }
-    async fn find_optional(&self, query: StageQuery) -> Result<Option<Stage>, Self::Error> {
+    async fn find_optional(&self, query: &StageQuery) -> Result<Option<Stage>, Self::Error> {
         let conn = self.get_conn().await?;
         let row = match query {
             StageQuery::uid(uid) => {
@@ -69,13 +69,13 @@ impl DataQueryExecutor<Stage> for StageExecutor {
             None => None,
         })
     }
-    async fn create(&self, data: Data<Stage>) -> Result<(), Self::Error> {
+    async fn create(&self, _data: Data<Stage>) -> Result<(), Self::Error> {
         todo!()
     }
-    async fn update(&self, data: Data<Stage>) -> Result<(), Self::Error> {
+    async fn update(&self, _data: Data<Stage>) -> Result<(), Self::Error> {
         todo!()
     }
-    async fn delete(&self, data: StageQuery) -> Result<Vec<Self::Id>, Self::Error> {
+    async fn delete(&self, _data: &StageQuery) -> Result<Vec<Self::Id>, Self::Error> {
         todo!()
     }
 }
@@ -137,7 +137,7 @@ async fn identification_stage(
         user_fields,
     })
 }
-async fn password_stage(client: &impl GenericClient, row: &Row) -> Result<StageKind, StorageError> {
+async fn password_stage(_client: &impl GenericClient, _row: &Row) -> Result<StageKind, StorageError> {
     //TODO: Make Password backend configurable
     Ok(StageKind::Password {
         backends: vec![PasswordBackend::Internal],
@@ -179,4 +179,29 @@ async fn prompt_stage(
         .collect();
     bindings.sort_by_key(|v| v.order);
     Ok(StageKind::Prompt { bindings })
+}
+
+#[async_trait]
+impl ReverseLookup<Stage> for StorageManager {
+    async fn reverse_lookup(&self, sub: &Stage) {
+        match &sub.kind {
+            model::StageKind::Prompt { bindings } => {
+                for binding in bindings {
+                    self.lookup(&binding.prompt)
+                        .await
+                        .expect("Failed to lookup prompt");
+                }
+            }
+            model::StageKind::Identification {
+                password,
+                user_fields: _,
+            } => {
+                if let Some(password) = password {
+                    let stage = self.lookup(password).await.expect("Failed to lookup stage");
+                    self.reverse_lookup(&*stage).await;
+                }
+            }
+            _ => {}
+        }
+    }
 }

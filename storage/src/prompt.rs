@@ -18,7 +18,7 @@ impl DataQueryExecutor<Prompt> for PromptExecutor {
         data.uid
     }
 
-    async fn find_one(&self, query: PromptQuery) -> Result<Prompt, Self::Error> {
+    async fn find_one(&self, query: &PromptQuery) -> Result<Prompt, Self::Error> {
         let conn = self.get_conn().await?;
         let row = match query {
             PromptQuery::uid(uid) => {
@@ -31,10 +31,13 @@ impl DataQueryExecutor<Prompt> for PromptExecutor {
         };
         Ok(from_row(row))
     }
-    async fn find_all_ids(&self, query: Option<PromptQuery>) -> Result<Vec<Self::Id>, Self::Error> {
+    async fn find_all_ids(
+        &self,
+        _query: Option<&PromptQuery>,
+    ) -> Result<Vec<Self::Id>, Self::Error> {
         todo!()
     }
-    async fn find_optional(&self, query: PromptQuery) -> Result<Option<Prompt>, Self::Error> {
+    async fn find_optional(&self, query: &PromptQuery) -> Result<Option<Prompt>, Self::Error> {
         let conn = self.get_conn().await?;
         let row = match query {
             PromptQuery::uid(uid) => {
@@ -47,13 +50,13 @@ impl DataQueryExecutor<Prompt> for PromptExecutor {
         };
         Ok(row.map(from_row))
     }
-    async fn create(&self, data: Data<Prompt>) -> Result<(), Self::Error> {
+    async fn create(&self, _data: Data<Prompt>) -> Result<(), Self::Error> {
         todo!()
     }
-    async fn update(&self, data: Data<Prompt>) -> Result<(), Self::Error> {
+    async fn update(&self, _data: Data<Prompt>) -> Result<(), Self::Error> {
         todo!()
     }
-    async fn delete(&self, data: PromptQuery) -> Result<Vec<Self::Id>, Self::Error> {
+    async fn delete(&self, _data: &PromptQuery) -> Result<Vec<Self::Id>, Self::Error> {
         todo!()
     }
 }

@@ -1,3 +1,11 @@
+use async_trait::async_trait;
+use datacache::{Data, DataMarker, DataQueryExecutor, DataStorage};
+use deadpool_postgres::Pool;
+use flow::{FlowExecutor, FlowStorage};
+use parking_lot::Mutex;
+use policy::{PolicyExecutor, PolicyStorage};
+use prompt::{PromptExecutor, PromptStorage};
+use stage::{StageExecutor, StageStorage};
 use std::{
     collections::HashMap,
     convert::Infallible,
@@ -7,12 +15,38 @@ use std::{
     marker::PhantomData,
     sync::Arc,
 };
+use tenant::{TenantExecutor, TenantStorage};
 
 pub mod flow;
 pub mod policy;
 pub mod prompt;
 pub mod stage;
 pub mod tenant;
+
+pub use datacache;
+
+macro_rules! executor {
+    ($vis:vis $ident:ident) => {
+        $vis struct $ident {
+            pool: deadpool_postgres::Pool,
+        }
+
+        impl $ident {
+            pub fn new(pool: deadpool_postgres::Pool) -> Self {
+                Self {
+                    pool,
+                }
+            }
+
+            #[inline(always)]
+            async fn get_conn(&self) -> Result<deadpool_postgres::Object, deadpool_postgres::PoolError> {
+                self.pool.get().await
+            }
+        }
+    };
+}
+
+pub(crate) use executor;
 
 #[derive(Debug)]
 pub enum StorageError {
@@ -109,7 +143,7 @@ fn register_proxied<D: StorageRef + Send + Sync + 'static>(
 
 fn get_proxied<D: StorageRef + Send + Sync + 'static>(
     manager: &mut StorageManager,
-) -> Box<ProxyStorage<D::Storage, D::Exc, D>> {
+) -> Arc<ProxyStorage<<D as StorageRef>::Storage, <D as StorageRef>::Exc, D>> {
     manager
         .get_and_remove::<ProxyStorage<D::Storage, D::Exc, D>>()
         .expect("Failed to find proxied")
@@ -121,38 +155,6 @@ macro_rules! include_sql {
         include_str!(concat!("sql/", $path, ".sql"))
     };
 }
-
-macro_rules! executor {
-    ($vis:vis $ident:ident) => {
-        $vis struct $ident {
-            pool: deadpool_postgres::Pool,
-        }
-
-        impl $ident {
-            pub fn new(pool: deadpool_postgres::Pool) -> Self {
-                Self {
-                    pool,
-                }
-            }
-
-            #[inline(always)]
-            async fn get_conn(&self) -> Result<deadpool_postgres::Object, deadpool_postgres::PoolError> {
-                self.pool.get().await
-            }
-        }
-    };
-}
-
-use async_trait::async_trait;
-use datacache::{Data, DataMarker, DataQueryExecutor, DataStorage};
-use deadpool_postgres::Pool;
-pub(crate) use executor;
-use flow::{FlowExecutor, FlowStorage};
-use parking_lot::Mutex;
-use policy::{PolicyExecutor, PolicyStorage};
-use prompt::{PromptExecutor, PromptStorage};
-use stage::{StageExecutor, StageStorage};
-use tenant::{TenantExecutor, TenantStorage};
 
 struct ProxyStorage<P: DataStorage<Exc, D>, Exc: DataQueryExecutor<D>, D: DataMarker> {
     proxy: P,
@@ -189,18 +191,18 @@ where
         let id = self.proxy.get_executor().get_id(data.as_ref());
         let queries = data.create_queries();
         let mut raw_lock = self.query.lock();
-        let lock = raw_lock.as_mut().expect("Mutex doesn't contain queries");
+        let lock = raw_lock.as_mut().expect("Already exported");
         for query in queries {
             lock.insert(query, id.clone());
         }
         self.data
             .lock()
             .as_mut()
-            .expect("Mutex doesn't contain data")
+            .expect("Already exported")
             .insert(id, data);
     }
 
-    pub fn export_data(self) -> ExportedData<D::Query, Exc::Id, D> {
+    pub fn export_data(&self) -> ExportedData<D::Query, Exc::Id, D> {
         let data = self.data.lock().take().expect("Mutex doesn't contain data");
         let query = self
             .query
@@ -220,16 +222,16 @@ where
     D: DataMarker + Send + Sync,
     D::Query: Hash + Eq,
 {
-    async fn find_one(&self, query: D::Query) -> Result<Data<D>, Arc<Exc::Error>> {
+    async fn find_one(&self, query: &D::Query) -> Result<Data<D>, Arc<Exc::Error>> {
         self.proxy.find_one(query).await.map(|v| {
             self.insert_data(v.clone());
             v
         })
     }
-    async fn find_all(&self, query: Option<D::Query>) -> Result<Vec<Data<D>>, Arc<Exc::Error>> {
+    async fn find_all(&self, query: Option<&D::Query>) -> Result<Vec<Data<D>>, Arc<Exc::Error>> {
         self.proxy.find_all(query).await
     }
-    async fn find_optional(&self, query: D::Query) -> Result<Option<Data<D>>, Arc<Exc::Error>> {
+    async fn find_optional(&self, query: &D::Query) -> Result<Option<Data<D>>, Arc<Exc::Error>> {
         self.proxy.find_optional(query).await.map(|opt| {
             opt.map(|v| {
                 self.insert_data(v.clone());
@@ -242,10 +244,10 @@ where
         panic!("Insert is unsupported on a proxy datastorage");
     }
 
-    async fn delete(&self, _query: D::Query) -> Result<(), Exc::Error> {
+    async fn delete(&self, _query: &D::Query) -> Result<(), Exc::Error> {
         panic!("Delete is unsupported on a proxy datastorage");
     }
-    async fn invalidate(&self, _query: D::Query) -> Result<(), Exc::Error> {
+    async fn invalidate(&self, _query: &D::Query) -> Result<(), Exc::Error> {
         panic!("Invalidate is unsupported on a proxy datastorage");
     }
 
@@ -269,9 +271,9 @@ impl<D: DataMarker, Id: Send + Sync + Hash + Eq + Clone> DataQueryExecutor<D>
         panic!("Unsupported operation")
     }
 
-    fn find_one<'life0, 'async_trait>(
+    fn find_one<'life0, 'life1, 'async_trait>(
         &'life0 self,
-        _query: D::Query,
+        _query: &'life1 <D as DataMarker>::Query,
     ) -> core::pin::Pin<
         Box<
             dyn core::future::Future<Output = Result<D, Self::Error>>
@@ -281,14 +283,15 @@ impl<D: DataMarker, Id: Send + Sync + Hash + Eq + Clone> DataQueryExecutor<D>
     >
     where
         'life0: 'async_trait,
+        'life1: 'async_trait,
         Self: 'async_trait,
     {
         panic!("Unsupported operation")
     }
 
-    fn find_all_ids<'life0, 'async_trait>(
+    fn find_all_ids<'life0, 'life1, 'async_trait>(
         &'life0 self,
-        _query: Option<D::Query>,
+        _query: Option<&'life1 <D as DataMarker>::Query>,
     ) -> core::pin::Pin<
         Box<
             dyn core::future::Future<Output = Result<Vec<Self::Id>, Self::Error>>
@@ -298,14 +301,15 @@ impl<D: DataMarker, Id: Send + Sync + Hash + Eq + Clone> DataQueryExecutor<D>
     >
     where
         'life0: 'async_trait,
+        'life1: 'async_trait,
         Self: 'async_trait,
     {
         panic!("Unsupported operation")
     }
 
-    fn find_optional<'life0, 'async_trait>(
+    fn find_optional<'life0, 'life1, 'async_trait>(
         &'life0 self,
-        _query: D::Query,
+        _query: &'life1 <D as DataMarker>::Query,
     ) -> core::pin::Pin<
         Box<
             dyn core::future::Future<Output = Result<Option<D>, Self::Error>>
@@ -315,6 +319,7 @@ impl<D: DataMarker, Id: Send + Sync + Hash + Eq + Clone> DataQueryExecutor<D>
     >
     where
         'life0: 'async_trait,
+        'life1: 'async_trait,
         Self: 'async_trait,
     {
         panic!("Unsupported operation")
@@ -354,9 +359,9 @@ impl<D: DataMarker, Id: Send + Sync + Hash + Eq + Clone> DataQueryExecutor<D>
         panic!("Unsupported operation")
     }
 
-    fn delete<'life0, 'async_trait>(
+    fn delete<'life0, 'life1, 'async_trait>(
         &'life0 self,
-        _data: D::Query,
+        _data: &'life1 <D as DataMarker>::Query,
     ) -> core::pin::Pin<
         Box<
             dyn core::future::Future<Output = Result<Vec<Self::Id>, Self::Error>>
@@ -366,6 +371,7 @@ impl<D: DataMarker, Id: Send + Sync + Hash + Eq + Clone> DataQueryExecutor<D>
     >
     where
         'life0: 'async_trait,
+        'life1: 'async_trait,
         Self: 'async_trait,
     {
         panic!("Unsupported operation")
@@ -408,14 +414,14 @@ where
     D::Query: Hash + Eq + Debug,
     Id: Send + Sync + Hash + Eq + Debug + Clone,
 {
-    async fn find_one(&self, query: D::Query) -> Result<Data<D>, Arc<Infallible>> {
+    async fn find_one(&self, query: &D::Query) -> Result<Data<D>, Arc<Infallible>> {
         let id = self.find_id(&query);
         self.get_data(id)
     }
-    async fn find_all(&self, _: Option<D::Query>) -> Result<Vec<Data<D>>, Arc<Infallible>> {
+    async fn find_all(&self, _: Option<&D::Query>) -> Result<Vec<Data<D>>, Arc<Infallible>> {
         panic!("Unsupported operation")
     }
-    async fn find_optional(&self, query: D::Query) -> Result<Option<Data<D>>, Arc<Infallible>> {
+    async fn find_optional(&self, query: &D::Query) -> Result<Option<Data<D>>, Arc<Infallible>> {
         let id = self.find_id(&query);
         Ok(self.data.data.get(id).cloned())
     }
@@ -424,14 +430,19 @@ where
         panic!("Unsupported operation")
     }
 
-    async fn delete(&self, _: D::Query) -> Result<(), Infallible> {
+    async fn delete(&self, _: &D::Query) -> Result<(), Infallible> {
         panic!("Unsupported operation")
     }
-    async fn invalidate(&self, _: D::Query) -> Result<(), Infallible> {
+    async fn invalidate(&self, _: &D::Query) -> Result<(), Infallible> {
         panic!("Unsupported operation")
     }
 
     fn get_executor(&self) -> &DummyExecutor<Id> {
         panic!("Unsupported operation")
     }
+}
+
+#[async_trait]
+pub trait ReverseLookup<T> {
+    async fn reverse_lookup(&self, sub: &T);
 }

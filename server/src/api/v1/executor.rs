@@ -1,4 +1,4 @@
-use std::sync::Arc;
+
 
 use argon2::{password_hash::Encoding, PasswordHash};
 use axum::{
@@ -11,11 +11,12 @@ use axum::{
 use deadpool_postgres::GenericClient;
 use policy_engine::uri::Scheme;
 use serde_json::Value;
+use storage::datacache::Data;
 use tower_cookies::Cookies;
 use tracing::instrument;
 
 use crate::{
-    api::{ApiError, ApiErrorKind, AuthServiceData, ExecutorQuery},
+    api::{ApiError, ApiErrorKind, AuthServiceData, ExecutorQuery, RefWrapper},
     auth::Session,
     executor::{
         flow::{CheckContextRequest, FlowExecution},
@@ -26,7 +27,7 @@ use crate::{
 };
 use model::{
     error::{FieldError, FieldErrorKind, FieldType, SubmissionError},
-    Flow, FlowData, PasswordBackend, PendingUser, Reference, Stage, StageKind, UserField,
+    Flow, FlowData, PasswordBackend, PendingUser, Stage, StageKind, UserField,
 };
 
 use super::{
@@ -44,7 +45,7 @@ pub fn setup_executor_router() -> Router<SharedState> {
 #[instrument(skip(state, session))]
 async fn get_flow(
     session: Session,
-    flow: Reference<Flow>,
+    RefWrapper(flow): RefWrapper<Flow>,
     State(state): State<SharedState>,
     query: Option<ExecutorQuery>,
     OriginalUri(uri): OriginalUri,
@@ -74,7 +75,7 @@ async fn get_flow(
 #[instrument(skip(state, session, form, cookies, uri))]
 async fn post_flow(
     session: Session,
-    flow: Reference<Flow>,
+    RefWrapper(flow): RefWrapper<Flow>,
     State(state): State<SharedState>,
     OriginalUri(uri): OriginalUri,
     cookies: Cookies,
@@ -150,7 +151,7 @@ async fn handle_stage(
     _executor: &FlowExecutor,
     users: &UserService,
     execution: &FlowExecution,
-    stage: Arc<Stage>,
+    stage: Data<Stage>,
 ) -> Result<(), ApiError> {
     match &stage.kind {
         StageKind::Deny => return Ok(()),
@@ -281,7 +282,7 @@ fn str_from_field<'a>(name: &'static str, value: &'a Value) -> Result<&'a String
     }
 }
 
-#[instrument(skip(client, execution, keys, cookies, session))]
+// #[instrument(skip(client, execution, keys, cookies, session))]
 async fn complete(
     client: &impl GenericClient,
     execution: &FlowExecution,

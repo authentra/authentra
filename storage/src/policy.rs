@@ -19,7 +19,7 @@ impl DataQueryExecutor<Policy> for PolicyExecutor {
         data.uid
     }
 
-    async fn find_one(&self, query: PolicyQuery) -> Result<Policy, Self::Error> {
+    async fn find_one(&self, query: &PolicyQuery) -> Result<Policy, Self::Error> {
         let conn = self.get_conn().await?;
         let row = match query {
             PolicyQuery::uid(uid) => {
@@ -39,10 +39,13 @@ impl DataQueryExecutor<Policy> for PolicyExecutor {
         };
         from_row(&conn, row).await
     }
-    async fn find_all_ids(&self, query: Option<PolicyQuery>) -> Result<Vec<Self::Id>, Self::Error> {
+    async fn find_all_ids(
+        &self,
+        _query: Option<&PolicyQuery>,
+    ) -> Result<Vec<Self::Id>, Self::Error> {
         todo!()
     }
-    async fn find_optional(&self, query: PolicyQuery) -> Result<Option<Policy>, Self::Error> {
+    async fn find_optional(&self, query: &PolicyQuery) -> Result<Option<Policy>, Self::Error> {
         let conn = self.get_conn().await?;
         let row = match query {
             PolicyQuery::uid(uid) => {
@@ -65,13 +68,13 @@ impl DataQueryExecutor<Policy> for PolicyExecutor {
             None => None,
         })
     }
-    async fn create(&self, data: Data<Policy>) -> Result<(), Self::Error> {
+    async fn create(&self, _data: Data<Policy>) -> Result<(), Self::Error> {
         todo!()
     }
-    async fn update(&self, data: Data<Policy>) -> Result<(), Self::Error> {
+    async fn update(&self, _data: Data<Policy>) -> Result<(), Self::Error> {
         todo!()
     }
-    async fn delete(&self, data: PolicyQuery) -> Result<Vec<Self::Id>, Self::Error> {
+    async fn delete(&self, _data: &PolicyQuery) -> Result<Vec<Self::Id>, Self::Error> {
         todo!()
     }
 }

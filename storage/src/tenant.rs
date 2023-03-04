@@ -19,7 +19,7 @@ impl DataQueryExecutor<Tenant> for TenantExecutor {
         data.uid
     }
 
-    async fn find_one(&self, query: TenantQuery) -> Result<Tenant, Self::Error> {
+    async fn find_one(&self, query: &TenantQuery) -> Result<Tenant, Self::Error> {
         let conn = self.get_conn().await?;
         let row = match query {
             TenantQuery::uid(uid) => {
@@ -39,10 +39,13 @@ impl DataQueryExecutor<Tenant> for TenantExecutor {
         };
         Ok(from_row(row))
     }
-    async fn find_all_ids(&self, query: Option<TenantQuery>) -> Result<Vec<Self::Id>, Self::Error> {
+    async fn find_all_ids(
+        &self,
+        _query: Option<&TenantQuery>,
+    ) -> Result<Vec<Self::Id>, Self::Error> {
         todo!()
     }
-    async fn find_optional(&self, query: TenantQuery) -> Result<Option<Tenant>, Self::Error> {
+    async fn find_optional(&self, query: &TenantQuery) -> Result<Option<Tenant>, Self::Error> {
         let conn = self.get_conn().await?;
         let row = match query {
             TenantQuery::uid(uid) => {
@@ -62,13 +65,13 @@ impl DataQueryExecutor<Tenant> for TenantExecutor {
         };
         Ok(row.map(from_row))
     }
-    async fn create(&self, data: Data<Tenant>) -> Result<(), Self::Error> {
+    async fn create(&self, _data: Data<Tenant>) -> Result<(), Self::Error> {
         todo!()
     }
-    async fn update(&self, data: Data<Tenant>) -> Result<(), Self::Error> {
+    async fn update(&self, _data: Data<Tenant>) -> Result<(), Self::Error> {
         todo!()
     }
-    async fn delete(&self, data: TenantQuery) -> Result<Vec<Self::Id>, Self::Error> {
+    async fn delete(&self, _data: &TenantQuery) -> Result<Vec<Self::Id>, Self::Error> {
         todo!()
     }
 }

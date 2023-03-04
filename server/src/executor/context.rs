@@ -4,11 +4,10 @@ use std::{
     marker::PhantomData,
 };
 
-use model::{PendingUser, Reference, Stage};
+use model::{PendingUser, Stage};
+use storage::{datacache::DataRef, StorageManager};
 use time::OffsetDateTime;
 use uuid::Uuid;
-
-use crate::flow_storage::FreezedStorage;
 
 pub struct ExecutionContext {
     pub session_id: String,
@@ -16,17 +15,17 @@ pub struct ExecutionContext {
     pub fields: FieldStorage,
     pub pending: Option<PendingUser>,
     pub user: Option<PolicyUser>,
-    pub storage: FreezedStorage,
+    pub storage: StorageManager,
     pub error: Option<ExecutionError>,
 }
 
 pub struct ExecutionError {
-    pub stage: Option<Reference<Stage>>,
+    pub stage: Option<DataRef<Stage>>,
     pub message: String,
 }
 
 impl ExecutionContext {
-    pub fn new(session_id: String, storage: FreezedStorage) -> Self {
+    pub fn new(session_id: String, storage: StorageManager) -> Self {
         Self {
             session_id,
             start_time: OffsetDateTime::now_utc(),

@@ -1,11 +1,13 @@
 use std::sync::Arc;
 
 use deadpool_postgres::{GenericClient, Pool};
-use model::{PartialPolicy, Policy, Reference};
+use model::{PartialPolicy, Policy, PolicyQuery};
 use moka::sync::Cache;
 use policy_engine::{compile, rhai::AST};
-
-use crate::flow_storage::{FlowStorage, ReferenceLookup};
+use storage::{
+    datacache::{DataRef, DataStorage, LookupRef},
+    StorageManager,
+};
 
 use super::DUMMY_SCOPE;
 
@@ -14,7 +16,7 @@ use super::DUMMY_SCOPE;
 pub struct PolicyService(Arc<InternalPolicyService>);
 
 impl PolicyService {
-    pub fn new(storage: FlowStorage, pool: Pool) -> Self {
+    pub fn new(storage: StorageManager, pool: Pool) -> Self {
         Self(Arc::new(InternalPolicyService {
             storage,
             pool,
@@ -22,7 +24,7 @@ impl PolicyService {
         }))
     }
 
-    pub async fn get_ast(&self, policy: Reference<Policy>) -> Option<Arc<AST>> {
+    pub async fn get_ast(&self, policy: DataRef<Policy>) -> Option<Arc<AST>> {
         self.0.get_ast(policy).await
     }
 
@@ -39,14 +41,14 @@ impl PolicyService {
 }
 
 struct InternalPolicyService {
-    storage: FlowStorage,
+    storage: StorageManager,
     pool: Pool,
     asts: Cache<i32, Option<Arc<AST>>>,
 }
 
 impl InternalPolicyService {
-    pub async fn get_ast(&self, policy: Reference<Policy>) -> Option<Arc<AST>> {
-        let Some(policy) = self.storage.lookup_reference(&policy).await else { return None};
+    pub async fn get_ast(&self, policy: DataRef<Policy>) -> Option<Arc<AST>> {
+        let Some(policy) = self.storage.lookup(&policy).await else { return None};
         self.asts
             .optionally_get_with(policy.uid, move || match &policy.kind {
                 model::PolicyKind::Expression(expr) => {
@@ -68,13 +70,13 @@ impl InternalPolicyService {
     pub async fn list_all_references<C: GenericClient>(
         &self,
         client: &C,
-    ) -> Result<Vec<Reference<Policy>>, tokio_postgres::Error> {
+    ) -> Result<Vec<DataRef<Policy>>, tokio_postgres::Error> {
         let statement = client.prepare_cached("select uid from policies").await?;
-        let records: Vec<Reference<Policy>> = client
+        let records: Vec<DataRef<Policy>> = client
             .query(&statement, &[])
             .await?
             .into_iter()
-            .map(|rec| Reference::<Policy>::new_uid(rec.get(0)))
+            .map(|rec| DataRef::new(PolicyQuery::uid(rec.get(0))))
             .collect();
         Ok(records)
     }
@@ -86,7 +88,7 @@ impl InternalPolicyService {
         let references = self.list_all_references(client).await?;
         let mut policies = Vec::new();
         for reference in references {
-            if let Some(policy) = self.storage.lookup_reference(&reference).await {
+            if let Some(policy) = self.storage.lookup(&reference).await {
                 policies.push(policy.as_ref().into());
             }
         }
@@ -96,7 +98,10 @@ impl InternalPolicyService {
     pub async fn invalidate(&self, policy: i32) {
         self.asts.invalidate(&policy);
         self.storage
-            .delete_ref(&Reference::<Policy>::new_uid(policy))
-            .await;
+            .get_for_data::<Policy>()
+            .expect("Failed to get Policy storage")
+            .invalidate(&PolicyQuery::uid(policy))
+            .await
+            .expect("Invalidation of policy failed");
     }
 }

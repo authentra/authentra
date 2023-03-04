@@ -1,8 +1,4 @@
-#[cfg(feature = "axum")]
-use axum::{
-    extract::{rejection::PathRejection, Path},
-    http::request::Parts,
-};
+
 use datacache::DataRef;
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
@@ -95,20 +91,5 @@ pub struct FlowEntry {
 #[cfg(feature = "axum")]
 #[derive(Deserialize)]
 pub struct FlowParam {
-    flow_slug: String,
+    pub flow_slug: String,
 }
-
-// #[cfg(feature = "axum")]
-// #[async_trait::async_trait]
-// impl<S> axum::extract::FromRequestParts<S> for DataRef<Flow>
-// where
-//     S: Send + Sync,
-// {
-//     type Rejection = PathRejection;
-
-//     async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
-//         let path: Path<FlowParam> = Path::from_request_parts(parts, state).await?;
-//         let flow_slug = path.0.flow_slug;
-//         Ok(DataRef::new(FlowQuery::slug(flow_slug)))
-//     }
-// }

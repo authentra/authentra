@@ -9,17 +9,17 @@ use std::{
 use http::Uri;
 use parking_lot::{lock_api::RwLockReadGuard, Mutex, RawRwLock, RwLock};
 use policy_engine::{execute, uri::Scheme, LogEntry};
+use storage::datacache::{Data, DataRef, LookupRef};
 use uuid::Uuid;
 
 use crate::{
     api::ExecutorQuery,
-    flow_storage::ReferenceLookup,
     service::policy::{create_scope, PolicyService},
 };
 use model::{
     error::SubmissionError, user::PartialUser, AuthenticationRequirement, Flow, FlowBinding,
-    FlowBindingKind, FlowComponent, FlowData, FlowEntry, FlowInfo, PendingUser, Policy, Reference,
-    Stage,
+    FlowBindingKind, FlowComponent, FlowData, FlowEntry, FlowInfo, PendingUser, Policy,
+    PolicyQuery, Stage,
 };
 
 use super::{data::AsComponent, ExecutionContext, ExecutionError, FlowExecutor, FlowKey};
@@ -121,18 +121,18 @@ impl FlowExecution {
         self.0.is_completed.load(Ordering::Relaxed)
     }
 
-    pub async fn lookup_stage(&self, reference: &Reference<Stage>) -> Arc<Stage> {
+    pub async fn lookup_stage(&self, reference: &DataRef<Stage>) -> Data<Stage> {
         let lock = self.0.context.read();
         let storage = &lock.storage;
-        match storage.lookup_reference(reference).await {
+        match storage.lookup(reference).await {
             Some(v) => v,
             None => panic!("Missing stage in storage {reference:?}"),
         }
     }
-    pub async fn lookup_policy(&self, reference: &Reference<Policy>) -> Arc<Policy> {
+    pub async fn lookup_policy(&self, reference: &DataRef<Policy>) -> Data<Policy> {
         let lock = self.0.context.read();
         let storage = &lock.storage;
-        match storage.lookup_reference(reference).await {
+        match storage.lookup(reference).await {
             Some(v) => v,
             None => panic!("Missing policy in storage {reference:?}"),
         }
@@ -227,7 +227,7 @@ impl IntoFlowCheckOutput for bool {
 pub enum FlowCheck {
     Authentication(AuthenticationRequirement),
     IsUser(Uuid),
-    Policy(Reference<Policy>),
+    Policy(DataRef<Policy>),
 }
 
 impl FlowCheck {
@@ -295,7 +295,7 @@ async fn check_policy(context: &CheckContext, policy: &Policy) -> FlowCheckOutpu
         }
         model::PolicyKind::PasswordStrength => FlowCheckOutput::Neutral,
         model::PolicyKind::Expression(_) => {
-            let reference = Reference::new_uid(policy.uid);
+            let reference = DataRef::new(PolicyQuery::uid(policy.uid));
             let ast = context
                 .execution
                 .0
@@ -329,7 +329,7 @@ async fn check_policy(context: &CheckContext, policy: &Policy) -> FlowCheckOutpu
 }
 
 fn dispatch_expression_log_entries(
-    policy: &Reference<Policy>,
+    policy: &DataRef<Policy>,
     entries: Vec<LogEntry>,
     has_error: bool,
 ) {
@@ -390,7 +390,7 @@ pub struct CheckContextRequest {
 }
 
 pub(super) struct FlowExecutionInternal {
-    pub(super) flow: Arc<Flow>,
+    pub(super) flow: Data<Flow>,
     pub(super) key: FlowKey,
     pub(super) context: RwLock<ExecutionContext>,
     pub(super) current_entry_idx: Mutex<usize>,

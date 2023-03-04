@@ -7,7 +7,6 @@ use crate::api::setup_api_v1;
 use crate::api::sql_tx::TxLayer;
 use crate::config::PostgresConfiguration;
 use crate::config::{AuthustConfiguration, InternalAuthustConfiguration};
-use crate::flow_storage::{FlowStorage, FreezedStorage, ReferenceLookup, ReverseLookup};
 use crate::interface::setup_interface_router;
 use crate::otel_middleware::{otel_layer, ExtensionLayer};
 use crate::service::user::UserService;
@@ -17,13 +16,13 @@ use axum::error_handling::HandleErrorLayer;
 use axum::extract::FromRef;
 use axum::routing::get;
 use axum::{BoxError, Router};
-use deadpool_postgres::{Manager, ManagerConfig, Object, Pool, PoolError};
+use deadpool_postgres::{GenericClient, Manager, ManagerConfig, Object, Pool, PoolError};
 
 use executor::FlowExecutor;
 use futures::{Future, FutureExt};
 use http::StatusCode;
 use jsonwebtoken::{DecodingKey, EncodingKey};
-use model::{Flow, Policy, Reference, Tenant};
+use model::{Flow, Policy, Prompt, Stage, Tenant, TenantQuery};
 
 use opentelemetry::sdk::resource::{EnvResourceDetector, ResourceDetector};
 use opentelemetry::{sdk::Resource, Key, KeyValue};
@@ -31,8 +30,10 @@ use opentelemetry_otlp::{self as otlp, ExportConfig};
 
 use otlp::{SpanExporterBuilder, TonicExporterBuilder, WithExportConfig};
 use service::policy::PolicyService;
-use sqlx::query;
+
 use sqlx::{postgres::PgConnectOptions, ConnectOptions, PgPool};
+use storage::datacache::{Data, DataStorage};
+use storage::{StorageError, StorageManager};
 use tokio::signal;
 use tower::ServiceBuilder;
 use tower_cookies::CookieManagerLayer;
@@ -45,7 +46,6 @@ pub mod api;
 pub mod auth;
 pub mod config;
 pub mod executor;
-pub mod flow_storage;
 pub mod interface;
 mod otel_middleware;
 pub mod service;
@@ -197,44 +197,37 @@ impl FromRef<AppState> for AuthServiceData {
     }
 }
 
-async fn preload(pool: &PgPool, storage: &FlowStorage) -> Result<(), sqlx::Error> {
+async fn preload(_pool: &PgPool, storage: &StorageManager) -> Result<(), Arc<StorageError>> {
     info!("Preloading flows...");
-    let ids = query!("select uid from flows")
-        .fetch_all(pool)
-        .await
-        .expect("Failed to load flow ids")
-        .into_iter()
-        .map(|rec| Reference::<Flow>::new_uid(rec.uid));
-    let freezed = FreezedStorage::new(storage.clone());
-    for reference in ids {
-        let flow = freezed
-            .lookup_reference(&reference)
-            .await
-            .expect("Failed to preload flow");
-        flow.reverse_lookup(&freezed).await;
-    }
-    info!("Preloading tenants...");
-    let tenants: Vec<Reference<Tenant>> = query!("select uid from tenants")
-        .fetch_all(pool)
-        .await
-        .expect("Failed to load tenant ids")
-        .into_iter()
-        .map(|rec| Reference::new_uid(rec.uid))
-        .collect();
-    for reference in tenants {
-        storage.lookup_reference(&reference).await;
-    }
+    storage
+        .get_for_data::<Flow>()
+        .expect("Failed to get storage")
+        .find_all(None)
+        .await?;
+    info!("Preloading stages...");
+    storage
+        .get_for_data::<Stage>()
+        .expect("Failed to get storage")
+        .find_all(None)
+        .await?;
     info!("Preloading policies...");
-    let policies: Vec<Reference<Policy>> = query!("select uid from policies")
-        .fetch_all(pool)
-        .await
-        .expect("Failed to load policy ids")
-        .into_iter()
-        .map(|rec| Reference::new_uid(rec.uid))
-        .collect();
-    for policy in policies {
-        storage.lookup_reference(&policy).await;
-    }
+    storage
+        .get_for_data::<Policy>()
+        .expect("Failed to get storage")
+        .find_all(None)
+        .await?;
+    info!("Preloading prompts...");
+    storage
+        .get_for_data::<Prompt>()
+        .expect("Failed to get storage")
+        .find_all(None)
+        .await?;
+    info!("Preloading tenants...");
+    storage
+        .get_for_data::<Tenant>()
+        .expect("Failed to get storage")
+        .find_all(None)
+        .await?;
 
     info!("Preload complete");
     Ok(())
@@ -256,7 +249,7 @@ impl SharedState {
         &self.0.auth_data
     }
 
-    pub fn storage(&self) -> &FlowStorage {
+    pub fn storage(&self) -> &StorageManager {
         &self.0.storage
     }
     pub fn defaults(&self) -> &Defaults {
@@ -277,20 +270,20 @@ struct InternalSharedState {
     users: UserService,
     executor: FlowExecutor,
     auth_data: AuthServiceData,
-    storage: FlowStorage,
+    storage: StorageManager,
     defaults: Arc<Defaults>,
     policies: PolicyService,
 }
 
 pub struct Defaults {
-    storage: FlowStorage,
+    storage: StorageManager,
     sqlx_pool: PgPool,
     pool: Pool,
-    tenant: Option<Arc<Tenant>>,
+    tenant: Option<Data<Tenant>>,
 }
 
 impl Defaults {
-    pub fn tenant(&self) -> Option<Arc<Tenant>> {
+    pub fn tenant(&self) -> Option<Data<Tenant>> {
         self.tenant.clone()
     }
 
@@ -306,8 +299,12 @@ impl Defaults {
 }
 
 impl Defaults {
-    pub async fn new(storage: FlowStorage, sqlx_pool: PgPool, pool: Pool) -> Self {
-        let default = Self::find_default(&storage, &sqlx_pool).await;
+    pub async fn new(storage: StorageManager, sqlx_pool: PgPool, pool: Pool) -> Self {
+        let default = Self::find_default(
+            &storage,
+            &pool.get().await.expect("Failed to get connection"),
+        )
+        .await;
         Defaults {
             storage,
             sqlx_pool,
@@ -316,18 +313,25 @@ impl Defaults {
         }
     }
 
-    async fn find_default(storage: &FlowStorage, pool: &PgPool) -> Option<Arc<Tenant>> {
-        let res = match query!("select uid from tenants where is_default = true")
-            .fetch_optional(pool)
+    async fn find_default(
+        storage: &StorageManager,
+        client: &impl GenericClient,
+    ) -> Option<Data<Tenant>> {
+        let statement = client
+            .prepare_cached("select uid from tenants where is_default = true")
             .await
             .ok()
-            .flatten()
-        {
-            Some(res) => res,
-            None => return None,
-        };
-        let reference: Reference<Tenant> = Reference::new_uid(res.uid);
-        let tenant = storage.lookup_reference(&reference).await;
+            .expect("Failed to prepare statement");
+        let Some(row) = client
+            .query_opt(&statement, &[])
+            .await
+            .expect("Failed to execute statement") else { return None };
+        let tenant = storage
+            .get_for_data::<Tenant>()
+            .expect("Failed to get Tenant storage")
+            .find_optional(&TenantQuery::uid(row.get("uid")))
+            .await
+            .expect("An error occurred while loading tenant");
         tenant
     }
 }
@@ -341,7 +345,7 @@ async fn start_server(
     #[cfg(debug_assertions)]
     #[cfg(feature = "dev-mode")]
     let cors = tower_http::cors::CorsLayer::very_permissive();
-    let storage = FlowStorage::new(sqlx_pool.clone(), pool.clone());
+    let storage = storage::create_manager(pool.clone());
     preload(&sqlx_pool, &storage)
         .await
         .expect("Preloading failed");

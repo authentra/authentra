@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use async_trait::async_trait;
 use axum::{
     extract::{rejection::HostRejection, FromRequestParts, Host, RawQuery, State},
@@ -9,10 +7,11 @@ use axum::{
 };
 use derive_more::From;
 use http::{header::LOCATION, request::Parts, StatusCode};
-use model::{FlowDesignation, Reference, Tenant};
+use model::{FlowDesignation, Tenant, TenantQuery};
 use once_cell::sync::Lazy;
+use storage::datacache::{Data, DataRef, LookupRef};
 
-use crate::{flow_storage::ReferenceLookup, SharedState};
+use crate::SharedState;
 
 pub fn setup_flow_router() -> Router<SharedState> {
     Router::new().route("/:flow_designation", get(tenant_flow_redirect))
@@ -29,13 +28,13 @@ fn base_uri() -> &'static str {
 }
 
 pub async fn tenant_flow_redirect(
-    tenant: Arc<Tenant>,
+    tenant: Data<Tenant>,
     designation: FlowDesignation,
     State(state): State<SharedState>,
     RawQuery(query): RawQuery,
 ) -> Response {
     if let Some(flow) = tenant.get_flow(&designation) {
-        if let Some(flow) = state.storage().lookup_reference(&flow).await {
+        if let Some(flow) = state.storage().lookup(&flow).await {
             let uri = match query {
                 Some(query) => format!("{}/flow/{}?{query}", *INTERFACE_BASE_URI, flow.slug),
                 None => format!("{}/flow/{}", *INTERFACE_BASE_URI, flow.slug),
@@ -62,15 +61,15 @@ impl IntoResponse for TenantRejection {
 }
 
 #[async_trait]
-impl FromRequestParts<SharedState> for Arc<Tenant> {
+impl FromRequestParts<SharedState> for Data<Tenant> {
     type Rejection = TenantRejection;
     async fn from_request_parts(
         parts: &mut Parts,
         state: &SharedState,
     ) -> Result<Self, Self::Rejection> {
         let host = Host::from_request_parts(parts, state).await?;
-        let reference: Reference<Tenant> = Reference::new_slug(host.0);
-        if let Some(tenant) = state.storage().lookup_reference(&reference).await {
+        let reference: DataRef<Tenant> = DataRef::new(TenantQuery::host(host.0));
+        if let Some(tenant) = state.storage().lookup(&reference).await {
             return Ok(tenant);
         }
         state.defaults().tenant().ok_or(TenantRejection::NotFound)

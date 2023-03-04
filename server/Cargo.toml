@@ -60,3 +60,4 @@ tokio-postgres = { workspace = true, features = [
   "with-time-0_3",
 ] }
 opentelemetry-otlp = { version = "0.11.0" }
+storage = { path = "../storage" }

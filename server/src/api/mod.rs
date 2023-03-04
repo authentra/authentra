@@ -2,7 +2,10 @@ use std::fmt::Debug;
 
 use async_trait::async_trait;
 use axum::{
-    extract::{rejection::QueryRejection, FromRequestParts, Query},
+    extract::{
+        rejection::{PathRejection, QueryRejection},
+        FromRequestParts, Path, Query,
+    },
     response::{IntoResponse, Response},
     Json,
 };
@@ -11,8 +14,9 @@ use derive_more::{Display, Error, From};
 use http::{header::HeaderName, request::Parts, StatusCode};
 
 use jsonwebtoken::{errors::ErrorKind, DecodingKey, EncodingKey};
-use model::error::SubmissionError;
+use model::{error::SubmissionError, Flow, FlowParam, FlowQuery};
 use serde::Deserialize;
+use storage::datacache::{DataMarker, DataRef};
 use tracing_error::SpanTrace;
 pub use v1::setup_api_v1;
 
@@ -236,4 +240,26 @@ where
 
 pub async fn ping_handler() -> &'static str {
     "Pong!"
+}
+
+pub struct RefWrapper<D: DataMarker>(pub DataRef<D>);
+
+impl<D: DataMarker> RefWrapper<D> {
+    pub fn new(query: D::Query) -> Self {
+        Self(DataRef::new(query))
+    }
+}
+
+#[async_trait::async_trait]
+impl<S> axum::extract::FromRequestParts<S> for RefWrapper<Flow>
+where
+    S: Send + Sync,
+{
+    type Rejection = PathRejection;
+
+    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
+        let path: Path<FlowParam> = Path::from_request_parts(parts, state).await?;
+        let flow_slug = path.0.flow_slug;
+        Ok(RefWrapper::new(FlowQuery::slug(flow_slug)))
+    }
 }
