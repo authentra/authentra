@@ -2,7 +2,6 @@ use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct PartialPolicy {
     pub uid: i32,
     pub slug: String,
@@ -11,7 +10,6 @@ pub struct PartialPolicy {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "datacache", derive(datacache::DataMarker))]
-#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct Policy {
     #[cfg_attr(feature = "datacache", datacache(queryable))]
     pub uid: i32,
@@ -21,7 +19,6 @@ pub struct Policy {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum PolicyKind {
     PasswordExpiry { max_age: i32 },
@@ -30,7 +27,6 @@ pub enum PolicyKind {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSql, FromSql)]
-#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[cfg_attr(
     feature = "sqlx",
     derive(sqlx::Type),

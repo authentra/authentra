@@ -1,18 +1,15 @@
+use datacache::DataRef;
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 
-use super::Reference;
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct PromptBinding {
     pub order: i16,
-    pub prompt: Reference<Prompt>,
+    pub prompt: DataRef<Prompt>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "datacache", derive(datacache::DataMarker))]
-#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct Prompt {
     #[cfg_attr(feature = "datacache", datacache(queryable))]
     pub uid: i32,
@@ -25,7 +22,6 @@ pub struct Prompt {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromSql, ToSql)]
-#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[serde(rename_all = "snake_case")]
 #[postgres(name = "prompt_kind")]
 pub enum PromptKind {

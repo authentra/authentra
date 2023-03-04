@@ -3,7 +3,6 @@ use serde::Serialize;
 use serde_json::Value;
 
 #[derive(Debug, Clone, Display, Serialize)]
-#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[serde(rename_all = "snake_case")]
 pub enum FieldType {
     Null,
@@ -28,7 +27,6 @@ impl<'a> From<&'a Value> for FieldType {
 }
 
 #[derive(Debug, Clone, Error, Display, Serialize, From)]
-#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum SubmissionError {
     NoPendingUser,
@@ -37,7 +35,6 @@ pub enum SubmissionError {
 }
 
 #[derive(Debug, Clone, Error, Display, Serialize)]
-#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct FieldError {
     #[serde(flatten)]
     kind: FieldErrorKind,
@@ -54,7 +51,6 @@ impl FieldError {
 }
 
 #[derive(Debug, Clone, Error, Display, Serialize)]
-#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum FieldErrorKind {
     Missing,

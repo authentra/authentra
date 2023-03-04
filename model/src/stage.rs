@@ -1,11 +1,11 @@
+use datacache::DataRef;
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 
-use super::{PromptBinding, Reference};
+use super::PromptBinding;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "datacache", derive(datacache::DataMarker))]
-#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct Stage {
     #[cfg_attr(feature = "datacache", datacache(queryable))]
     pub uid: i32,
@@ -16,7 +16,6 @@ pub struct Stage {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, FromSql, ToSql)]
-#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[serde(rename_all = "snake_case")]
 #[postgres(name = "password_backend")]
 pub enum PasswordBackend {
@@ -27,7 +26,6 @@ pub enum PasswordBackend {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash, FromSql, ToSql)]
-#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[cfg_attr(feature = "sqlx", derive(sqlx::Type))]
 #[cfg_attr(
     feature = "sqlx",
@@ -45,7 +43,6 @@ pub enum UserField {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum StageKind {
     Deny,
@@ -53,7 +50,7 @@ pub enum StageKind {
         bindings: Vec<PromptBinding>,
     },
     Identification {
-        password: Option<Reference<Stage>>,
+        password: Option<DataRef<Stage>>,
         user_fields: Vec<UserField>,
     },
     UserLogin,
@@ -91,7 +88,6 @@ pub enum PgConsentMode {
     Until,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[serde(tag = "mode", rename_all = "snake_case")]
 pub enum ConsentMode {
     Always,

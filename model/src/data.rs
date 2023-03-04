@@ -4,7 +4,6 @@ use uuid::Uuid;
 use crate::{error::SubmissionError, UserField};
 
 #[derive(Serialize)]
-#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct FlowData {
     pub flow: FlowInfo,
     #[serde(rename = "response_error")]
@@ -15,7 +14,6 @@ pub struct FlowData {
 }
 
 #[derive(Serialize)]
-#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[serde(tag = "component", rename_all = "snake_case")]
 pub enum FlowComponent {
     AccessDenied {
@@ -40,20 +38,17 @@ pub enum FlowComponent {
 }
 
 #[derive(Serialize)]
-#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct PasswordComponentData {
     pub recovery_url: String,
 }
 
 #[derive(Serialize)]
-#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct Sources {
     pub sources: Vec<Source>,
     pub show_source_labels: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
-#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct PendingUser {
     #[serde(skip)]
     pub uid: Uuid,
@@ -66,14 +61,12 @@ pub struct PendingUser {
 }
 
 #[derive(Serialize)]
-#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct Source {
     pub name: String,
     pub icon_url: String,
 }
 
 #[derive(Serialize)]
-#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct FlowInfo {
     pub title: String,
 }

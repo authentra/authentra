@@ -1,7 +1,7 @@
 use async_trait::async_trait;
-use datacache::{Data, DataQueryExecutor};
+use datacache::{Data, DataQueryExecutor, DataRef};
 use deadpool_postgres::GenericClient;
-use model::{Flow, FlowBinding, FlowBindingKind, FlowEntry, FlowQuery, Reference};
+use model::{Flow, FlowBinding, FlowBindingKind, FlowEntry, FlowQuery, PolicyQuery, StageQuery};
 use tokio_postgres::{Row, Statement};
 use uuid::Uuid;
 
@@ -117,7 +117,7 @@ fn binding_from_row(row: Row) -> FlowBinding {
     } else if let Some(group) = row.get::<_, Option<Uuid>>("group_binding") {
         kind = FlowBindingKind::Group(group);
     } else if let Some(policy) = row.get::<_, Option<i32>>("policy") {
-        kind = FlowBindingKind::Policy(Reference::new_uid(policy))
+        kind = FlowBindingKind::Policy(DataRef::new(PolicyQuery::uid(policy)))
     } else {
         tracing::warn!(row = ?row, "Invalid flow binding");
         kind = FlowBindingKind::User(Uuid::nil());
@@ -150,6 +150,6 @@ async fn entry_from_row(client: &impl GenericClient, row: Row) -> Result<FlowEnt
     Ok(FlowEntry {
         ordering: row.get("ordering"),
         bindings,
-        stage: Reference::new_uid(row.get("stage")),
+        stage: DataRef::new(StageQuery::uid(row.get("stage"))),
     })
 }

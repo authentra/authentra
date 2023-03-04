@@ -1,8 +1,8 @@
 use async_trait::async_trait;
-use datacache::{Data, DataQueryExecutor};
+use datacache::{Data, DataQueryExecutor, DataRef};
 use deadpool_postgres::GenericClient;
 use model::{
-    ConsentMode, PasswordBackend, PgConsentMode, PromptBinding, Reference, Stage, StageKind,
+    ConsentMode, PasswordBackend, PgConsentMode, PromptBinding, PromptQuery, Stage, StageKind,
     StageQuery, UserField,
 };
 use postgres_types::FromSql;
@@ -133,7 +133,7 @@ async fn identification_stage(
     let id_row = client.query_one(&statement, &[&identification_id]).await?;
     let user_fields: Vec<UserField> = id_row.get("user_fields");
     Ok(StageKind::Identification {
-        password: password_stage_id.map(Reference::new_uid),
+        password: password_stage_id.map(|uid| DataRef::new(StageQuery::uid(uid))),
         user_fields,
     })
 }
@@ -174,7 +174,7 @@ async fn prompt_stage(
         .into_iter()
         .map(|row| PromptBinding {
             order: row.get("ordering"),
-            prompt: Reference::new_uid(row.get("prompt")),
+            prompt: DataRef::new(PromptQuery::uid(row.get("prompt"))),
         })
         .collect();
     bindings.sort_by_key(|v| v.order);

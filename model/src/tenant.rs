@@ -3,9 +3,10 @@ use axum::{
     extract::{rejection::PathRejection, Path},
     http::request::Parts,
 };
+use datacache::DataRef;
 use serde::Serialize;
 
-use crate::{Flow, FlowDesignation, Reference};
+use crate::{Flow, FlowDesignation, FlowQuery};
 
 #[derive(Debug, Clone, Serialize)]
 #[cfg_attr(feature = "datacache", derive(datacache::DataMarker))]
@@ -19,17 +20,17 @@ pub struct Tenant {
     pub logo: String,
     pub favicon: String,
 
-    pub invalidation_flow: Option<Reference<Flow>>,
-    pub authentication_flow: Option<Reference<Flow>>,
-    pub authorization_flow: Option<Reference<Flow>>,
-    pub enrollment_flow: Option<Reference<Flow>>,
-    pub recovery_flow: Option<Reference<Flow>>,
-    pub unenrollment_flow: Option<Reference<Flow>>,
-    pub configuration_flow: Option<Reference<Flow>>,
+    pub invalidation_flow: Option<DataRef<Flow>>,
+    pub authentication_flow: Option<DataRef<Flow>>,
+    pub authorization_flow: Option<DataRef<Flow>>,
+    pub enrollment_flow: Option<DataRef<Flow>>,
+    pub recovery_flow: Option<DataRef<Flow>>,
+    pub unenrollment_flow: Option<DataRef<Flow>>,
+    pub configuration_flow: Option<DataRef<Flow>>,
 }
 
 impl Tenant {
-    pub fn get_flow(&self, designation: &FlowDesignation) -> Option<Reference<Flow>> {
+    pub fn get_flow(&self, designation: &FlowDesignation) -> Option<DataRef<Flow>> {
         match designation {
             FlowDesignation::Invalidation => self.invalidation_flow.clone(),
             FlowDesignation::Authentication => self.authentication_flow.clone(),
@@ -52,13 +53,27 @@ impl From<PgTenant> for Tenant {
             title: value.title,
             logo: value.logo,
             favicon: value.favicon,
-            invalidation_flow: value.invalidation_flow.map(Reference::new_uid),
-            authentication_flow: value.authentication_flow.map(Reference::new_uid),
-            authorization_flow: value.authorization_flow.map(Reference::new_uid),
-            enrollment_flow: value.enrollment_flow.map(Reference::new_uid),
-            recovery_flow: value.recovery_flow.map(Reference::new_uid),
-            unenrollment_flow: value.unenrollment_flow.map(Reference::new_uid),
-            configuration_flow: value.configuration_flow.map(Reference::new_uid),
+            invalidation_flow: value
+                .invalidation_flow
+                .map(|uid| DataRef::new(FlowQuery::uid(uid))),
+            authentication_flow: value
+                .authentication_flow
+                .map(|uid| DataRef::new(FlowQuery::uid(uid))),
+            authorization_flow: value
+                .authorization_flow
+                .map(|uid| DataRef::new(FlowQuery::uid(uid))),
+            enrollment_flow: value
+                .enrollment_flow
+                .map(|uid| DataRef::new(FlowQuery::uid(uid))),
+            recovery_flow: value
+                .recovery_flow
+                .map(|uid| DataRef::new(FlowQuery::uid(uid))),
+            unenrollment_flow: value
+                .unenrollment_flow
+                .map(|uid| DataRef::new(FlowQuery::uid(uid))),
+            configuration_flow: value
+                .configuration_flow
+                .map(|uid| DataRef::new(FlowQuery::uid(uid))),
         }
     }
 }
