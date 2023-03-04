@@ -1,0 +1,1 @@
+select * from flows where slug = $1

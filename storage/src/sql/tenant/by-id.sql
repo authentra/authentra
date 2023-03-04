@@ -1,0 +1,1 @@
+select * from tenants where uid = $1

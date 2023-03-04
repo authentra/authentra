@@ -1,0 +1,1 @@
+select * from stages where slug = $1

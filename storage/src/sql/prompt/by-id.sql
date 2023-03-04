@@ -1,0 +1,1 @@
+select * from prompts where uid = $1

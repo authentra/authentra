@@ -2689,6 +2689,7 @@ dependencies = [
  "deadpool-postgres",
  "futures",
  "moka",
+ "postgres-types",
  "serde",
  "tokio",
  "tokio-postgres",

@@ -109,6 +109,8 @@ create table stage_prompt_bindings
     primary key (prompt, stage)
 );
 
+create index stage_prompt_bindings_stage on stage_prompt_bindings(stage);
+
 create type authentication_requirement as enum ('required', 'none', 'superuser', 'ignored');
 create type flow_designation as enum ('invalidation', 'authentication', 'authorization', 'enrollment', 'recovery', 'unenrollment', 'configuration');
 

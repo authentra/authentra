@@ -1,7 +1,4 @@
-use std::future::{ready, Ready};
-
 use axum::{routing::get_service, Router};
-use http::StatusCode;
 use tower_http::services::{ServeDir, ServeFile};
 
 use crate::SharedState;
@@ -15,10 +12,6 @@ pub fn setup_interface_router() -> Router<SharedState> {
     Router::new()
         .nest("/flow/-", setup_flow_router())
         .merge(spa)
-}
-
-fn handle_error(_err: std::io::Error) -> Ready<StatusCode> {
-    ready(StatusCode::INTERNAL_SERVER_ERROR)
 }
 
 fn spa_router() -> Router<SharedState> {

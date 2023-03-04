@@ -1,0 +1,1 @@
+select * from stage_prompt_bindings where stage = $1;

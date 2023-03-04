@@ -1,0 +1,1 @@
+select * from stages where uid = $1

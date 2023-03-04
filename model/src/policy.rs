@@ -13,7 +13,9 @@ pub struct PartialPolicy {
 #[cfg_attr(feature = "datacache", derive(datacache::DataMarker))]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct Policy {
+    #[cfg_attr(feature = "datacache", datacache(queryable))]
     pub uid: i32,
+    #[cfg_attr(feature = "datacache", datacache(queryable))]
     pub slug: String,
     pub kind: PolicyKind,
 }

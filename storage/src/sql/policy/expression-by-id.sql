@@ -1,0 +1,1 @@
+select * from expression_policies where uid = $1

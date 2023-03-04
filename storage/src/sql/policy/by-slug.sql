@@ -1,0 +1,1 @@
+select * from policies where slug = $1
