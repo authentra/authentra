@@ -39,7 +39,7 @@ impl DataQueryExecutor<Policy> for PolicyExecutor {
         };
         from_row(&conn, row).await
     }
-    async fn find_all_ids(&self, query: PolicyQuery) -> Result<Vec<Self::Id>, Self::Error> {
+    async fn find_all_ids(&self, query: Option<PolicyQuery>) -> Result<Vec<Self::Id>, Self::Error> {
         todo!()
     }
     async fn find_optional(&self, query: PolicyQuery) -> Result<Option<Policy>, Self::Error> {

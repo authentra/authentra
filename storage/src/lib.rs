@@ -226,7 +226,7 @@ where
             v
         })
     }
-    async fn find_all(&self, query: D::Query) -> Result<Vec<Data<D>>, Arc<Exc::Error>> {
+    async fn find_all(&self, query: Option<D::Query>) -> Result<Vec<Data<D>>, Arc<Exc::Error>> {
         self.proxy.find_all(query).await
     }
     async fn find_optional(&self, query: D::Query) -> Result<Option<Data<D>>, Arc<Exc::Error>> {
@@ -288,7 +288,7 @@ impl<D: DataMarker, Id: Send + Sync + Hash + Eq + Clone> DataQueryExecutor<D>
 
     fn find_all_ids<'life0, 'async_trait>(
         &'life0 self,
-        _query: D::Query,
+        _query: Option<D::Query>,
     ) -> core::pin::Pin<
         Box<
             dyn core::future::Future<Output = Result<Vec<Self::Id>, Self::Error>>
@@ -412,7 +412,7 @@ where
         let id = self.find_id(&query);
         self.get_data(id)
     }
-    async fn find_all(&self, _: D::Query) -> Result<Vec<Data<D>>, Arc<Infallible>> {
+    async fn find_all(&self, _: Option<D::Query>) -> Result<Vec<Data<D>>, Arc<Infallible>> {
         panic!("Unsupported operation")
     }
     async fn find_optional(&self, query: D::Query) -> Result<Option<Data<D>>, Arc<Infallible>> {

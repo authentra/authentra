@@ -39,7 +39,7 @@ impl DataQueryExecutor<Tenant> for TenantExecutor {
         };
         Ok(from_row(row))
     }
-    async fn find_all_ids(&self, query: TenantQuery) -> Result<Vec<Self::Id>, Self::Error> {
+    async fn find_all_ids(&self, query: Option<TenantQuery>) -> Result<Vec<Self::Id>, Self::Error> {
         todo!()
     }
     async fn find_optional(&self, query: TenantQuery) -> Result<Option<Tenant>, Self::Error> {

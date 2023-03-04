@@ -41,10 +41,14 @@ impl DataQueryExecutor<Flow> for FlowExecutor {
         };
         Ok(from_row(&conn, row).await?)
     }
-    async fn find_all_ids(&self, query: FlowQuery) -> Result<Vec<Self::Id>, Self::Error> {
-        match query {
-            FlowQuery::uid(id) => return Ok(vec![id]),
-            FlowQuery::slug(slug) => todo!(),
+    async fn find_all_ids(&self, query: Option<FlowQuery>) -> Result<Vec<Self::Id>, Self::Error> {
+        if let Some(query) = query {
+            match query {
+                FlowQuery::uid(id) => return Ok(vec![id]),
+                FlowQuery::slug(slug) => todo!(),
+            }
+        } else {
+            todo!("Get all ids")
         }
     }
     async fn find_optional(&self, query: FlowQuery) -> Result<Option<Flow>, Self::Error> {

@@ -43,7 +43,7 @@ impl DataQueryExecutor<Stage> for StageExecutor {
         };
         from_row(&conn, row).await
     }
-    async fn find_all_ids(&self, query: StageQuery) -> Result<Vec<Self::Id>, Self::Error> {
+    async fn find_all_ids(&self, query: Option<StageQuery>) -> Result<Vec<Self::Id>, Self::Error> {
         todo!()
     }
     async fn find_optional(&self, query: StageQuery) -> Result<Option<Stage>, Self::Error> {

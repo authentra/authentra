@@ -31,7 +31,7 @@ impl DataQueryExecutor<Prompt> for PromptExecutor {
         };
         Ok(from_row(row))
     }
-    async fn find_all_ids(&self, query: PromptQuery) -> Result<Vec<Self::Id>, Self::Error> {
+    async fn find_all_ids(&self, query: Option<PromptQuery>) -> Result<Vec<Self::Id>, Self::Error> {
         todo!()
     }
     async fn find_optional(&self, query: PromptQuery) -> Result<Option<Prompt>, Self::Error> {
