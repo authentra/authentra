@@ -10,12 +10,19 @@ use tokio_postgres::Row;
 
 use crate::{include_sql, StorageError};
 
+datacache::storage!(pub StageStorage(StageExecutor, Stage), id(uid: i32), unique(slug: String), fields());
+
 crate::executor!(pub StageExecutor);
 
 #[async_trait]
 impl DataQueryExecutor<Stage> for StageExecutor {
     type Error = StorageError;
     type Id = i32;
+
+    fn get_id(&self, data: &Stage) -> Self::Id {
+        data.uid
+    }
+
     async fn find_one(&self, query: StageQuery) -> Result<Stage, Self::Error> {
         let conn = self.get_conn().await?;
         let row = match query {

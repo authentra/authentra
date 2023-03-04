@@ -5,12 +5,19 @@ use tokio_postgres::Row;
 
 use crate::{include_sql, StorageError};
 
+datacache::storage!(pub PromptStorage(PromptExecutor, Prompt), id(uid: i32), unique(), fields());
+
 crate::executor!(pub PromptExecutor);
 
 #[async_trait]
 impl DataQueryExecutor<Prompt> for PromptExecutor {
     type Error = StorageError;
     type Id = i32;
+
+    fn get_id(&self, data: &Prompt) -> Self::Id {
+        data.uid
+    }
+
     async fn find_one(&self, query: PromptQuery) -> Result<Prompt, Self::Error> {
         let conn = self.get_conn().await?;
         let row = match query {

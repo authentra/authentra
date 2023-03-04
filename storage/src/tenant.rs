@@ -6,12 +6,19 @@ use tokio_postgres::Row;
 
 use crate::{include_sql, StorageError};
 
+datacache::storage!(pub TenantStorage(TenantExecutor, Tenant), id(uid: i32), unique(host: String), fields());
+
 crate::executor!(pub TenantExecutor);
 
 #[async_trait]
 impl DataQueryExecutor<Tenant> for TenantExecutor {
     type Error = StorageError;
     type Id = i32;
+
+    fn get_id(&self, data: &Tenant) -> Self::Id {
+        data.uid
+    }
+
     async fn find_one(&self, query: TenantQuery) -> Result<Tenant, Self::Error> {
         let conn = self.get_conn().await?;
         let row = match query {

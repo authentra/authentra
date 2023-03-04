@@ -1,4 +1,12 @@
-use std::{error::Error, fmt::Display};
+use std::{
+    collections::HashMap,
+    convert::Infallible,
+    error::Error,
+    fmt::{Debug, Display},
+    hash::Hash,
+    marker::PhantomData,
+    sync::Arc,
+};
 
 pub mod flow;
 pub mod policy;
@@ -42,9 +50,70 @@ impl Display for StorageError {
 }
 
 datacache::storage_ref!(pub StorageRef);
-// ($vis:vis $ident:ident($exc:ty, $data:ty), id($id_field:ident: $id_ty:ty), unique($($unique:ident: $unique_ty:ty),* ), fields($($field:ident: $field_ty:ty),* )) => {
+// ($data:path: $ref:ident where Exc: $exc:path, Storage: $storage:path) => {
 
-datacache::storage_manager!(pub StorageManager: StorageRef);
+datacache::storage_manager!(pub StorageManager: StorageRef, handle_error);
+
+datacache::storage_ref!(model::Flow: StorageRef where Exc: flow::FlowExecutor, Storage: flow::FlowStorage);
+datacache::storage_ref!(model::Stage: StorageRef where Exc: stage::StageExecutor, Storage: stage::StageStorage);
+datacache::storage_ref!(model::Policy: StorageRef where Exc: policy::PolicyExecutor, Storage: policy::PolicyStorage);
+datacache::storage_ref!(model::Prompt: StorageRef where Exc: prompt::PromptExecutor, Storage: prompt::PromptStorage);
+datacache::storage_ref!(model::Tenant: StorageRef where Exc: tenant::TenantExecutor, Storage: tenant::TenantStorage);
+
+fn handle_error(err: impl Display) {
+    tracing::error!("An error occurred {err}");
+}
+
+pub fn create_manager(pool: Pool) -> StorageManager {
+    let mut manager = StorageManager::new();
+    manager.register_storage(FlowStorage::new(FlowExecutor::new(pool.clone())));
+    manager.register_storage(StageStorage::new(StageExecutor::new(pool.clone())));
+    manager.register_storage(PolicyStorage::new(PolicyExecutor::new(pool.clone())));
+    manager.register_storage(PromptStorage::new(PromptExecutor::new(pool.clone())));
+    manager.register_storage(TenantStorage::new(TenantExecutor::new(pool)));
+    manager
+}
+
+pub fn create_proxied(manager: &StorageManager) -> StorageManager {
+    let mut proxied = StorageManager::new();
+    register_proxied::<model::Flow>(&manager, &mut proxied);
+    register_proxied::<model::Stage>(&manager, &mut proxied);
+    register_proxied::<model::Policy>(&manager, &mut proxied);
+    register_proxied::<model::Prompt>(&manager, &mut proxied);
+    register_proxied::<model::Tenant>(&manager, &mut proxied);
+    proxied
+}
+
+pub fn create_freezed(mut manager: StorageManager) -> StorageManager {
+    let flow = get_proxied::<model::Flow>(&mut manager).export_data();
+    let stage = get_proxied::<model::Stage>(&mut manager).export_data();
+    let policy = get_proxied::<model::Policy>(&mut manager).export_data();
+    let prompt = get_proxied::<model::Prompt>(&mut manager).export_data();
+    let tenant = get_proxied::<model::Tenant>(&mut manager).export_data();
+    let mut manager = StorageManager::new();
+    manager.register_storage(DummyStorage::new(flow));
+    manager.register_storage(DummyStorage::new(stage));
+    manager.register_storage(DummyStorage::new(policy));
+    manager.register_storage(DummyStorage::new(prompt));
+    manager.register_storage(DummyStorage::new(tenant));
+    manager
+}
+
+fn register_proxied<D: StorageRef + Send + Sync + 'static>(
+    proxied: &StorageManager,
+    manager: &mut StorageManager,
+) {
+    let storage = proxied.get_for_data::<D>().expect("No storage for data");
+    manager.register_storage(ProxyStorage::new(storage.clone()));
+}
+
+fn get_proxied<D: StorageRef + Send + Sync + 'static>(
+    manager: &mut StorageManager,
+) -> Box<ProxyStorage<D::Storage, D::Exc, D>> {
+    manager
+        .get_and_remove::<ProxyStorage<D::Storage, D::Exc, D>>()
+        .expect("Failed to find proxied")
+}
 
 #[macro_export]
 macro_rules! include_sql {
@@ -74,4 +143,295 @@ macro_rules! executor {
     };
 }
 
+use async_trait::async_trait;
+use datacache::{Data, DataMarker, DataQueryExecutor, DataStorage};
+use deadpool_postgres::Pool;
 pub(crate) use executor;
+use flow::{FlowExecutor, FlowStorage};
+use parking_lot::Mutex;
+use policy::{PolicyExecutor, PolicyStorage};
+use prompt::{PromptExecutor, PromptStorage};
+use stage::{StageExecutor, StageStorage};
+use tenant::{TenantExecutor, TenantStorage};
+
+struct ProxyStorage<P: DataStorage<Exc, D>, Exc: DataQueryExecutor<D>, D: DataMarker> {
+    proxy: P,
+    _exc: PhantomData<Exc>,
+    _d: PhantomData<D>,
+    data: Mutex<Option<HashMap<Exc::Id, Data<D>>>>,
+    query: Mutex<Option<HashMap<D::Query, Exc::Id>>>,
+}
+
+struct ExportedData<Query, Id, D> {
+    data: HashMap<Id, Data<D>>,
+    query: HashMap<Query, Id>,
+}
+
+impl<P, Exc, D> ProxyStorage<P, Exc, D>
+where
+    P: DataStorage<Exc, D>,
+    Exc: DataQueryExecutor<D>,
+    Exc::Id: Hash + Eq + Clone,
+    D: DataMarker,
+    D::Query: Hash + Eq,
+{
+    pub fn new(proxy: P) -> Self {
+        Self {
+            proxy,
+            _exc: PhantomData,
+            _d: PhantomData,
+            data: Mutex::new(Some(HashMap::new())),
+            query: Mutex::new(Some(HashMap::new())),
+        }
+    }
+
+    fn insert_data(&self, data: Data<D>) {
+        let id = self.proxy.get_executor().get_id(data.as_ref());
+        let queries = data.create_queries();
+        let mut raw_lock = self.query.lock();
+        let lock = raw_lock.as_mut().expect("Mutex doesn't contain queries");
+        for query in queries {
+            lock.insert(query, id.clone());
+        }
+        self.data
+            .lock()
+            .as_mut()
+            .expect("Mutex doesn't contain data")
+            .insert(id, data);
+    }
+
+    pub fn export_data(self) -> ExportedData<D::Query, Exc::Id, D> {
+        let data = self.data.lock().take().expect("Mutex doesn't contain data");
+        let query = self
+            .query
+            .lock()
+            .take()
+            .expect("Mutex doesn't contain queries");
+        ExportedData { data, query }
+    }
+}
+
+#[async_trait]
+impl<P, Exc, D> DataStorage<Exc, D> for ProxyStorage<P, Exc, D>
+where
+    P: DataStorage<Exc, D> + Send + Sync,
+    Exc: DataQueryExecutor<D> + Send + Sync,
+    Exc::Id: Hash + Eq + Clone,
+    D: DataMarker + Send + Sync,
+    D::Query: Hash + Eq,
+{
+    async fn find_one(&self, query: D::Query) -> Result<Data<D>, Arc<Exc::Error>> {
+        self.proxy.find_one(query).await.map(|v| {
+            self.insert_data(v.clone());
+            v
+        })
+    }
+    async fn find_all(&self, query: D::Query) -> Result<Vec<Data<D>>, Arc<Exc::Error>> {
+        self.proxy.find_all(query).await
+    }
+    async fn find_optional(&self, query: D::Query) -> Result<Option<Data<D>>, Arc<Exc::Error>> {
+        self.proxy.find_optional(query).await.map(|opt| {
+            opt.map(|v| {
+                self.insert_data(v.clone());
+                v
+            })
+        })
+    }
+
+    async fn insert(&self, _data: D) -> Result<(), Exc::Error> {
+        panic!("Insert is unsupported on a proxy datastorage");
+    }
+
+    async fn delete(&self, _query: D::Query) -> Result<(), Exc::Error> {
+        panic!("Delete is unsupported on a proxy datastorage");
+    }
+    async fn invalidate(&self, _query: D::Query) -> Result<(), Exc::Error> {
+        panic!("Invalidate is unsupported on a proxy datastorage");
+    }
+
+    fn get_executor(&self) -> &Exc {
+        self.proxy.get_executor()
+    }
+}
+
+struct DummyExecutor<Id> {
+    _id: PhantomData<Id>,
+}
+
+impl<D: DataMarker, Id: Send + Sync + Hash + Eq + Clone> DataQueryExecutor<D>
+    for DummyExecutor<Id>
+{
+    type Error = Infallible;
+
+    type Id = Id;
+
+    fn get_id(&self, _data: &D) -> Self::Id {
+        panic!("Unsupported operation")
+    }
+
+    fn find_one<'life0, 'async_trait>(
+        &'life0 self,
+        _query: D::Query,
+    ) -> core::pin::Pin<
+        Box<
+            dyn core::future::Future<Output = Result<D, Self::Error>>
+                + core::marker::Send
+                + 'async_trait,
+        >,
+    >
+    where
+        'life0: 'async_trait,
+        Self: 'async_trait,
+    {
+        panic!("Unsupported operation")
+    }
+
+    fn find_all_ids<'life0, 'async_trait>(
+        &'life0 self,
+        _query: D::Query,
+    ) -> core::pin::Pin<
+        Box<
+            dyn core::future::Future<Output = Result<Vec<Self::Id>, Self::Error>>
+                + core::marker::Send
+                + 'async_trait,
+        >,
+    >
+    where
+        'life0: 'async_trait,
+        Self: 'async_trait,
+    {
+        panic!("Unsupported operation")
+    }
+
+    fn find_optional<'life0, 'async_trait>(
+        &'life0 self,
+        _query: D::Query,
+    ) -> core::pin::Pin<
+        Box<
+            dyn core::future::Future<Output = Result<Option<D>, Self::Error>>
+                + core::marker::Send
+                + 'async_trait,
+        >,
+    >
+    where
+        'life0: 'async_trait,
+        Self: 'async_trait,
+    {
+        panic!("Unsupported operation")
+    }
+
+    fn create<'life0, 'async_trait>(
+        &'life0 self,
+        _data: Data<D>,
+    ) -> core::pin::Pin<
+        Box<
+            dyn core::future::Future<Output = Result<(), Self::Error>>
+                + core::marker::Send
+                + 'async_trait,
+        >,
+    >
+    where
+        'life0: 'async_trait,
+        Self: 'async_trait,
+    {
+        panic!("Unsupported operation")
+    }
+
+    fn update<'life0, 'async_trait>(
+        &'life0 self,
+        _data: Data<D>,
+    ) -> core::pin::Pin<
+        Box<
+            dyn core::future::Future<Output = Result<(), Self::Error>>
+                + core::marker::Send
+                + 'async_trait,
+        >,
+    >
+    where
+        'life0: 'async_trait,
+        Self: 'async_trait,
+    {
+        panic!("Unsupported operation")
+    }
+
+    fn delete<'life0, 'async_trait>(
+        &'life0 self,
+        _data: D::Query,
+    ) -> core::pin::Pin<
+        Box<
+            dyn core::future::Future<Output = Result<Vec<Self::Id>, Self::Error>>
+                + core::marker::Send
+                + 'async_trait,
+        >,
+    >
+    where
+        'life0: 'async_trait,
+        Self: 'async_trait,
+    {
+        panic!("Unsupported operation")
+    }
+}
+
+struct DummyStorage<D: DataMarker, Id> {
+    data: ExportedData<D::Query, Id, D>,
+}
+
+impl<D, Id> DummyStorage<D, Id>
+where
+    D: DataMarker,
+    D::Query: Hash + Eq + Debug,
+    Id: Hash + Eq + Debug,
+{
+    pub fn new(data: ExportedData<D::Query, Id, D>) -> Self {
+        Self { data }
+    }
+
+    fn find_id(&self, query: &D::Query) -> &Id {
+        match self.data.query.get(query) {
+            Some(id) => id,
+            None => panic!("Failed to find data for {query:?}"),
+        }
+    }
+
+    fn get_data(&self, id: &Id) -> Result<Data<D>, Arc<Infallible>> {
+        Ok(match self.data.data.get(id) {
+            Some(data) => data.clone(),
+            None => panic!("Failed to find data for {id:?}"),
+        })
+    }
+}
+
+#[async_trait]
+impl<D, Id> DataStorage<DummyExecutor<Id>, D> for DummyStorage<D, Id>
+where
+    D: DataMarker + Send + Sync,
+    D::Query: Hash + Eq + Debug,
+    Id: Send + Sync + Hash + Eq + Debug + Clone,
+{
+    async fn find_one(&self, query: D::Query) -> Result<Data<D>, Arc<Infallible>> {
+        let id = self.find_id(&query);
+        self.get_data(id)
+    }
+    async fn find_all(&self, _: D::Query) -> Result<Vec<Data<D>>, Arc<Infallible>> {
+        panic!("Unsupported operation")
+    }
+    async fn find_optional(&self, query: D::Query) -> Result<Option<Data<D>>, Arc<Infallible>> {
+        let id = self.find_id(&query);
+        Ok(self.data.data.get(id).cloned())
+    }
+
+    async fn insert(&self, _: D) -> Result<(), Infallible> {
+        panic!("Unsupported operation")
+    }
+
+    async fn delete(&self, _: D::Query) -> Result<(), Infallible> {
+        panic!("Unsupported operation")
+    }
+    async fn invalidate(&self, _: D::Query) -> Result<(), Infallible> {
+        panic!("Unsupported operation")
+    }
+
+    fn get_executor(&self) -> &DummyExecutor<Id> {
+        panic!("Unsupported operation")
+    }
+}

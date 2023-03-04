@@ -6,12 +6,19 @@ use tokio_postgres::Row;
 
 use crate::{include_sql, StorageError};
 
+datacache::storage!(pub PolicyStorage(PolicyExecutor, Policy), id(uid: i32), unique(slug: String), fields());
+
 crate::executor!(pub PolicyExecutor);
 
 #[async_trait]
 impl DataQueryExecutor<Policy> for PolicyExecutor {
     type Error = StorageError;
     type Id = i32;
+
+    fn get_id(&self, data: &Policy) -> Self::Id {
+        data.uid
+    }
+
     async fn find_one(&self, query: PolicyQuery) -> Result<Policy, Self::Error> {
         let conn = self.get_conn().await?;
         let row = match query {

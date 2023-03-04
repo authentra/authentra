@@ -7,6 +7,8 @@ use uuid::Uuid;
 
 use crate::{include_sql, StorageError};
 
+datacache::storage!(pub FlowStorage(FlowExecutor, Flow), id(uid: i32), unique(slug: String), fields());
+
 crate::executor!(pub FlowExecutor);
 
 #[async_trait]
@@ -14,6 +16,11 @@ impl DataQueryExecutor<Flow> for FlowExecutor {
     type Error = StorageError;
 
     type Id = i32;
+
+    fn get_id(&self, data: &Flow) -> Self::Id {
+        data.uid
+    }
+
     async fn find_one(&self, query: FlowQuery) -> Result<Flow, Self::Error> {
         let conn = self.get_conn().await?;
         let row = match query {
@@ -146,5 +153,3 @@ async fn entry_from_row(client: &impl GenericClient, row: Row) -> Result<FlowEnt
         stage: Reference::new_uid(row.get("stage")),
     })
 }
-
-datacache::storage!(pub FlowStorage(FlowExecutor, Flow), id(uid: i32), unique(slug: String), fields());
