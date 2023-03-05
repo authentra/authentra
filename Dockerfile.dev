@@ -7,7 +7,7 @@ WORKDIR /app
 
 FROM chef AS planner
 COPY . .
-RUN cargo chef prepare --recipe-path recipe.json
+RUN cargo chef prepare --recipe-path recipe.json --bin server
 
 FROM node:18-alpine AS frontend-build
 COPY frontend .
@@ -17,8 +17,9 @@ RUN npm run build
 FROM chef AS builder
 COPY --from=planner /app/recipe.json recipe.json
 # Notice that we are specifying the --target flag!
-RUN cargo chef cook --target x86_64-unknown-linux-musl --recipe-path recipe.json
+RUN cargo chef cook --target x86_64-unknown-linux-musl --recipe-path recipe.json --bin authust_server
 COPY model/ model/
+COPY storage/ storage/
 COPY server/ server/
 COPY policy-engine/ policy-engine/
 COPY Cargo.lock .
