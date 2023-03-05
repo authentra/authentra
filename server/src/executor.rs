@@ -78,12 +78,10 @@ impl FlowExecutor {
     }
 
     pub fn get_key(&self, session: &Session, flow: DataRef<Flow>) -> Option<FlowKey> {
-        if let FlowQuery::uid(_) = flow.0 {
+        if let FlowQuery::slug(_) = flow.0 {
             let key = FlowKey::new(session, flow);
-            tracing::info!("Key0");
             Some(key)
         } else {
-            tracing::info!("Key1");
             None
         }
     }

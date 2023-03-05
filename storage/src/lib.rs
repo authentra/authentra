@@ -84,15 +84,43 @@ impl Display for StorageError {
 }
 
 datacache::storage_ref!(pub StorageRef);
+// datacache::storage_ref!(pub FreezedRef);
 // ($data:path: $ref:ident where Exc: $exc:path, Storage: $storage:path) => {
 
-datacache::storage_manager!(pub StorageManager: StorageRef, handle_error);
+datacache::storage_manager!(pub StorageManager: StorageRef);
+datacache::storage_lookup!(StorageManager: StorageRef, handle_error);
 
 datacache::storage_ref!(model::Flow: StorageRef where Exc: flow::FlowExecutor, Storage: flow::FlowStorage);
 datacache::storage_ref!(model::Stage: StorageRef where Exc: stage::StageExecutor, Storage: stage::StageStorage);
 datacache::storage_ref!(model::Policy: StorageRef where Exc: policy::PolicyExecutor, Storage: policy::PolicyStorage);
 datacache::storage_ref!(model::Prompt: StorageRef where Exc: prompt::PromptExecutor, Storage: prompt::PromptStorage);
 datacache::storage_ref!(model::Tenant: StorageRef where Exc: tenant::TenantExecutor, Storage: tenant::TenantStorage);
+
+// datacache::storage_manager!(pub FreezedManager: FreezedRef, handle_error);
+
+// datacache::storage_ref!(model::Flow: FreezedRef where Exc: DummyExecutor<i32>, Storage: DummyStorage<model::Flow, i32>);
+// datacache::storage_ref!(model::Stage: FreezedRef where Exc: DummyExecutor<i32>, Storage: DummyStorage<model::Stage, i32>);
+// datacache::storage_ref!(model::Policy: FreezedRef where Exc: DummyExecutor<i32>, Storage: DummyStorage<model::Policy, i32>);
+// datacache::storage_ref!(model::Prompt: FreezedRef where Exc: DummyExecutor<i32>, Storage: DummyStorage<model::Prompt, i32>);
+// datacache::storage_ref!(model::Tenant: FreezedRef where Exc: DummyExecutor<i32>, Storage: DummyStorage<model::Tenant, i32>);
+
+datacache::storage_lookup!(FreezedStorage: StorageRef, handle_error, get_data_freezed);
+
+pub struct FreezedStorage(StorageManager);
+
+fn get_data_freezed<D: DataMarker + 'static>(
+    storage: &FreezedStorage,
+) -> Option<&DummyStorage<D, i32>> {
+    storage.0.get_storage()
+}
+pub struct ProxiedStorage(StorageManager);
+
+fn get_data_proxied<D: DataMarker + StorageRef + 'static>(
+    storage: &ProxiedStorage,
+) -> Option<&ProxyStorage<D::Storage, D::Exc, D>> {
+    storage.0.get_storage()
+}
+datacache::storage_lookup!(ProxiedStorage: StorageRef, handle_error, get_data_proxied);
 
 fn handle_error(err: impl Display) {
     tracing::error!("An error occurred {err}");
@@ -108,17 +136,17 @@ pub fn create_manager(pool: Pool) -> StorageManager {
     manager
 }
 
-pub fn create_proxied(manager: &StorageManager) -> StorageManager {
+pub fn create_proxied(manager: &StorageManager) -> ProxiedStorage {
     let mut proxied = StorageManager::new();
     register_proxied::<model::Flow>(&manager, &mut proxied);
     register_proxied::<model::Stage>(&manager, &mut proxied);
     register_proxied::<model::Policy>(&manager, &mut proxied);
     register_proxied::<model::Prompt>(&manager, &mut proxied);
     register_proxied::<model::Tenant>(&manager, &mut proxied);
-    proxied
+    ProxiedStorage(proxied)
 }
 
-pub fn create_freezed(mut manager: StorageManager) -> StorageManager {
+pub fn create_freezed(mut manager: ProxiedStorage) -> FreezedStorage {
     let flow = get_proxied::<model::Flow>(&mut manager).export_data();
     let stage = get_proxied::<model::Stage>(&mut manager).export_data();
     let policy = get_proxied::<model::Policy>(&mut manager).export_data();
@@ -130,7 +158,7 @@ pub fn create_freezed(mut manager: StorageManager) -> StorageManager {
     manager.register_storage(DummyStorage::new(policy));
     manager.register_storage(DummyStorage::new(prompt));
     manager.register_storage(DummyStorage::new(tenant));
-    manager
+    FreezedStorage(manager)
 }
 
 fn register_proxied<D: StorageRef + Send + Sync + 'static>(
@@ -142,9 +170,10 @@ fn register_proxied<D: StorageRef + Send + Sync + 'static>(
 }
 
 fn get_proxied<D: StorageRef + Send + Sync + 'static>(
-    manager: &mut StorageManager,
+    manager: &mut ProxiedStorage,
 ) -> Arc<ProxyStorage<<D as StorageRef>::Storage, <D as StorageRef>::Exc, D>> {
     manager
+        .0
         .get_and_remove::<ProxyStorage<D::Storage, D::Exc, D>>()
         .expect("Failed to find proxied")
 }
@@ -164,7 +193,7 @@ struct ProxyStorage<P: DataStorage<Exc, D>, Exc: DataQueryExecutor<D>, D: DataMa
     query: Mutex<Option<HashMap<D::Query, Exc::Id>>>,
 }
 
-struct ExportedData<Query, Id, D> {
+pub struct ExportedData<Query, Id, D> {
     data: HashMap<Id, Data<D>>,
     query: HashMap<Query, Id>,
 }
@@ -256,7 +285,7 @@ where
     }
 }
 
-struct DummyExecutor<Id> {
+pub struct DummyExecutor<Id> {
     _id: PhantomData<Id>,
 }
 
@@ -378,8 +407,9 @@ impl<D: DataMarker, Id: Send + Sync + Hash + Eq + Clone> DataQueryExecutor<D>
     }
 }
 
-struct DummyStorage<D: DataMarker, Id> {
-    data: ExportedData<D::Query, Id, D>,
+#[derive(Clone)]
+pub struct DummyStorage<D: DataMarker, Id> {
+    data: Arc<ExportedData<D::Query, Id, D>>,
 }
 
 impl<D, Id> DummyStorage<D, Id>
@@ -389,7 +419,9 @@ where
     Id: Hash + Eq + Debug,
 {
     pub fn new(data: ExportedData<D::Query, Id, D>) -> Self {
-        Self { data }
+        Self {
+            data: Arc::new(data),
+        }
     }
 
     fn find_id(&self, query: &D::Query) -> &Id {

@@ -5,7 +5,7 @@ use std::{
 };
 
 use model::{PendingUser, Stage};
-use storage::{datacache::DataRef, StorageManager};
+use storage::{datacache::DataRef, FreezedStorage, StorageManager};
 use time::OffsetDateTime;
 use uuid::Uuid;
 
@@ -15,7 +15,7 @@ pub struct ExecutionContext {
     pub fields: FieldStorage,
     pub pending: Option<PendingUser>,
     pub user: Option<PolicyUser>,
-    pub storage: StorageManager,
+    pub storage: FreezedStorage,
     pub error: Option<ExecutionError>,
 }
 
@@ -25,7 +25,7 @@ pub struct ExecutionError {
 }
 
 impl ExecutionContext {
-    pub fn new(session_id: String, storage: StorageManager) -> Self {
+    pub fn new(session_id: String, storage: FreezedStorage) -> Self {
         Self {
             session_id,
             start_time: OffsetDateTime::now_utc(),

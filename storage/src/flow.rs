@@ -5,7 +5,7 @@ use model::{Flow, FlowBinding, FlowBindingKind, FlowEntry, FlowQuery, PolicyQuer
 use tokio_postgres::{Row, Statement};
 use uuid::Uuid;
 
-use crate::{include_sql, ReverseLookup, StorageError, StorageManager};
+use crate::{include_sql, ProxiedStorage, ReverseLookup, StorageError};
 
 datacache::storage!(pub FlowStorage(FlowExecutor, Flow), id(uid: i32), unique(slug: String), fields());
 
@@ -162,7 +162,7 @@ async fn entry_from_row(client: &impl GenericClient, row: Row) -> Result<FlowEnt
 }
 
 #[async_trait]
-impl ReverseLookup<Flow> for StorageManager {
+impl ReverseLookup<Flow> for ProxiedStorage {
     async fn reverse_lookup(&self, sub: &Flow) {
         self.lookup(&DataRef::<Flow>::new(FlowQuery::uid(sub.uid)))
             .await

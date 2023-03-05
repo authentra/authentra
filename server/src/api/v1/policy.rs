@@ -115,7 +115,6 @@ async fn create<C: GenericClient>(
         .query_one(&statement, &[&slug, &simple_kind])
         .await?
         .get(0);
-    tracing::info!("No Fuck 1");
     match kind {
         PolicyKind::PasswordExpiry { max_age } => {
             let statement = client

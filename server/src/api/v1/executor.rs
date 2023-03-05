@@ -50,18 +50,14 @@ async fn get_flow(
     Host(host): Host,
 ) -> Result<Json<FlowData>, ApiError> {
     let executor = state.executor();
-    tracing::info!("Lol0");
     let key = executor
         .get_key(&session, flow)
         .ok_or(ApiErrorKind::MiscInternal("Key has slug instead of id").into_api())?;
-    tracing::info!("Lol1");
     let execution = executor
         .get_execution(&key, true)
         .await
         .ok_or(ApiErrorKind::NotFound.into_api())?;
-    tracing::info!("Lol2");
     let connection = state.defaults().connection().await?;
-    tracing::info!("Lol3");
     let context = CheckContextRequest {
         uri,
         host,

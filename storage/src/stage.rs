@@ -8,7 +8,7 @@ use model::{
 use postgres_types::FromSql;
 use tokio_postgres::Row;
 
-use crate::{include_sql, ReverseLookup, StorageError, StorageManager};
+use crate::{include_sql, ProxiedStorage, ReverseLookup, StorageError};
 
 datacache::storage!(pub StageStorage(StageExecutor, Stage), id(uid: i32), unique(slug: String), fields());
 
@@ -195,7 +195,7 @@ async fn prompt_stage(
 }
 
 #[async_trait]
-impl ReverseLookup<Stage> for StorageManager {
+impl ReverseLookup<Stage> for ProxiedStorage {
     async fn reverse_lookup(&self, sub: &Stage) {
         match &sub.kind {
             model::StageKind::Prompt { bindings } => {
