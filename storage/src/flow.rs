@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use datacache::{Data, DataQueryExecutor, DataRef, LookupRef};
+use datacache::{DataQueryExecutor, DataRef, LookupRef};
 use deadpool_postgres::GenericClient;
 use model::{Flow, FlowBinding, FlowBindingKind, FlowEntry, FlowQuery, PolicyQuery, StageQuery};
 use tokio_postgres::{Row, Statement};
@@ -76,12 +76,6 @@ impl DataQueryExecutor<Flow> for FlowExecutor {
             Some(row) => Some(from_row(&conn, row).await?),
             None => None,
         })
-    }
-    async fn create(&self, _data: Data<Flow>) -> Result<(), Self::Error> {
-        todo!()
-    }
-    async fn update(&self, _data: Data<Flow>) -> Result<(), Self::Error> {
-        todo!()
     }
     async fn delete(&self, _data: &FlowQuery) -> Result<Vec<Self::Id>, Self::Error> {
         todo!()

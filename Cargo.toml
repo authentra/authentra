@@ -21,7 +21,6 @@ tower-cookies = ">=0.9.0"
 refinery = ">=0.8.7"
 deadpool-postgres = ">=0.10.5"
 tokio-postgres = ">=0.7.7"
-sqlx = { version = ">=0.6.2", features = ["runtime-tokio-rustls"] }
 opentelemetry = ">=0.18.0"
 tracing-opentelemetry = ">=0.18.0"
 config = { version = ">=0.13.3", default-features = false }
@@ -37,5 +36,5 @@ impl-tools = ">=0.8.0"
 parking_lot = { version = ">=0.12.1", features = ["send_guard"] }
 futures-util = ">=0.3.26"
 async-trait = ">=0.1.64"
-schemars = ">=0.8.11"
 derive_more = { git = "https://github.com/JelteF/derive_more" }
+datacache = { git = "https://github.com/authust/datacache" }

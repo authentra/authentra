@@ -4,7 +4,6 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use crate::api::setup_api_v1;
-use crate::api::sql_tx::TxLayer;
 use crate::config::PostgresConfiguration;
 use crate::config::{AuthustConfiguration, InternalAuthustConfiguration};
 use crate::interface::setup_interface_router;
@@ -31,7 +30,6 @@ use opentelemetry_otlp::{self as otlp, ExportConfig};
 use otlp::{SpanExporterBuilder, TonicExporterBuilder, WithExportConfig};
 use service::policy::PolicyService;
 
-use sqlx::{postgres::PgConnectOptions, ConnectOptions, PgPool};
 use storage::datacache::{Data, DataStorage};
 use storage::{StorageError, StorageManager};
 use tokio::signal;
@@ -135,30 +133,15 @@ async fn setup() {
         fut.expect("Error occurred while waiting for Ctrl+C signal");
         tracing::info!("Received shutdown signal");
     });
-    let (sqlx_pool, pool) = setup_database(&configuration.postgres, &password)
-        .await
-        .expect("Failed to connect to database");
-    let app_future = start_server(configuration, sqlx_pool, pool, shutdown_future);
+    let pool = setup_database(&configuration.postgres, &password).await;
+    let app_future = start_server(configuration, pool, shutdown_future);
     app_future.await;
     tracing::info!("Shutting down opentelemetry provider");
     opentelemetry::global::shutdown_tracer_provider();
     tracing::info!("Shutdown complete");
 }
 
-async fn setup_database(
-    configuration: &PostgresConfiguration,
-    password: &str,
-) -> Result<(PgPool, Pool), sqlx::Error> {
-    let mut options = PgConnectOptions::new_without_pgpass()
-        .host(&configuration.host)
-        .port(configuration.port)
-        .database(&configuration.database)
-        .username(&configuration.user)
-        .password(password)
-        .application_name("Authust");
-    options.log_statements(tracing::log::LevelFilter::Debug);
-    // options.log_slow_statements(tracing::log::LevelFilter::Warn, Duration::from_millis(100));
-    let sqlx_pool = PgPool::connect_with(options).await?;
+async fn setup_database(configuration: &PostgresConfiguration, password: &str) -> Pool {
     let mut cfg = tokio_postgres::Config::new();
     cfg.host(&configuration.host)
         .port(configuration.port)
@@ -178,7 +161,7 @@ async fn setup_database(
         .expect("Failed to run migrations");
     info!("Running migrations on database...");
     info!("Database setup complete");
-    Ok((sqlx_pool, pool))
+    pool
 }
 
 #[derive(Debug, Clone)]
@@ -197,7 +180,7 @@ impl FromRef<AppState> for AuthServiceData {
     }
 }
 
-async fn preload(_pool: &PgPool, storage: &StorageManager) -> Result<(), Arc<StorageError>> {
+async fn preload(storage: &StorageManager) -> Result<(), Arc<StorageError>> {
     info!("Preloading flows...");
     storage
         .get_for_data::<Flow>()
@@ -234,7 +217,7 @@ async fn preload(_pool: &PgPool, storage: &StorageManager) -> Result<(), Arc<Sto
 }
 
 #[derive(Clone)]
-pub struct SharedState(Arc<InternalSharedState>, PgPool);
+pub struct SharedState(Arc<InternalSharedState>);
 
 impl SharedState {
     pub fn users(&self) -> &UserService {
@@ -260,12 +243,6 @@ impl SharedState {
     }
 }
 
-impl FromRef<SharedState> for PgPool {
-    fn from_ref(input: &SharedState) -> Self {
-        input.1.clone()
-    }
-}
-
 struct InternalSharedState {
     users: UserService,
     executor: FlowExecutor,
@@ -277,7 +254,6 @@ struct InternalSharedState {
 
 pub struct Defaults {
     storage: StorageManager,
-    sqlx_pool: PgPool,
     pool: Pool,
     tenant: Option<Data<Tenant>>,
 }
@@ -285,10 +261,6 @@ pub struct Defaults {
 impl Defaults {
     pub fn tenant(&self) -> Option<Data<Tenant>> {
         self.tenant.clone()
-    }
-
-    pub fn sqlx_pool(&self) -> &PgPool {
-        &self.sqlx_pool
     }
     pub fn pool(&self) -> Pool {
         self.pool.clone()
@@ -299,7 +271,7 @@ impl Defaults {
 }
 
 impl Defaults {
-    pub async fn new(storage: StorageManager, sqlx_pool: PgPool, pool: Pool) -> Self {
+    pub async fn new(storage: StorageManager, pool: Pool) -> Self {
         let default = Self::find_default(
             &storage,
             &pool.get().await.expect("Failed to get connection"),
@@ -307,7 +279,6 @@ impl Defaults {
         .await;
         Defaults {
             storage,
-            sqlx_pool,
             pool,
             tenant: default,
         }
@@ -338,7 +309,6 @@ impl Defaults {
 
 async fn start_server(
     config: InternalAuthustConfiguration,
-    sqlx_pool: PgPool,
     pool: Pool,
     future: impl Future<Output = ()>,
 ) {
@@ -346,11 +316,9 @@ async fn start_server(
     #[cfg(feature = "dev-mode")]
     let cors = tower_http::cors::CorsLayer::very_permissive();
     let storage = storage::create_manager(pool.clone());
-    preload(&sqlx_pool, &storage)
-        .await
-        .expect("Preloading failed");
+    preload(&storage).await.expect("Preloading failed");
     let policies = PolicyService::new(storage.clone(), pool.clone());
-    let defaults = Defaults::new(storage.clone(), sqlx_pool.clone(), pool.clone()).await;
+    let defaults = Defaults::new(storage.clone(), pool.clone()).await;
     let executor = FlowExecutor::new(storage.clone(), policies.clone());
     let users = UserService::new();
     let internal_state = InternalSharedState {
@@ -364,12 +332,11 @@ async fn start_server(
         defaults: Arc::new(defaults),
         policies,
     };
-    let state = SharedState(Arc::new(internal_state), sqlx_pool.clone());
+    let state = SharedState(Arc::new(internal_state));
     let service = ServiceBuilder::new()
         .layer(ExtensionLayer)
         .layer(otel_layer())
         .layer(CookieManagerLayer::new())
-        // .layer(TxLayer::new(sqlx_pool))
         .layer(HandleErrorLayer::new(handle_timeout_error))
         .timeout(Duration::from_secs(1));
     #[cfg(debug_assertions)]

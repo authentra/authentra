@@ -27,11 +27,6 @@ pub enum PolicyKind {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSql, FromSql)]
-#[cfg_attr(
-    feature = "sqlx",
-    derive(sqlx::Type),
-    sqlx(type_name = "policy_kind", rename_all = "snake_case")
-)]
 #[postgres(name = "policy_kind")]
 #[serde(rename_all = "snake_case")]
 pub enum PolicyKindSimple {
@@ -74,19 +69,3 @@ impl From<bool> for PolicyResult {
         Self::Value(value)
     }
 }
-
-// impl PolicyKind {
-//     pub fn validate(&self, context: &ExecutionContext) -> PolicyResult {
-//         match self {
-//             PolicyKind::PasswordExpiry { max_age } => context
-//                 .user
-//                 .as_ref()
-//                 .map(|user| user.password_change_date)
-//                 .map_or(PolicyResult::NotApplicable, |date| {
-//                     (&(context.start_time - date) > &max_age.seconds()).into()
-//                 }),
-//             PolicyKind::PasswordStrength => todo!(),
-//             PolicyKind::Expression => todo!(),
-//         }
-//     }
-// }

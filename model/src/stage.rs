@@ -26,11 +26,6 @@ pub enum PasswordBackend {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash, FromSql, ToSql)]
-#[cfg_attr(feature = "sqlx", derive(sqlx::Type))]
-#[cfg_attr(
-    feature = "sqlx",
-    sqlx(type_name = "user_field", rename_all = "snake_case")
-)]
 #[serde(rename_all = "snake_case")]
 #[postgres(name = "userid_field")]
 pub enum UserField {

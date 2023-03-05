@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use datacache::{Data, DataQueryExecutor, DataRef, LookupRef};
+use datacache::{DataQueryExecutor, DataRef, LookupRef};
 use deadpool_postgres::GenericClient;
 use model::{
     ConsentMode, PasswordBackend, PgConsentMode, PromptBinding, PromptQuery, Stage, StageKind,
@@ -78,12 +78,6 @@ impl DataQueryExecutor<Stage> for StageExecutor {
             Some(row) => Some(from_row(&conn, row).await?),
             None => None,
         })
-    }
-    async fn create(&self, _data: Data<Stage>) -> Result<(), Self::Error> {
-        todo!()
-    }
-    async fn update(&self, _data: Data<Stage>) -> Result<(), Self::Error> {
-        todo!()
     }
     async fn delete(&self, _data: &StageQuery) -> Result<Vec<Self::Id>, Self::Error> {
         todo!()

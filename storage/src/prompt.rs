@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use datacache::{Data, DataQueryExecutor};
+use datacache::DataQueryExecutor;
 use model::{Prompt, PromptQuery};
 use tokio_postgres::Row;
 
@@ -58,12 +58,6 @@ impl DataQueryExecutor<Prompt> for PromptExecutor {
             }
         };
         Ok(row.map(from_row))
-    }
-    async fn create(&self, _data: Data<Prompt>) -> Result<(), Self::Error> {
-        todo!()
-    }
-    async fn update(&self, _data: Data<Prompt>) -> Result<(), Self::Error> {
-        todo!()
     }
     async fn delete(&self, _data: &PromptQuery) -> Result<Vec<Self::Id>, Self::Error> {
         todo!()

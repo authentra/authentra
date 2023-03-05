@@ -1,4 +1,3 @@
-
 use datacache::DataRef;
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
@@ -7,11 +6,6 @@ use uuid::Uuid;
 use super::{Policy, Stage};
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSql, FromSql)]
-#[cfg_attr(feature = "sqlx", derive(sqlx::Type))]
-#[cfg_attr(
-    feature = "sqlx",
-    sqlx(type_name = "authentication_requirement", rename_all = "snake_case")
-)]
 #[postgres(name = "authentication_requirement")]
 #[serde(rename_all = "snake_case")]
 pub enum AuthenticationRequirement {
@@ -26,11 +20,6 @@ pub enum AuthenticationRequirement {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSql, FromSql)]
-#[cfg_attr(feature = "sqlx", derive(sqlx::Type))]
-#[cfg_attr(
-    feature = "sqlx",
-    sqlx(type_name = "flow_designation", rename_all = "snake_case")
-)]
 #[postgres(name = "flow_designation")]
 #[serde(rename_all = "snake_case")]
 pub enum FlowDesignation {

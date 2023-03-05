@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use datacache::{Data, DataQueryExecutor};
+use datacache::DataQueryExecutor;
 use deadpool_postgres::GenericClient;
 use model::{Policy, PolicyKind, PolicyKindSimple, PolicyQuery};
 use tokio_postgres::Row;
@@ -77,12 +77,6 @@ impl DataQueryExecutor<Policy> for PolicyExecutor {
             Some(row) => Some(from_row(&conn, row).await?),
             None => None,
         })
-    }
-    async fn create(&self, _data: Data<Policy>) -> Result<(), Self::Error> {
-        todo!()
-    }
-    async fn update(&self, _data: Data<Policy>) -> Result<(), Self::Error> {
-        todo!()
     }
     async fn delete(&self, _data: &PolicyQuery) -> Result<Vec<Self::Id>, Self::Error> {
         todo!()

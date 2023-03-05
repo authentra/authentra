@@ -5,7 +5,7 @@ use std::{
 };
 
 use model::{PendingUser, Stage};
-use storage::{datacache::DataRef, FreezedStorage, StorageManager};
+use storage::{datacache::DataRef, FreezedStorage};
 use time::OffsetDateTime;
 use uuid::Uuid;
 

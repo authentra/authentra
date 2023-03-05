@@ -20,10 +20,7 @@ use storage::datacache::{DataMarker, DataRef};
 use tracing_error::SpanTrace;
 pub use v1::setup_api_v1;
 
-use self::sql_tx::TxError;
-
 pub mod csrf;
-pub mod sql_tx;
 mod v1;
 pub const CSRF_HEADER: HeaderName = HeaderName::from_static("x-csrf-token");
 #[derive(Debug, Display, Error)]
@@ -59,7 +56,6 @@ impl<T: Into<ApiErrorKind>> From<T> for ApiError {
 #[derive(Debug, Display, Error, From)]
 pub enum ApiErrorKind {
     Axum(#[error(source)] axum::Error),
-    Database(#[error(source)] sqlx::Error),
 
     InvalidLoginData,
     SessionCookieMissing,
@@ -80,7 +76,6 @@ pub enum ApiErrorKind {
     #[from(ignore)]
     #[display("{}", _0)]
     PwHash(#[error(not(source))] argon2::password_hash::Error),
-    Tx(#[error(source)] TxError),
     PoolError(#[error(source)] PoolError),
     #[from(ignore)]
     PostgresError(#[error(source)] tokio_postgres::Error),
@@ -121,10 +116,8 @@ impl From<tokio_postgres::Error> for ApiErrorKind {
 impl ApiErrorKind {
     pub fn is_internal(&self) -> bool {
         match self {
-            ApiErrorKind::Database(_) => true,
             ApiErrorKind::InvalidLoginData => false,
             ApiErrorKind::PwHash(_) => true,
-            ApiErrorKind::Tx(_) => true,
             ApiErrorKind::NotFound => false,
             ApiErrorKind::MiscInternal(_) => true,
             ApiErrorKind::SubmissionError(_) => false,
@@ -166,10 +159,8 @@ impl IntoResponse for ApiError {
             }
         }
         match self.kind {
-            ApiErrorKind::Database(_)
-            | ApiErrorKind::Axum(_)
+            ApiErrorKind::Axum(_)
             | ApiErrorKind::PwHash(_)
-            | ApiErrorKind::Tx(_)
             | ApiErrorKind::PoolError(_)
             | ApiErrorKind::PostgresError(_)
             | ApiErrorKind::MiscInternal(_)

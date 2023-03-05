@@ -12,7 +12,6 @@ axum = ["dep:axum", "dep:async-trait"]
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 uuid = { workspace = true, features = ["serde"] }
-sqlx = { workspace = true, optional = true }
 impl-tools = { workspace = true }
 async-trait = { workspace = true, optional = true }
 axum = { workspace = true, optional = true }
@@ -20,4 +19,4 @@ derive_more = { workspace = true, features = ["error", "display", "from"] }
 postgres-types = { version = "0.2.4", features = ["derive", "with-time-0_3"] }
 time = { workspace = true, features = ["serde"] }
 # datacache = { git = "https://github.com/authust/datacache", optional = true }
-datacache = { path = "../../datacache-with-macros", optional = true, features = ["serde"] }
+datacache = { workspace = true, optional = true, features = ["serde"] }

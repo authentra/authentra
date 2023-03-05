@@ -269,10 +269,6 @@ where
         })
     }
 
-    async fn insert(&self, _data: D) -> Result<(), Exc::Error> {
-        panic!("Insert is unsupported on a proxy datastorage");
-    }
-
     async fn delete(&self, _query: &D::Query) -> Result<(), Exc::Error> {
         panic!("Delete is unsupported on a proxy datastorage");
     }
@@ -354,40 +350,6 @@ impl<D: DataMarker, Id: Send + Sync + Hash + Eq + Clone> DataQueryExecutor<D>
         panic!("Unsupported operation")
     }
 
-    fn create<'life0, 'async_trait>(
-        &'life0 self,
-        _data: Data<D>,
-    ) -> core::pin::Pin<
-        Box<
-            dyn core::future::Future<Output = Result<(), Self::Error>>
-                + core::marker::Send
-                + 'async_trait,
-        >,
-    >
-    where
-        'life0: 'async_trait,
-        Self: 'async_trait,
-    {
-        panic!("Unsupported operation")
-    }
-
-    fn update<'life0, 'async_trait>(
-        &'life0 self,
-        _data: Data<D>,
-    ) -> core::pin::Pin<
-        Box<
-            dyn core::future::Future<Output = Result<(), Self::Error>>
-                + core::marker::Send
-                + 'async_trait,
-        >,
-    >
-    where
-        'life0: 'async_trait,
-        Self: 'async_trait,
-    {
-        panic!("Unsupported operation")
-    }
-
     fn delete<'life0, 'life1, 'async_trait>(
         &'life0 self,
         _data: &'life1 <D as DataMarker>::Query,
@@ -456,10 +418,6 @@ where
     async fn find_optional(&self, query: &D::Query) -> Result<Option<Data<D>>, Arc<Infallible>> {
         let id = self.find_id(&query);
         Ok(self.data.data.get(id).cloned())
-    }
-
-    async fn insert(&self, _: D) -> Result<(), Infallible> {
-        panic!("Unsupported operation")
     }
 
     async fn delete(&self, _: &D::Query) -> Result<(), Infallible> {
