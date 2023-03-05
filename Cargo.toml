@@ -36,5 +36,5 @@ impl-tools = ">=0.8.0"
 parking_lot = { version = ">=0.12.1", features = ["send_guard"] }
 futures-util = ">=0.3.26"
 async-trait = ">=0.1.64"
-derive_more = { git = "https://github.com/JelteF/derive_more" }
+derive_more = { git = "https://github.com/JelteF/derive_more", rev = "ce92a90" }
 datacache = { git = "https://github.com/authust/datacache" }

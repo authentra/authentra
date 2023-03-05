@@ -588,7 +588,7 @@ dependencies = [
 [[package]]
 name = "derive_more"
 version = "0.99.17"
-source = "git+https://github.com/JelteF/derive_more#ce92a9000262d2870a620db120d29a16118e51b0"
+source = "git+https://github.com/JelteF/derive_more?rev=ce92a90#ce92a9000262d2870a620db120d29a16118e51b0"
 dependencies = [
  "derive_more-impl",
 ]
@@ -596,7 +596,7 @@ dependencies = [
 [[package]]
 name = "derive_more-impl"
 version = "0.99.17"
-source = "git+https://github.com/JelteF/derive_more#ce92a9000262d2870a620db120d29a16118e51b0"
+source = "git+https://github.com/JelteF/derive_more?rev=ce92a90#ce92a9000262d2870a620db120d29a16118e51b0"
 dependencies = [
  "proc-macro2",
  "quote",
