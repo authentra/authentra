@@ -53,7 +53,7 @@ async fn get_flow(
     tracing::info!("Lol0");
     let key = executor
         .get_key(&session, flow)
-        .ok_or(ApiErrorKind::MiscInternal.into_api())?;
+        .ok_or(ApiErrorKind::MiscInternal("Key has slug instead of id").into_api())?;
     tracing::info!("Lol1");
     let execution = executor
         .get_execution(&key, true)

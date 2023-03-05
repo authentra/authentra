@@ -65,16 +65,20 @@ pub enum ApiErrorKind {
     SessionCookieMissing,
     InvalidSessionCookie,
     NotFound,
-    MiscInternal,
+
+    #[from(ignore)]
+    #[display("{}", _0)]
+    MiscInternal(#[error(not(source))] &'static str),
     Unauthorized,
     Forbidden,
     Conflict,
 
-    #[display("Missing middleware: '{}'", 0)]
+    #[display("Missing middleware: '{}'", _0)]
+    #[from(ignore)]
     MissingMiddleware(#[error(not(source))] &'static str),
 
     #[from(ignore)]
-    #[display("{}", 0)]
+    #[display("{}", _0)]
     PwHash(#[error(not(source))] argon2::password_hash::Error),
     Tx(#[error(source)] TxError),
     PoolError(#[error(source)] PoolError),
@@ -122,7 +126,7 @@ impl ApiErrorKind {
             ApiErrorKind::PwHash(_) => true,
             ApiErrorKind::Tx(_) => true,
             ApiErrorKind::NotFound => false,
-            ApiErrorKind::MiscInternal => true,
+            ApiErrorKind::MiscInternal(_) => true,
             ApiErrorKind::SubmissionError(_) => false,
             ApiErrorKind::SessionCookieMissing => false,
             ApiErrorKind::InvalidSessionCookie => false,
@@ -154,7 +158,12 @@ impl From<argon2::password_hash::Error> for ApiErrorKind {
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
         if self.kind.is_internal() {
-            tracing::error!("{self:?}");
+            if let Some(trace) = &self.st {
+                let format = format!("{trace}");
+                tracing::error!(trace = format, info = %self.kind, "Internal Server error");
+            } else {
+                tracing::error!(info = %self.kind, "Internal Server error");
+            }
         }
         match self.kind {
             ApiErrorKind::Database(_)
@@ -163,7 +172,7 @@ impl IntoResponse for ApiError {
             | ApiErrorKind::Tx(_)
             | ApiErrorKind::PoolError(_)
             | ApiErrorKind::PostgresError(_)
-            | ApiErrorKind::MiscInternal
+            | ApiErrorKind::MiscInternal(_)
             | ApiErrorKind::MissingMiddleware(_)
             | ApiErrorKind::JsonWebToken(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
             ApiErrorKind::InvalidLoginData => StatusCode::UNAUTHORIZED.into_response(),
