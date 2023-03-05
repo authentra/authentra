@@ -41,9 +41,19 @@ impl DataQueryExecutor<Tenant> for TenantExecutor {
     }
     async fn find_all_ids(
         &self,
-        _query: Option<&TenantQuery>,
+        query: Option<&TenantQuery>,
     ) -> Result<Vec<Self::Id>, Self::Error> {
-        todo!()
+        if let Some(query) = query {
+            match query {
+                TenantQuery::uid(id) => return Ok(vec![id.clone()]),
+                TenantQuery::host(_host) => todo!(),
+            }
+        } else {
+            let conn = self.get_conn().await?;
+            let statement = conn.prepare_cached(include_sql!("tenant/all-ids")).await?;
+            let ids = conn.query(&statement, &[]).await?;
+            Ok(ids.into_iter().map(|row| row.get("uid")).collect())
+        }
     }
     async fn find_optional(&self, query: &TenantQuery) -> Result<Option<Tenant>, Self::Error> {
         let conn = self.get_conn().await?;

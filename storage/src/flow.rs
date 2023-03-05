@@ -48,7 +48,10 @@ impl DataQueryExecutor<Flow> for FlowExecutor {
                 FlowQuery::slug(_slug) => todo!(),
             }
         } else {
-            todo!("Get all ids")
+            let conn = self.get_conn().await?;
+            let statement = conn.prepare_cached(include_sql!("flow/all-ids")).await?;
+            let ids = conn.query(&statement, &[]).await?;
+            Ok(ids.into_iter().map(|row| row.get("uid")).collect())
         }
     }
     async fn find_optional(&self, query: &FlowQuery) -> Result<Option<Flow>, Self::Error> {

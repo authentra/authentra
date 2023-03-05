@@ -32,7 +32,7 @@ pub enum PasswordBackend {
     sqlx(type_name = "user_field", rename_all = "snake_case")
 )]
 #[serde(rename_all = "snake_case")]
-#[postgres(name = "user_field")]
+#[postgres(name = "userid_field")]
 pub enum UserField {
     #[postgres(name = "email")]
     Email,

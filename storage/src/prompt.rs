@@ -33,9 +33,18 @@ impl DataQueryExecutor<Prompt> for PromptExecutor {
     }
     async fn find_all_ids(
         &self,
-        _query: Option<&PromptQuery>,
+        query: Option<&PromptQuery>,
     ) -> Result<Vec<Self::Id>, Self::Error> {
-        todo!()
+        if let Some(query) = query {
+            match query {
+                PromptQuery::uid(id) => return Ok(vec![id.clone()]),
+            }
+        } else {
+            let conn = self.get_conn().await?;
+            let statement = conn.prepare_cached(include_sql!("prompt/all-ids")).await?;
+            let ids = conn.query(&statement, &[]).await?;
+            Ok(ids.into_iter().map(|row| row.get("uid")).collect())
+        }
     }
     async fn find_optional(&self, query: &PromptQuery) -> Result<Option<Prompt>, Self::Error> {
         let conn = self.get_conn().await?;

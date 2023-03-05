@@ -43,8 +43,18 @@ impl DataQueryExecutor<Stage> for StageExecutor {
         };
         from_row(&conn, row).await
     }
-    async fn find_all_ids(&self, _query: Option<&StageQuery>) -> Result<Vec<Self::Id>, Self::Error> {
-        todo!()
+    async fn find_all_ids(&self, query: Option<&StageQuery>) -> Result<Vec<Self::Id>, Self::Error> {
+        if let Some(query) = query {
+            match query {
+                StageQuery::uid(id) => return Ok(vec![id.clone()]),
+                StageQuery::slug(_slug) => todo!(),
+            }
+        } else {
+            let conn = self.get_conn().await?;
+            let statement = conn.prepare_cached(include_sql!("stage/all-ids")).await?;
+            let ids = conn.query(&statement, &[]).await?;
+            Ok(ids.into_iter().map(|row| row.get("uid")).collect())
+        }
     }
     async fn find_optional(&self, query: &StageQuery) -> Result<Option<Stage>, Self::Error> {
         let conn = self.get_conn().await?;
@@ -131,13 +141,16 @@ async fn identification_stage(
         .prepare_cached(include_sql!("stage/identification-by-id"))
         .await?;
     let id_row = client.query_one(&statement, &[&identification_id]).await?;
-    let user_fields: Vec<UserField> = id_row.get("user_fields");
+    let user_fields: Vec<UserField> = id_row.get("fields");
     Ok(StageKind::Identification {
         password: password_stage_id.map(|uid| DataRef::new(StageQuery::uid(uid))),
         user_fields,
     })
 }
-async fn password_stage(_client: &impl GenericClient, _row: &Row) -> Result<StageKind, StorageError> {
+async fn password_stage(
+    _client: &impl GenericClient,
+    _row: &Row,
+) -> Result<StageKind, StorageError> {
     //TODO: Make Password backend configurable
     Ok(StageKind::Password {
         backends: vec![PasswordBackend::Internal],

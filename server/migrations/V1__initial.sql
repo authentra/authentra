@@ -80,12 +80,12 @@ create table consent_stages
     until int4
 );
 
-create type userid_fields as enum ('email', 'name', 'uuid');
+create type userid_field as enum ('email', 'name', 'uuid');
 
 create table identification_stages
 (
     uid    serial primary key,
-    fields userid_fields[] not null
+    fields userid_field[] not null
 );
 
 create table stages

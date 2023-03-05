@@ -41,9 +41,19 @@ impl DataQueryExecutor<Policy> for PolicyExecutor {
     }
     async fn find_all_ids(
         &self,
-        _query: Option<&PolicyQuery>,
+        query: Option<&PolicyQuery>,
     ) -> Result<Vec<Self::Id>, Self::Error> {
-        todo!()
+        if let Some(query) = query {
+            match query {
+                PolicyQuery::uid(id) => return Ok(vec![id.clone()]),
+                PolicyQuery::slug(_slug) => todo!(),
+            }
+        } else {
+            let conn = self.get_conn().await?;
+            let statement = conn.prepare_cached(include_sql!("policy/all-ids")).await?;
+            let ids = conn.query(&statement, &[]).await?;
+            Ok(ids.into_iter().map(|row| row.get("uid")).collect())
+        }
     }
     async fn find_optional(&self, query: &PolicyQuery) -> Result<Option<Policy>, Self::Error> {
         let conn = self.get_conn().await?;

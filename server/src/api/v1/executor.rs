@@ -1,5 +1,3 @@
-
-
 use argon2::{password_hash::Encoding, PasswordHash};
 use axum::{
     extract::{Host, OriginalUri, State},
@@ -52,14 +50,18 @@ async fn get_flow(
     Host(host): Host,
 ) -> Result<Json<FlowData>, ApiError> {
     let executor = state.executor();
+    tracing::info!("Lol0");
     let key = executor
         .get_key(&session, flow)
         .ok_or(ApiErrorKind::MiscInternal.into_api())?;
+    tracing::info!("Lol1");
     let execution = executor
         .get_execution(&key, true)
         .await
         .ok_or(ApiErrorKind::NotFound.into_api())?;
+    tracing::info!("Lol2");
     let connection = state.defaults().connection().await?;
+    tracing::info!("Lol3");
     let context = CheckContextRequest {
         uri,
         host,
@@ -282,7 +284,7 @@ fn str_from_field<'a>(name: &'static str, value: &'a Value) -> Result<&'a String
     }
 }
 
-// #[instrument(skip(client, execution, keys, cookies, session))]
+#[instrument(skip(client, execution, keys, cookies, session))]
 async fn complete(
     client: &impl GenericClient,
     execution: &FlowExecution,

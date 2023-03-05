@@ -3,7 +3,7 @@ INSERT INTO users (name, display_name, password, administrator) VALUES ('admin',
 insert into flows(slug, title, designation, authentication)
 values ('test-flow', 'Test Flow', 'authentication', 'none');
 insert into identification_stages(fields)
-values (array ['email', 'name']::userid_fields[]);
+values (array ['email', 'name']::userid_field[]);
 insert into stages(slug, kind, timeout, identification_stage)
 values ('id-stage', 'identification', 30, 1);
 insert into stages(slug, kind, timeout)

@@ -369,7 +369,7 @@ async fn start_server(
         .layer(ExtensionLayer)
         .layer(otel_layer())
         .layer(CookieManagerLayer::new())
-        .layer(TxLayer::new(sqlx_pool))
+        // .layer(TxLayer::new(sqlx_pool))
         .layer(HandleErrorLayer::new(handle_timeout_error))
         .timeout(Duration::from_secs(1));
     #[cfg(debug_assertions)]
