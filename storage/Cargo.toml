@@ -20,6 +20,6 @@ tokio-postgres = { workspace = true, features = [
 ] }
 async-trait = "0.1.64"
 # datacache = { git = "https://github.com/authust/datacache" }
-datacache = { path = "../../datacache-with-macros" }
+datacache.workspace = true
 postgres-types = { version = "0.2.4", features = ["derive", "with-time-0_3"] }
 parking_lot.workspace = true

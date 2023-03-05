@@ -531,6 +531,7 @@ dependencies = [
 [[package]]
 name = "datacache"
 version = "0.1.0"
+source = "git+https://github.com/authust/datacache#68ddaa1dca8b9ccdc3a0f3e537bec16106ec346d"
 dependencies = [
  "async-trait",
  "dashmap",
@@ -543,6 +544,7 @@ dependencies = [
 [[package]]
 name = "datacache_derive"
 version = "0.1.0"
+source = "git+https://github.com/authust/datacache#68ddaa1dca8b9ccdc3a0f3e537bec16106ec346d"
 dependencies = [
  "proc-macro2",
  "quote",
