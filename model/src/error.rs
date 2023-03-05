@@ -35,6 +35,7 @@ pub enum SubmissionError {
 }
 
 #[derive(Debug, Clone, Error, Display, Serialize)]
+#[display("FieldError({kind}, field: {field})")]
 pub struct FieldError {
     #[serde(flatten)]
     kind: FieldErrorKind,
@@ -54,8 +55,14 @@ impl FieldError {
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum FieldErrorKind {
     Missing,
-    Invalid { message: String },
-    InvalidType { expected: FieldType, got: FieldType },
+    Invalid {
+        message: String,
+    },
+    #[display("Expected {expected} got {got}")]
+    InvalidType {
+        expected: FieldType,
+        got: FieldType,
+    },
 }
 
 impl FieldErrorKind {

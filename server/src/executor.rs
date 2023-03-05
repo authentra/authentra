@@ -28,6 +28,7 @@ const TIME_TO_IDLE: Duration = Duration::from_secs(60 * 60 * 12);
 const TIME_TO_LIVE: Duration = Duration::from_secs(60 * 60 * 36);
 
 #[derive(Debug, Display, Clone, Hash, PartialEq, Eq)]
+#[display("FlowKey({session}, {flow:?})")]
 pub struct FlowKey {
     session: String,
     flow: DataRef<Flow>,
