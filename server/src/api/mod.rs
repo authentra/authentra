@@ -15,8 +15,11 @@ use http::{header::HeaderName, request::Parts, StatusCode};
 
 use jsonwebtoken::{errors::ErrorKind, DecodingKey, EncodingKey};
 use model::{error::SubmissionError, Flow, FlowParam, FlowQuery};
-use serde::Deserialize;
-use storage::datacache::{DataMarker, DataRef};
+use serde::{de::DeserializeOwned, Deserialize};
+use storage::{
+    datacache::{DataMarker, DataRef},
+    StorageError,
+};
 use tracing_error::SpanTrace;
 pub use v1::setup_api_v1;
 
@@ -33,6 +36,15 @@ pub struct ApiError {
     pub st: Option<SpanTrace>,
     // #[error(backtrace)]
     // pub backtrace: Backtrace,
+}
+
+pub mod errors {
+    use super::{ApiError, ApiErrorKind};
+
+    pub const NOT_FOUND: ApiError = ApiError {
+        kind: ApiErrorKind::NotFound,
+        st: None,
+    };
 }
 
 impl<T: Into<ApiErrorKind>> From<T> for ApiError {
@@ -110,6 +122,14 @@ impl From<tokio_postgres::Error> for ApiErrorKind {
             }
         }
         Self::PostgresError(value)
+    }
+}
+impl From<StorageError> for ApiErrorKind {
+    fn from(value: StorageError) -> Self {
+        match value {
+            StorageError::Pool(err) => ApiErrorKind::PoolError(err),
+            StorageError::Database(err) => ApiErrorKind::PostgresError(err),
+        }
     }
 }
 
@@ -242,16 +262,16 @@ pub async fn ping_handler() -> &'static str {
     "Pong!"
 }
 
-pub struct RefWrapper<D: DataMarker>(pub DataRef<D>);
+pub struct SlugWrapper<D: DataMarker>(pub DataRef<D>);
 
-impl<D: DataMarker> RefWrapper<D> {
+impl<D: DataMarker> SlugWrapper<D> {
     pub fn new(query: D::Query) -> Self {
         Self(DataRef::new(query))
     }
 }
 
 #[async_trait::async_trait]
-impl<S> axum::extract::FromRequestParts<S> for RefWrapper<Flow>
+impl<S> axum::extract::FromRequestParts<S> for SlugWrapper<Flow>
 where
     S: Send + Sync,
 {
@@ -260,6 +280,24 @@ where
     async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
         let path: Path<FlowParam> = Path::from_request_parts(parts, state).await?;
         let flow_slug = path.0.flow_slug;
-        Ok(RefWrapper::new(FlowQuery::slug(flow_slug)))
+        Ok(SlugWrapper::new(FlowQuery::slug(flow_slug)))
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(transparent)]
+struct FlowNumId {
+    flow_id: i32,
+}
+
+pub struct RefWrapper<D: DataMarker>(pub DataRef<D>);
+
+#[async_trait]
+impl<S> FromRequestParts<S> for RefWrapper<Flow> {
+    type Rejection = PathRejection;
+
+    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
+        let path: Path<FlowNumId> = Path::from_request_parts(parts, &()).await?;
+        Ok(Self(DataRef::new(FlowQuery::uid(path.0.flow_id))))
     }
 }

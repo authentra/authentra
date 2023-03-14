@@ -14,7 +14,7 @@ use tower_cookies::Cookies;
 use tracing::instrument;
 
 use crate::{
-    api::{ApiError, ApiErrorKind, AuthServiceData, ExecutorQuery, RefWrapper},
+    api::{ApiError, ApiErrorKind, AuthServiceData, ExecutorQuery, SlugWrapper},
     auth::Session,
     executor::{
         flow::{CheckContextRequest, FlowExecution},
@@ -43,7 +43,7 @@ pub fn setup_executor_router() -> Router<SharedState> {
 #[instrument(skip(state, session))]
 async fn get_flow(
     session: Session,
-    RefWrapper(flow): RefWrapper<Flow>,
+    SlugWrapper(flow): SlugWrapper<Flow>,
     State(state): State<SharedState>,
     query: Option<ExecutorQuery>,
     OriginalUri(uri): OriginalUri,
@@ -73,7 +73,7 @@ async fn get_flow(
 #[instrument(skip(state, session, form, cookies, uri))]
 async fn post_flow(
     session: Session,
-    RefWrapper(flow): RefWrapper<Flow>,
+    SlugWrapper(flow): SlugWrapper<Flow>,
     State(state): State<SharedState>,
     OriginalUri(uri): OriginalUri,
     cookies: Cookies,

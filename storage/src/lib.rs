@@ -251,16 +251,16 @@ where
     D: DataMarker + Send + Sync,
     D::Query: Hash + Eq,
 {
-    async fn find_one(&self, query: &D::Query) -> Result<Data<D>, Arc<Exc::Error>> {
+    async fn find_one(&self, query: &D::Query) -> Result<Data<D>, Exc::Error> {
         self.proxy.find_one(query).await.map(|v| {
             self.insert_data(v.clone());
             v
         })
     }
-    async fn find_all(&self, query: Option<&D::Query>) -> Result<Vec<Data<D>>, Arc<Exc::Error>> {
+    async fn find_all(&self, query: Option<&D::Query>) -> Result<Vec<Data<D>>, Exc::Error> {
         self.proxy.find_all(query).await
     }
-    async fn find_optional(&self, query: &D::Query) -> Result<Option<Data<D>>, Arc<Exc::Error>> {
+    async fn find_optional(&self, query: &D::Query) -> Result<Option<Data<D>>, Exc::Error> {
         self.proxy.find_optional(query).await.map(|opt| {
             opt.map(|v| {
                 self.insert_data(v.clone());
@@ -393,7 +393,7 @@ where
         }
     }
 
-    fn get_data(&self, id: &Id) -> Result<Data<D>, Arc<Infallible>> {
+    fn get_data(&self, id: &Id) -> Result<Data<D>, Infallible> {
         Ok(match self.data.data.get(id) {
             Some(data) => data.clone(),
             None => panic!("Failed to find data for {id:?}"),
@@ -408,14 +408,14 @@ where
     D::Query: Hash + Eq + Debug,
     Id: Send + Sync + Hash + Eq + Debug + Clone,
 {
-    async fn find_one(&self, query: &D::Query) -> Result<Data<D>, Arc<Infallible>> {
+    async fn find_one(&self, query: &D::Query) -> Result<Data<D>, Infallible> {
         let id = self.find_id(&query);
         self.get_data(id)
     }
-    async fn find_all(&self, _: Option<&D::Query>) -> Result<Vec<Data<D>>, Arc<Infallible>> {
+    async fn find_all(&self, _: Option<&D::Query>) -> Result<Vec<Data<D>>, Infallible> {
         panic!("Unsupported operation")
     }
-    async fn find_optional(&self, query: &D::Query) -> Result<Option<Data<D>>, Arc<Infallible>> {
+    async fn find_optional(&self, query: &D::Query) -> Result<Option<Data<D>>, Infallible> {
         let id = self.find_id(&query);
         Ok(self.data.data.get(id).cloned())
     }

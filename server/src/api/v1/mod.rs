@@ -10,7 +10,7 @@ use crate::{
     SharedState,
 };
 
-use self::{auth::AuthLayer, policy::setup_policy_router};
+use self::{auth::AuthLayer, executor::setup_executor_router, policy::setup_policy_router};
 
 pub mod application;
 pub mod auth;
@@ -25,6 +25,7 @@ pub async fn setup_api_v1(_secret: &str, state: SharedState) -> Router<SharedSta
     let router = Router::new()
         .route("/ping", get(ping_handler))
         .nest("/flow", setup_flow_router())
+        .nest("/flows/executor", setup_executor_router())
         .nest("/auth", setup_auth_router())
         .nest("/policies", setup_policy_router())
         .layer(service);

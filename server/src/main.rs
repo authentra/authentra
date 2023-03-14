@@ -12,7 +12,6 @@ use crate::service::user::UserService;
 use api::AuthServiceData;
 
 use axum::error_handling::HandleErrorLayer;
-use axum::extract::FromRef;
 use axum::routing::get;
 use axum::{BoxError, Router};
 use deadpool_postgres::{GenericClient, Manager, ManagerConfig, Object, Pool, PoolError};
@@ -169,50 +168,45 @@ pub struct AuthustState {
     pub configuration: AuthustConfiguration,
 }
 
-#[derive(Clone)]
-pub struct AppState {
-    auth_data: AuthServiceData,
-}
-
-impl FromRef<AppState> for AuthServiceData {
-    fn from_ref(input: &AppState) -> Self {
-        input.auth_data.clone()
-    }
-}
-
 async fn preload(storage: &StorageManager) -> Result<(), Arc<StorageError>> {
     info!("Preloading flows...");
-    storage
+    let flows = storage
         .get_for_data::<Flow>()
         .expect("Failed to get storage")
         .find_all(None)
-        .await?;
+        .await?
+        .len();
     info!("Preloading stages...");
-    storage
+    let stages = storage
         .get_for_data::<Stage>()
         .expect("Failed to get storage")
         .find_all(None)
-        .await?;
+        .await?
+        .len();
     info!("Preloading policies...");
-    storage
+    let policies = storage
         .get_for_data::<Policy>()
         .expect("Failed to get storage")
         .find_all(None)
-        .await?;
+        .await?
+        .len();
     info!("Preloading prompts...");
-    storage
+    let prompts = storage
         .get_for_data::<Prompt>()
         .expect("Failed to get storage")
         .find_all(None)
-        .await?;
+        .await?
+        .len();
     info!("Preloading tenants...");
-    storage
+    let tenants = storage
         .get_for_data::<Tenant>()
         .expect("Failed to get storage")
         .find_all(None)
-        .await?;
+        .await?
+        .len();
 
     info!("Preload complete");
+    info!("Loaded {flows} flows,{stages} stages, {policies} policies, {prompts} prompts and {tenants} tenants");
     Ok(())
 }
 
