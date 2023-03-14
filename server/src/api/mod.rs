@@ -20,6 +20,7 @@ use storage::{
     datacache::{DataMarker, DataRef},
     StorageError,
 };
+use tokio_postgres::error::SqlState;
 use tracing_error::SpanTrace;
 pub use v1::setup_api_v1;
 
@@ -117,7 +118,7 @@ impl From<jsonwebtoken::errors::Error> for ApiErrorKind {
 impl From<tokio_postgres::Error> for ApiErrorKind {
     fn from(value: tokio_postgres::Error) -> Self {
         if let Some(db_error) = value.as_db_error() {
-            if db_error.routine() == Some("_bt_check_unique") {
+            if db_error.code() == &SqlState::UNIQUE_VIOLATION {
                 return Self::Conflict;
             }
         }

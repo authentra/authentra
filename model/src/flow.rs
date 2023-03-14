@@ -5,7 +5,7 @@ use uuid::Uuid;
 
 use super::{Policy, Stage};
 
-#[derive(Debug, Clone, Serialize, Deserialize, ToSql, FromSql)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSql, FromSql)]
 #[postgres(name = "authentication_requirement")]
 #[serde(rename_all = "snake_case")]
 pub enum AuthenticationRequirement {
@@ -19,7 +19,7 @@ pub enum AuthenticationRequirement {
     Ignored,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, ToSql, FromSql)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSql, FromSql)]
 #[postgres(name = "flow_designation")]
 #[serde(rename_all = "snake_case")]
 pub enum FlowDesignation {

@@ -129,8 +129,8 @@ create unique index flow_slug on flows ((lower(slug)));
 create table flow_entries
 (
     uid      serial primary key,
-    flow     int4 not null references flows,
-    stage    int4 not null references stages,
+    flow     int4 not null references flows on delete cascade,
+    stage    int4 not null references stages on delete cascade,
     ordering int2 not null
 );
 
@@ -138,11 +138,11 @@ create unique index on flow_entries (flow, stage, ordering);
 
 create table flow_bindings
 (
-    policy        int4 not null references policies,
-    flow          int4 references flows,
-    entry         int4 references flow_entries,
+    policy        int4 not null references policies on delete cascade,
+    flow          int4 references flows on delete cascade,
+    entry         int4 references flow_entries on delete cascade,
     group_binding uuid,
-    user_binding  uuid references users,
+    user_binding  uuid references users on delete cascade,
 
     ordering      int2 not null,
     enabled       bool not null,
@@ -178,11 +178,11 @@ create table tenants
     logo                varchar(255) not null,
     favicon             varchar(255) not null,
 
-    invalidation_flow   int4 references flows,
-    authentication_flow int4 references flows,
-    authorization_flow  int4 references flows,
-    enrollment_flow     int4 references flows,
-    recovery_flow       int4 references flows,
-    unenrollment_flow   int4 references flows,
-    configuration_flow  int4 references flows
+    invalidation_flow   int4 references flows on delete set null,
+    authentication_flow int4 references flows on delete set null,
+    authorization_flow  int4 references flows on delete set null,
+    enrollment_flow     int4 references flows on delete set null,
+    recovery_flow       int4 references flows on delete set null,
+    unenrollment_flow   int4 references flows on delete set null,
+    configuration_flow  int4 references flows on delete set null
 );
