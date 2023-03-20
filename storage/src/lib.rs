@@ -22,6 +22,7 @@ pub mod policy;
 pub mod prompt;
 pub mod stage;
 pub mod tenant;
+pub mod storage;
 
 pub use datacache;
 

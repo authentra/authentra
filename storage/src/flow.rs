@@ -82,7 +82,7 @@ impl DataQueryExecutor<Flow> for FlowExecutor {
     }
 }
 
-async fn from_row(client: &impl GenericClient, row: Row) -> Result<Flow, StorageError> {
+pub(crate) async fn from_row(client: &impl GenericClient, row: Row) -> Result<Flow, StorageError> {
     let binding_statement = client
         .prepare_cached(include_sql!("flow/bindings-by-flow"))
         .await?;

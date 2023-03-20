@@ -83,7 +83,10 @@ impl DataQueryExecutor<Policy> for PolicyExecutor {
     }
 }
 
-async fn from_row(client: &impl GenericClient, row: Row) -> Result<Policy, StorageError> {
+pub(crate) async fn from_row(
+    client: &impl GenericClient,
+    row: Row,
+) -> Result<Policy, StorageError> {
     let simple_kind: PolicyKindSimple = row.get("kind");
     let kind = match simple_kind {
         PolicyKindSimple::PasswordExpiry => {

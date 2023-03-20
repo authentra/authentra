@@ -64,7 +64,7 @@ impl DataQueryExecutor<Prompt> for PromptExecutor {
     }
 }
 
-fn from_row(row: Row) -> Prompt {
+pub(crate) fn from_row(row: Row) -> Prompt {
     Prompt {
         uid: row.get("uid"),
         field_key: row.get("field_key"),

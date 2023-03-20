@@ -80,7 +80,7 @@ impl DataQueryExecutor<Tenant> for TenantExecutor {
     }
 }
 
-fn from_row(row: Row) -> Tenant {
+pub(crate) fn from_row(row: Row) -> Tenant {
     Tenant {
         uid: row.get("uid"),
         host: row.get("host"),

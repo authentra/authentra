@@ -15,9 +15,10 @@ use http::{header::HeaderName, request::Parts, StatusCode};
 
 use jsonwebtoken::{errors::ErrorKind, DecodingKey, EncodingKey};
 use model::{error::SubmissionError, Flow, FlowParam, FlowQuery};
-use serde::{de::DeserializeOwned, Deserialize};
+use serde::Deserialize;
 use storage::{
     datacache::{DataMarker, DataRef},
+    storage::EntityId,
     StorageError,
 };
 use tokio_postgres::error::SqlState;
@@ -97,6 +98,10 @@ pub enum ApiErrorKind {
     SubmissionError(#[error(source)] SubmissionError),
     #[from(ignore)]
     JsonWebToken(#[error(source)] jsonwebtoken::errors::Error),
+
+    #[from(ignore)]
+    #[display("Missing entity! {:?}", _0)]
+    InternalEntityNotFound(#[error(not(source))] EntityId),
 }
 
 impl From<jsonwebtoken::errors::Error> for ApiErrorKind {
@@ -152,6 +157,7 @@ impl ApiErrorKind {
             ApiErrorKind::PoolError(_) => true,
             ApiErrorKind::PostgresError(_) => true,
             ApiErrorKind::Axum(_) => true,
+            ApiErrorKind::InternalEntityNotFound(_) => true,
         }
     }
 
@@ -186,6 +192,7 @@ impl IntoResponse for ApiError {
             | ApiErrorKind::PostgresError(_)
             | ApiErrorKind::MiscInternal(_)
             | ApiErrorKind::MissingMiddleware(_)
+            | ApiErrorKind::InternalEntityNotFound(_)
             | ApiErrorKind::JsonWebToken(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
             ApiErrorKind::InvalidLoginData => StatusCode::UNAUTHORIZED.into_response(),
             ApiErrorKind::NotFound => StatusCode::NOT_FOUND.into_response(),

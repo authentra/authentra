@@ -104,7 +104,7 @@ enum PgStageKind {
     Consent,
 }
 
-async fn from_row(client: &impl GenericClient, row: Row) -> Result<Stage, StorageError> {
+pub(crate) async fn from_row(client: &impl GenericClient, row: Row) -> Result<Stage, StorageError> {
     let uid = row.get("uid");
     let simple_kind: PgStageKind = row.get("kind");
     let kind = match simple_kind {
