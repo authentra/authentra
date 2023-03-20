@@ -21,8 +21,14 @@ pub mod flow;
 pub mod policy;
 pub mod prompt;
 pub mod stage;
+mod storage;
 pub mod tenant;
-pub mod storage;
+
+pub use storage::Conflict;
+pub use storage::EntityId;
+pub use storage::ExecutorStorage;
+pub use storage::Storage;
+pub use storage::StorageResult;
 
 pub use datacache;
 

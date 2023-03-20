@@ -1,8 +1,8 @@
-use std::{marker::PhantomData, sync::Arc};
+use std::{hash::Hash, marker::PhantomData, sync::Arc};
 
 use async_trait::async_trait;
 use deadpool_postgres::{GenericClient, Object, Pool, PoolError};
-use futures::{future::LocalBoxFuture, Future, FutureExt};
+use futures::{future::BoxFuture, Future, FutureExt};
 use model::{Flow, Policy, Prompt, Stage, Tenant};
 use moka::future::Cache;
 use serde::Serialize;
@@ -10,51 +10,71 @@ use tokio::sync::Mutex;
 
 use crate::{include_sql, StorageError};
 
-#[async_trait(?Send)]
-pub trait ExecutorStorage {
+#[async_trait]
+pub trait ExecutorStorage: Send + Sync {
     async fn get_flow(&self, id: i32) -> StorageResult<Option<Arc<Flow>>>;
+    async fn get_flow_with_slug(&self, slug: &str) -> StorageResult<Option<Arc<Flow>>>;
     async fn get_stage(&self, id: i32) -> StorageResult<Option<Arc<Stage>>>;
     async fn get_policy(&self, id: i32) -> StorageResult<Option<Arc<Policy>>>;
     async fn get_prompt(&self, id: i32) -> StorageResult<Option<Arc<Prompt>>>;
     async fn get_tenant(&self, id: i32) -> StorageResult<Option<Arc<Tenant>>>;
 }
 
-#[async_trait(?Send)]
+#[async_trait]
 impl ExecutorStorage for Storage {
     async fn get_flow(&self, id: i32) -> StorageResult<Option<Arc<Flow>>> {
-        self.flows.get(id).await
+        self.flows.get(&id).await
+    }
+    async fn get_flow_with_slug(&self, slug: &str) -> StorageResult<Option<Arc<Flow>>> {
+        todo!()
     }
     async fn get_stage(&self, id: i32) -> StorageResult<Option<Arc<Stage>>> {
-        self.stages.get(id).await
+        self.stages.get(&id).await
     }
     async fn get_policy(&self, id: i32) -> StorageResult<Option<Arc<Policy>>> {
-        self.policies.get(id).await
+        self.policies.get(&id).await
     }
     async fn get_prompt(&self, id: i32) -> StorageResult<Option<Arc<Prompt>>> {
-        self.prompts.get(id).await
+        self.prompts.get(&id).await
     }
     async fn get_tenant(&self, id: i32) -> StorageResult<Option<Arc<Tenant>>> {
-        self.tenants.get(id).await
+        self.tenants.get(&id).await
     }
 }
 
-pub type MokaCache<T> = Cache<i32, Arc<Mutex<Option<Option<Arc<T>>>>>>;
+pub type MokaCache<I, T> = Cache<I, Arc<Mutex<Option<Option<Arc<T>>>>>>;
 
-struct DataCache<T, E> {
-    getter: Box<dyn Fn(Object, i32) -> LocalBoxFuture<'static, Result<Option<T>, E>> + Send>,
-    cache: MokaCache<T>,
+struct DataCache<I, T, E> {
+    getter: Arc<dyn Fn(Object, I) -> BoxFuture<'static, Result<Option<T>, E>> + Send + Sync>,
+    cache: MokaCache<I, T>,
     // locks: DashMap<i32, Mutex<Option<Option<Arc<T>>>>>,
     _error: PhantomData<E>,
     pool: Pool,
 }
 
-impl<T: Send + Sync + 'static, E: From<PoolError>> DataCache<T, E> {
+impl<I, T, E> Clone for DataCache<I, T, E> {
+    fn clone(&self) -> Self {
+        Self {
+            getter: self.getter.clone(),
+            cache: self.cache.clone(),
+            _error: PhantomData,
+            pool: self.pool.clone(),
+        }
+    }
+}
+
+impl<
+        I: PartialEq + Eq + Hash + Send + Sync + Clone + 'static,
+        T: Send + Sync + 'static,
+        E: From<PoolError> + Send + Sync,
+    > DataCache<I, T, E>
+{
     pub fn new<Fut: Future<Output = Result<Option<T>, E>> + 'static + Send>(
-        cache: MokaCache<T>,
+        cache: MokaCache<I, T>,
         pool: Pool,
-        func: impl Fn(Object, i32) -> Fut + 'static + Send,
+        func: impl Fn(Object, I) -> Fut + 'static + Send + Sync,
     ) -> Self {
-        let func = Box::new(move |obj, id| func(obj, id).boxed_local());
+        let func = Arc::new(move |obj, id| func(obj, id).boxed());
         Self {
             getter: func,
             cache,
@@ -63,10 +83,10 @@ impl<T: Send + Sync + 'static, E: From<PoolError>> DataCache<T, E> {
         }
     }
 
-    pub async fn get(&self, id: i32) -> Result<Option<Arc<T>>, E> {
+    pub async fn get(&self, id: &I) -> Result<Option<Arc<T>>, E> {
         let mutex = self
             .cache
-            .get_with(id, async { Arc::new(Mutex::new(None)) })
+            .get_with_by_ref(id, async { Arc::new(Mutex::new(None)) })
             .await;
         let mut guard = mutex.lock().await;
         if let Some(value) = &*guard {
@@ -81,7 +101,9 @@ impl<T: Send + Sync + 'static, E: From<PoolError>> DataCache<T, E> {
             }
         };
 
-        let result = (self.getter)(conn, id).await.map(|opt| opt.map(Arc::new));
+        let result = (self.getter)(conn, id.clone())
+            .await
+            .map(|opt| opt.map(Arc::new));
         match &result {
             Ok(v) => {
                 *guard = Some(v.clone());
@@ -93,23 +115,28 @@ impl<T: Send + Sync + 'static, E: From<PoolError>> DataCache<T, E> {
         result
     }
 
-    pub async fn invalidate(&self, id: i32) {
+    pub async fn invalidate(&self, id: &I) {
         self.cache.invalidate(&id).await;
     }
 }
 
+#[derive(Clone)]
 pub struct Storage {
-    flows: DataCache<Flow, StorageError>,
-    stages: DataCache<Stage, StorageError>,
-    policies: DataCache<Policy, StorageError>,
-    prompts: DataCache<Prompt, StorageError>,
-    tenants: DataCache<Tenant, StorageError>,
+    flows: DataCache<i32, Flow, StorageError>,
+    stages: DataCache<i32, Stage, StorageError>,
+    policies: DataCache<i32, Policy, StorageError>,
+    prompts: DataCache<i32, Prompt, StorageError>,
+    tenants: DataCache<i32, Tenant, StorageError>,
 }
 
 impl Storage {
     pub fn new(pool: Pool) -> Self {
         Self {
-            flows: DataCache::new(Cache::builder().build(), pool.clone(), flow_from_db),
+            flows: DataCache::new(
+                MokaCache::<i32, Flow>::builder().build(),
+                pool.clone(),
+                flow_from_db,
+            ),
             stages: DataCache::new(Cache::builder().build(), pool.clone(), stage_from_db),
             policies: DataCache::new(Cache::builder().build(), pool.clone(), policy_from_db),
             prompts: DataCache::new(Cache::builder().build(), pool.clone(), prompt_from_db),
@@ -151,48 +178,56 @@ impl Storage {
         }
     }
 
-    pub async fn conflicts_for_flow(&self, client: &impl GenericClient, id: i32) -> Vec<Conflict> {
+    pub async fn conflicts_for_flow(
+        &self,
+        _client: &impl GenericClient,
+        _id: i32,
+    ) -> Vec<Conflict> {
         vec![]
     }
-    pub async fn conflicts_for_stage(&self, client: &impl GenericClient, id: i32) -> Vec<Conflict> {
+    pub async fn conflicts_for_stage(
+        &self,
+        _client: &impl GenericClient,
+        _id: i32,
+    ) -> Vec<Conflict> {
         vec![]
     }
     pub async fn conflicts_for_policy(
         &self,
-        client: &impl GenericClient,
-        id: i32,
+        _client: &impl GenericClient,
+        _id: i32,
     ) -> Vec<Conflict> {
         vec![]
     }
     pub async fn conflicts_for_prompt(
         &self,
-        client: &impl GenericClient,
-        id: i32,
+        _client: &impl GenericClient,
+        _id: i32,
     ) -> Vec<Conflict> {
         vec![]
     }
     pub async fn conflicts_for_tenant(
         &self,
-        client: &impl GenericClient,
-        id: i32,
+        _client: &impl GenericClient,
+        _id: i32,
     ) -> Vec<Conflict> {
         vec![]
     }
 
     pub async fn get_flow(&self, id: i32) -> StorageResult<Option<Arc<Flow>>> {
-        self.flows.get(id).await
+        self.flows.get(&id).await
     }
     pub async fn get_stage(&self, id: i32) -> StorageResult<Option<Arc<Stage>>> {
-        self.stages.get(id).await
+        self.stages.get(&id).await
     }
     pub async fn get_policy(&self, id: i32) -> StorageResult<Option<Arc<Policy>>> {
-        self.policies.get(id).await
+        self.policies.get(&id).await
     }
     pub async fn get_prompt(&self, id: i32) -> StorageResult<Option<Arc<Prompt>>> {
-        self.prompts.get(id).await
+        self.prompts.get(&id).await
     }
     pub async fn get_tenant(&self, id: i32) -> StorageResult<Option<Arc<Tenant>>> {
-        self.tenants.get(id).await
+        self.tenants.get(&id).await
     }
 }
 
@@ -203,6 +238,7 @@ async fn flow_from_db(client: Object, id: i32) -> StorageResult<Option<Flow>> {
         None => Ok(None),
     }
 }
+async fn flow_slug_from_db(client: Object, slug: &str) {}
 async fn stage_from_db(client: Object, id: i32) -> StorageResult<Option<Stage>> {
     let statement = client.prepare_cached(include_sql!("stage/by-id")).await?;
     match client.query_opt(&statement, &[&id]).await? {
