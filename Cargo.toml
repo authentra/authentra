@@ -1,5 +1,5 @@
 [workspace]
-members = ["model", "server", "tools", "policy-engine", "storage"]
+members = ["model", "server", "policy-engine", "storage"]
 
 [workspace.dependencies]
 tokio = ">=1.25.0"
