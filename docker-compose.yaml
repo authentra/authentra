@@ -1,0 +1,44 @@
+version: "3.9"
+services:
+  authust:
+    build: .
+    environment:
+      AUTHUST_POSTGRES__HOST: db
+      AUTHUST_POSTGRES__DATABASE: authust
+      AUTHUST_POSTGRES__USER: authust
+      AUTHUST_POSTGRES__PASSWORD: authust
+      AUTHUST_SECRET: really_secret
+    depends_on:
+      db:
+        condition: service_healthy
+      jaeger:
+        condition: service_healthy
+    links:
+      - db
+    ports:
+      - "8080:8080"
+  db:
+    image: postgres:alpine
+    restart: always
+    environment:
+      POSTGRES_USER: authust
+      POSTGRES_PASSWORD: authust
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+  jaeger:
+    image: jaegertracing/all-in-one
+    environment:
+      COLLECTOR_OTLP_ENABLED: true
+    healthcheck:
+      test: curl --fail http://jaeger:16686/ || exit 1
+      interval: 60s
+      retries: 5
+      start_period: 20s
+      timeout: 10s
+    ports:
+      - "16686:16686"
+      - "6831:6831/udp"
+      - "6832:6832/udp"
