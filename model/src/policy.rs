@@ -8,6 +8,16 @@ pub struct PartialPolicy {
     pub kind: PolicyKindSimple,
 }
 
+impl From<Policy> for PartialPolicy {
+    fn from(value: Policy) -> Self {
+        PartialPolicy {
+            uid: value.uid,
+            slug: value.slug,
+            kind: (&value.kind).into(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "datacache", derive(datacache::DataMarker))]
 pub struct Policy {

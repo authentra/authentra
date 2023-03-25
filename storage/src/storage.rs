@@ -6,39 +6,48 @@ use futures::{future::BoxFuture, Future, FutureExt};
 use model::{Flow, Policy, Prompt, Stage, Tenant};
 use moka::future::Cache;
 use serde::Serialize;
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, RwLock, RwLockReadGuard};
 
 use crate::{include_sql, StorageError};
 
 #[async_trait]
 pub trait ExecutorStorage: Send + Sync {
     async fn get_flow(&self, id: i32) -> StorageResult<Option<Arc<Flow>>>;
-    async fn get_flow_with_slug(&self, slug: &str) -> StorageResult<Option<Arc<Flow>>>;
+    async fn get_flow_by_slug(&self, slug: &str) -> StorageResult<Option<Arc<Flow>>>;
     async fn get_stage(&self, id: i32) -> StorageResult<Option<Arc<Stage>>>;
     async fn get_policy(&self, id: i32) -> StorageResult<Option<Arc<Policy>>>;
     async fn get_prompt(&self, id: i32) -> StorageResult<Option<Arc<Prompt>>>;
     async fn get_tenant(&self, id: i32) -> StorageResult<Option<Arc<Tenant>>>;
+    async fn get_tenant_by_host(&self, host: &str) -> StorageResult<Option<Arc<Tenant>>>;
+
+    async fn list_policies(&self) -> StorageResult<Vec<Policy>>;
 }
 
 #[async_trait]
 impl ExecutorStorage for Storage {
     async fn get_flow(&self, id: i32) -> StorageResult<Option<Arc<Flow>>> {
-        self.flows.get(&id).await
+        self.get_flow(id).await
     }
-    async fn get_flow_with_slug(&self, slug: &str) -> StorageResult<Option<Arc<Flow>>> {
-        todo!()
+    async fn get_flow_by_slug(&self, slug: &str) -> StorageResult<Option<Arc<Flow>>> {
+        self.get_flow_by_slug(slug).await
     }
     async fn get_stage(&self, id: i32) -> StorageResult<Option<Arc<Stage>>> {
-        self.stages.get(&id).await
+        self.get_stage(id).await
     }
     async fn get_policy(&self, id: i32) -> StorageResult<Option<Arc<Policy>>> {
-        self.policies.get(&id).await
+        self.get_policy(id).await
     }
     async fn get_prompt(&self, id: i32) -> StorageResult<Option<Arc<Prompt>>> {
-        self.prompts.get(&id).await
+        self.get_prompt(id).await
     }
     async fn get_tenant(&self, id: i32) -> StorageResult<Option<Arc<Tenant>>> {
-        self.tenants.get(&id).await
+        self.get_tenant(id).await
+    }
+    async fn get_tenant_by_host(&self, host: &str) -> StorageResult<Option<Arc<Tenant>>> {
+        self.get_tenant_by_host(host).await
+    }
+    async fn list_policies(&self) -> StorageResult<Vec<Policy>> {
+        self.list_policies().await
     }
 }
 
@@ -63,6 +72,7 @@ impl<I, T, E> Clone for DataCache<I, T, E> {
     }
 }
 
+#[allow(dead_code)]
 impl<
         I: PartialEq + Eq + Hash + Send + Sync + Clone + 'static,
         T: Send + Sync + 'static,
@@ -122,26 +132,16 @@ impl<
 
 #[derive(Clone)]
 pub struct Storage {
-    flows: DataCache<i32, Flow, StorageError>,
-    stages: DataCache<i32, Stage, StorageError>,
-    policies: DataCache<i32, Policy, StorageError>,
-    prompts: DataCache<i32, Prompt, StorageError>,
-    tenants: DataCache<i32, Tenant, StorageError>,
+    pool: Pool,
+    connection: Arc<RwLock<Object>>,
 }
 
 impl Storage {
-    pub fn new(pool: Pool) -> Self {
-        Self {
-            flows: DataCache::new(
-                MokaCache::<i32, Flow>::builder().build(),
-                pool.clone(),
-                flow_from_db,
-            ),
-            stages: DataCache::new(Cache::builder().build(), pool.clone(), stage_from_db),
-            policies: DataCache::new(Cache::builder().build(), pool.clone(), policy_from_db),
-            prompts: DataCache::new(Cache::builder().build(), pool.clone(), prompt_from_db),
-            tenants: DataCache::new(Cache::builder().build(), pool.clone(), tenant_from_db),
-        }
+    pub async fn new(pool: Pool) -> Result<Self, PoolError> {
+        Ok(Self {
+            connection: Arc::new(RwLock::new(pool.get().await?)),
+            pool,
+        })
     }
 }
 
@@ -214,55 +214,124 @@ impl Storage {
         vec![]
     }
 
+    async fn get_client(&self) -> Result<RwLockReadGuard<Object>, PoolError> {
+        let guard = self.connection.read().await;
+        if guard.is_closed() {
+            drop(guard);
+            let mut guard = self.connection.write().await;
+            if !guard.is_closed() {
+                drop(guard);
+                return Ok(self.connection.read().await);
+            }
+            *guard = self.pool.get().await?;
+            drop(guard);
+            let guard = self.connection.read().await;
+            Ok(guard)
+        } else {
+            Ok(guard)
+        }
+    }
+
     pub async fn get_flow(&self, id: i32) -> StorageResult<Option<Arc<Flow>>> {
-        self.flows.get(&id).await
+        let client = self.get_client().await?;
+        arced(flow_from_db(&client, id).await)
+    }
+    pub async fn get_flow_by_slug(&self, slug: &str) -> StorageResult<Option<Arc<Flow>>> {
+        let client = self.get_client().await?;
+        arced(flow_from_db_by_slug(&client, slug).await)
     }
     pub async fn get_stage(&self, id: i32) -> StorageResult<Option<Arc<Stage>>> {
-        self.stages.get(&id).await
+        let client = self.get_client().await?;
+        arced(stage_from_db(&client, id).await)
     }
     pub async fn get_policy(&self, id: i32) -> StorageResult<Option<Arc<Policy>>> {
-        self.policies.get(&id).await
+        let client = self.get_client().await?;
+        arced(policy_from_db(&client, id).await)
     }
     pub async fn get_prompt(&self, id: i32) -> StorageResult<Option<Arc<Prompt>>> {
-        self.prompts.get(&id).await
+        let client = self.get_client().await?;
+        arced(prompt_from_db(&client, id).await)
     }
     pub async fn get_tenant(&self, id: i32) -> StorageResult<Option<Arc<Tenant>>> {
-        self.tenants.get(&id).await
+        let client = self.get_client().await?;
+        arced(tenant_from_db(&client, id).await)
+    }
+    pub async fn get_tenant_by_host(&self, host: &str) -> StorageResult<Option<Arc<Tenant>>> {
+        let client = self.get_client().await?;
+        arced(tenant_from_db_by_host(&client, host).await)
+    }
+
+    pub async fn list_policies(&self) -> StorageResult<Vec<Policy>> {
+        let client = self.get_client().await?;
+        list_policies_from_db(&client).await
     }
 }
 
-async fn flow_from_db(client: Object, id: i32) -> StorageResult<Option<Flow>> {
+fn arced<T, E>(v: Result<Option<T>, E>) -> Result<Option<Arc<T>>, E> {
+    match v {
+        Ok(opt) => Ok(opt.map(Arc::new)),
+        Err(err) => Err(err),
+    }
+}
+
+async fn flow_from_db(client: &Object, id: i32) -> StorageResult<Option<Flow>> {
     let statement = client.prepare_cached(include_sql!("flow/by-id")).await?;
     match client.query_opt(&statement, &[&id]).await? {
-        Some(row) => Ok(Some(crate::flow::from_row(&client, row).await?)),
+        Some(row) => Ok(Some(crate::flow::from_row(client, row).await?)),
         None => Ok(None),
     }
 }
-async fn flow_slug_from_db(client: Object, slug: &str) {}
-async fn stage_from_db(client: Object, id: i32) -> StorageResult<Option<Stage>> {
+async fn flow_from_db_by_slug(client: &Object, slug: &str) -> StorageResult<Option<Flow>> {
+    let statement = client.prepare_cached(include_sql!("flow/by-slug")).await?;
+    match client.query_opt(&statement, &[&slug]).await? {
+        Some(row) => Ok(Some(crate::flow::from_row(client, row).await?)),
+        None => Ok(None),
+    }
+}
+async fn stage_from_db(client: &Object, id: i32) -> StorageResult<Option<Stage>> {
     let statement = client.prepare_cached(include_sql!("stage/by-id")).await?;
     match client.query_opt(&statement, &[&id]).await? {
-        Some(row) => Ok(Some(crate::stage::from_row(&client, row).await?)),
+        Some(row) => Ok(Some(crate::stage::from_row(client, row).await?)),
         None => Ok(None),
     }
 }
-async fn policy_from_db(client: Object, id: i32) -> StorageResult<Option<Policy>> {
+async fn list_policies_from_db(client: &Object) -> StorageResult<Vec<Policy>> {
+    let statement = client
+        .prepare_cached(include_sql!("policy/list-all"))
+        .await?;
+    client
+        .query(&statement, &[])
+        .await?
+        .into_iter()
+        .map(crate::policy::from_row)
+        .collect()
+}
+async fn policy_from_db(client: &Object, id: i32) -> StorageResult<Option<Policy>> {
     let statement = client.prepare_cached(include_sql!("policy/by-id")).await?;
     match client.query_opt(&statement, &[&id]).await? {
-        Some(row) => Ok(Some(crate::policy::from_row(&client, row).await?)),
+        Some(row) => Ok(Some(crate::policy::from_row(row)?)),
         None => Ok(None),
     }
 }
-async fn prompt_from_db(client: Object, id: i32) -> StorageResult<Option<Prompt>> {
+async fn prompt_from_db(client: &Object, id: i32) -> StorageResult<Option<Prompt>> {
     let statement = client.prepare_cached(include_sql!("prompt/by-id")).await?;
     match client.query_opt(&statement, &[&id]).await? {
         Some(row) => Ok(Some(crate::prompt::from_row(row))),
         None => Ok(None),
     }
 }
-async fn tenant_from_db(client: Object, id: i32) -> StorageResult<Option<Tenant>> {
+async fn tenant_from_db(client: &Object, id: i32) -> StorageResult<Option<Tenant>> {
     let statement = client.prepare_cached(include_sql!("tenant/by-id")).await?;
     match client.query_opt(&statement, &[&id]).await? {
+        Some(row) => Ok(Some(crate::tenant::from_row(row))),
+        None => Ok(None),
+    }
+}
+async fn tenant_from_db_by_host(client: &Object, host: &str) -> StorageResult<Option<Tenant>> {
+    let statement = client
+        .prepare_cached(include_sql!("tenant/by-host"))
+        .await?;
+    match client.query_opt(&statement, &[&host]).await? {
         Some(row) => Ok(Some(crate::tenant::from_row(row))),
         None => Ok(None),
     }

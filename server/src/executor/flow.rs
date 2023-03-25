@@ -9,7 +9,7 @@ use std::{
 use http::Uri;
 use parking_lot::{lock_api::RwLockReadGuard, Mutex, RawRwLock, RwLock};
 use policy_engine::{execute, uri::Scheme, LogEntry};
-use storage::datacache::{Data, DataRef, LookupRef};
+use storage::ExecutorStorage;
 use uuid::Uuid;
 
 use crate::{
@@ -18,8 +18,7 @@ use crate::{
 };
 use model::{
     error::SubmissionError, user::PartialUser, AuthenticationRequirement, Flow, FlowBinding,
-    FlowBindingKind, FlowComponent, FlowData, FlowEntry, FlowInfo, PendingUser, Policy,
-    PolicyQuery, Stage,
+    FlowBindingKind, FlowComponent, FlowData, FlowEntry, FlowInfo, PendingUser, Policy, Stage,
 };
 
 use super::{data::AsComponent, ExecutionContext, ExecutionError, FlowExecutor, FlowKey};
@@ -54,7 +53,7 @@ impl FlowExecution {
     pub async fn data(&self, error: Option<SubmissionError>, context: &CheckContext) -> FlowData {
         let flow = self.0.flow.as_ref();
         let entry = self.get_entry();
-        let stage = self.lookup_stage(&entry.stage).await;
+        let stage = self.lookup_stage(entry.stage).await;
         let flow_info = FlowInfo {
             title: flow.title.clone(),
         };
@@ -121,21 +120,11 @@ impl FlowExecution {
         self.0.is_completed.load(Ordering::Relaxed)
     }
 
-    pub async fn lookup_stage(&self, reference: &DataRef<Stage>) -> Data<Stage> {
-        let lock = self.0.context.read();
-        let storage = &lock.storage;
-        match storage.lookup(reference).await {
-            Some(v) => v,
-            None => panic!("Missing stage in storage {reference:?}"),
-        }
+    pub async fn lookup_stage(&self, id: i32) -> Arc<Stage> {
+        self.0.storage.get_stage(id).await.unwrap().unwrap()
     }
-    pub async fn lookup_policy(&self, reference: &DataRef<Policy>) -> Data<Policy> {
-        let lock = self.0.context.read();
-        let storage = &lock.storage;
-        match storage.lookup(reference).await {
-            Some(v) => v,
-            None => panic!("Missing policy in storage {reference:?}"),
-        }
+    pub async fn lookup_policy(&self, id: i32) -> Arc<Policy> {
+        self.0.storage.get_policy(id).await.unwrap().unwrap()
     }
 
     pub async fn check(&self, context: &CheckContext) -> Result<Option<String>, ()> {
@@ -227,7 +216,7 @@ impl IntoFlowCheckOutput for bool {
 pub enum FlowCheck {
     Authentication(AuthenticationRequirement),
     IsUser(Uuid),
-    Policy(DataRef<Policy>),
+    Policy(i32),
 }
 
 impl FlowCheck {
@@ -249,7 +238,7 @@ impl FlowCheck {
                 (context.request.user.as_ref().map(|v| &v.uid) == Some(id)).into_output()
             }
             FlowCheck::Policy(policy) => {
-                let policy = context.execution.lookup_policy(policy).await;
+                let policy = context.execution.lookup_policy(*policy).await;
                 check_policy(context, &policy).await
             }
         }
@@ -295,13 +284,7 @@ async fn check_policy(context: &CheckContext, policy: &Policy) -> FlowCheckOutpu
         }
         model::PolicyKind::PasswordStrength => FlowCheckOutput::Neutral,
         model::PolicyKind::Expression(_) => {
-            let reference = DataRef::new(PolicyQuery::uid(policy.uid));
-            let ast = context
-                .execution
-                .0
-                .policy_service
-                .get_ast(reference.clone())
-                .await;
+            let ast = context.execution.0.policy_service.get_ast(policy.uid).await;
             if let Some(ast) = ast {
                 let scope = create_scope(&context);
                 let result = execute(ast.as_ref(), || scope);
@@ -309,7 +292,7 @@ async fn check_policy(context: &CheckContext, policy: &Policy) -> FlowCheckOutpu
                     Ok(res) => res,
                     Err(err) => {
                         tracing::warn!(policy = ?policy,"An error occurred while executing policy!, {err}");
-                        dispatch_expression_log_entries(&reference, result.output, true);
+                        dispatch_expression_log_entries(policy.uid, result.output, true);
                         return FlowCheckOutput::FailedHard;
                     }
                 };
@@ -318,35 +301,31 @@ async fn check_policy(context: &CheckContext, policy: &Policy) -> FlowCheckOutpu
                 } else {
                     FlowCheckOutput::Failed
                 };
-                dispatch_expression_log_entries(&reference, result.output, false);
+                dispatch_expression_log_entries(policy.uid, result.output, false);
                 output
             } else {
-                tracing::warn!("Failed to find ast for policy {reference:?}");
+                tracing::warn!("Failed to find ast for policy {:?}", policy.uid);
                 FlowCheckOutput::Neutral
             }
         }
     }
 }
 
-fn dispatch_expression_log_entries(
-    policy: &DataRef<Policy>,
-    entries: Vec<LogEntry>,
-    has_error: bool,
-) {
+fn dispatch_expression_log_entries(policy: i32, entries: Vec<LogEntry>, has_error: bool) {
     for entry in entries {
         match entry {
             LogEntry::Text(text) => {
                 if has_error {
-                    tracing::warn!(policy = ?policy, "INFO: {text}");
+                    tracing::warn!(policy = policy, "INFO: {text}");
                 } else {
-                    tracing::debug!(policy = ?policy, "INFO: {text}");
+                    tracing::debug!(policy = policy, "INFO: {text}");
                 }
             }
             LogEntry::Debug(entry) => {
                 if has_error {
-                    tracing::warn!(policy = ?policy, position = ?entry.position, source = ?entry.source, "DEBUG: {}", entry.text);
+                    tracing::warn!(policy = policy, position = ?entry.position, source = ?entry.source, "DEBUG: {}", entry.text);
                 } else {
-                    tracing::debug!(policy = ?policy, position = ?entry.position, source = ?entry.source, "DEBUG: {}", entry.text);
+                    tracing::debug!(policy = policy, position = ?entry.position, source = ?entry.source, "DEBUG: {}", entry.text);
                 }
             }
         }
@@ -390,8 +369,9 @@ pub struct CheckContextRequest {
 }
 
 pub(super) struct FlowExecutionInternal {
-    pub(super) flow: Data<Flow>,
+    pub(super) flow: Arc<Flow>,
     pub(super) key: FlowKey,
+    pub(super) storage: Arc<dyn ExecutorStorage>,
     pub(super) context: RwLock<ExecutionContext>,
     pub(super) current_entry_idx: Mutex<usize>,
     pub(super) is_completed: AtomicBool,

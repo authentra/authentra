@@ -1,11 +1,10 @@
-use datacache::DataRef;
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PromptBinding {
     pub order: i16,
-    pub prompt: DataRef<Prompt>,
+    pub prompt: i32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

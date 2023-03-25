@@ -28,10 +28,13 @@ pub async fn list(
     _: AdminSession,
     State(state): State<SharedState>,
 ) -> Result<Json<Vec<PartialPolicy>>, ApiError> {
-    let service = state.policies();
-    let connection = state.defaults().connection().await?;
-    let policies = service.list_all(&connection).await?;
-    Ok(policies.into())
+    let service = state.storage();
+    let policies = service
+        .list_policies()
+        .await?
+        .into_iter()
+        .map(PartialPolicy::from);
+    Ok(Json(policies.collect()))
 }
 
 #[derive(Deserialize)]

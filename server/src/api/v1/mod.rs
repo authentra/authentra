@@ -18,7 +18,7 @@ pub mod executor;
 pub mod flow;
 pub mod policy;
 
-pub async fn setup_api_v1(_secret: &str, state: SharedState) -> Router<SharedState> {
+pub async fn setup_api_v1(state: SharedState) -> Router<SharedState> {
     let service = ServiceBuilder::new()
         .layer(CsrfLayer::new(vec!["*".into()]))
         .layer(AuthLayer::new(state.auth_data().clone()));

@@ -37,7 +37,7 @@ impl DataQueryExecutor<Policy> for PolicyExecutor {
                 .await?
             }
         };
-        from_row(&conn, row).await
+        from_row(row)
     }
     async fn find_all_ids(
         &self,
@@ -74,7 +74,7 @@ impl DataQueryExecutor<Policy> for PolicyExecutor {
             }
         };
         Ok(match row {
-            Some(row) => Some(from_row(&conn, row).await?),
+            Some(row) => Some(from_row(row)?),
             None => None,
         })
     }
@@ -83,19 +83,12 @@ impl DataQueryExecutor<Policy> for PolicyExecutor {
     }
 }
 
-pub(crate) async fn from_row(
-    client: &impl GenericClient,
-    row: Row,
-) -> Result<Policy, StorageError> {
+pub(crate) fn from_row(row: Row) -> Result<Policy, StorageError> {
     let simple_kind: PolicyKindSimple = row.get("kind");
     let kind = match simple_kind {
-        PolicyKindSimple::PasswordExpiry => {
-            password_expiry_policy(client, row.get("password_expiration")).await?
-        }
-        PolicyKindSimple::PasswordStrength => {
-            password_strength_policy(client, row.get("password_strength")).await?
-        }
-        PolicyKindSimple::Expression => expression_policy(client, row.get("expression")).await?,
+        PolicyKindSimple::PasswordExpiry => password_expiry_policy(&row)?,
+        PolicyKindSimple::PasswordStrength => password_strength_policy(&row)?,
+        PolicyKindSimple::Expression => expression_policy(&row)?,
     };
     Ok(Policy {
         uid: row.get("uid"),
@@ -104,34 +97,17 @@ pub(crate) async fn from_row(
     })
 }
 
-async fn password_expiry_policy(
-    client: &impl GenericClient,
-    id: i32,
-) -> Result<PolicyKind, StorageError> {
-    let statement = client
-        .prepare_cached(include_sql!("policy/password-expiration-by-id"))
-        .await?;
-    let row = client.query_one(&statement, &[&id]).await?;
+fn password_expiry_policy(row: &Row) -> Result<PolicyKind, StorageError> {
     Ok(PolicyKind::PasswordExpiry {
-        max_age: row.get("max_age"),
+        max_age: row.get("password_max_age"),
     })
 }
 
-async fn password_strength_policy(
-    _client: &impl GenericClient,
-    _id: i32,
-) -> Result<PolicyKind, StorageError> {
+fn password_strength_policy(_row: &Row) -> Result<PolicyKind, StorageError> {
     // let statement = client.prepare_cached(include_sql!("policy/password-strength-by-id")).await?;
     // let row = client.query_one(&statement, &[&id]).await?;
     Ok(PolicyKind::PasswordStrength {})
 }
-async fn expression_policy(
-    client: &impl GenericClient,
-    id: i32,
-) -> Result<PolicyKind, StorageError> {
-    let statement = client
-        .prepare_cached(include_sql!("policy/expression-by-id"))
-        .await?;
-    let row = client.query_one(&statement, &[&id]).await?;
+fn expression_policy(row: &Row) -> Result<PolicyKind, StorageError> {
     Ok(PolicyKind::Expression(row.get("expression")))
 }

@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use argon2::{password_hash::Encoding, PasswordHash};
 use axum::{
     extract::{Host, OriginalUri, State},
@@ -9,7 +11,6 @@ use axum::{
 use deadpool_postgres::GenericClient;
 use policy_engine::uri::Scheme;
 use serde_json::Value;
-use storage::datacache::Data;
 use tower_cookies::Cookies;
 use tracing::instrument;
 
@@ -43,19 +44,23 @@ pub fn setup_executor_router() -> Router<SharedState> {
 #[instrument(skip(state, session))]
 async fn get_flow(
     session: Session,
-    SlugWrapper(flow): SlugWrapper<Flow>,
+    SlugWrapper(slug, _): SlugWrapper<Flow>,
     State(state): State<SharedState>,
     query: Option<ExecutorQuery>,
     OriginalUri(uri): OriginalUri,
     Host(host): Host,
 ) -> Result<Json<FlowData>, ApiError> {
     let executor = state.executor();
-    let key = executor
-        .get_key(&session, flow)
-        .ok_or(ApiErrorKind::MiscInternal("Key has slug instead of id").into_api())?;
+    let flow = state
+        .storage()
+        .get_flow_by_slug(&slug)
+        .await?
+        .ok_or(ApiErrorKind::NotFound.into_api())?
+        .uid;
+    let key = executor.get_key(&session, flow);
     let execution = executor
         .get_execution(&key, true)
-        .await
+        .await?
         .ok_or(ApiErrorKind::NotFound.into_api())?;
     let connection = state.defaults().connection().await?;
     let context = CheckContextRequest {
@@ -73,7 +78,7 @@ async fn get_flow(
 #[instrument(skip(state, session, form, cookies, uri))]
 async fn post_flow(
     session: Session,
-    SlugWrapper(flow): SlugWrapper<Flow>,
+    SlugWrapper(slug, _): SlugWrapper<Flow>,
     State(state): State<SharedState>,
     OriginalUri(uri): OriginalUri,
     cookies: Cookies,
@@ -82,12 +87,16 @@ async fn post_flow(
     Form(form): Form<Value>,
 ) -> Result<Response, ApiError> {
     let executor = state.executor();
-    let key = executor
-        .get_key(&session, flow)
-        .ok_or(ApiErrorKind::NotFound.into_api())?;
+    let flow = state
+        .storage()
+        .get_flow_by_slug(&slug)
+        .await?
+        .ok_or(ApiErrorKind::NotFound.into_api())?
+        .uid;
+    let key = executor.get_key(&session, flow);
     let execution = executor
         .get_execution(&key, false)
-        .await
+        .await?
         .ok_or(ApiErrorKind::NotFound.into_api())?;
     let mut connection = state.defaults().connection().await?;
     let connection = connection.transaction().await?;
@@ -138,7 +147,7 @@ async fn handle_submission(
         return Ok(());
     }
     let entry = execution.get_entry();
-    let stage = execution.lookup_stage(&entry.stage).await;
+    let stage = execution.lookup_stage(entry.stage).await;
     handle_stage(form, client, executor, users, execution, stage).await
 }
 
@@ -149,13 +158,13 @@ async fn handle_stage(
     _executor: &FlowExecutor,
     users: &UserService,
     execution: &FlowExecution,
-    stage: Data<Stage>,
+    stage: Arc<Stage>,
 ) -> Result<(), ApiError> {
     match &stage.kind {
         StageKind::Deny => return Ok(()),
         StageKind::Prompt { bindings: _ } => return Ok(()),
         StageKind::Identification {
-            password,
+            password_stage,
             user_fields,
         } => {
             let uid = str_from_field(
@@ -193,8 +202,8 @@ async fn handle_stage(
                     .into())
                 }
             };
-            if let Some(password) = password {
-                let password = execution.lookup_stage(password).await;
+            if let Some(password_stage) = password_stage {
+                let password = execution.lookup_stage(*password_stage).await;
                 match &password.kind {
                     StageKind::Password { backends } => {
                         return handle_password_stage(&form, client, execution, &backends).await;
@@ -294,7 +303,7 @@ async fn complete(
             break;
         }
         let entry = execution.get_entry();
-        let stage = execution.lookup_stage(&entry.stage).await;
+        let stage = execution.lookup_stage(entry.stage).await;
         if stage.kind.requires_input() {
             break;
         }

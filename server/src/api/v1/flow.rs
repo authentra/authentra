@@ -31,7 +31,7 @@ async fn get_flows(
     State(state): State<SharedState>,
 ) -> Result<Json<Vec<Data<Flow>>>, ApiError> {
     state
-        .storage()
+        .storage_old()
         .get_for_data::<Flow>()
         .ok_or(ApiErrorKind::MiscInternal("Missing Flowstorage").into_api())?
         .find_all(None)
@@ -46,7 +46,7 @@ async fn get_flow(
     State(state): State<SharedState>,
 ) -> Result<Json<Data<Flow>>, ApiError> {
     state
-        .storage()
+        .storage_old()
         .lookup(&flow)
         .await
         .map(Json)
@@ -65,7 +65,7 @@ async fn update_flow(
     State(state): State<SharedState>,
     Json(body): Json<UpdateModel>,
 ) -> Result<(), ApiError> {
-    let storage = state.storage();
+    let storage = state.storage_old();
     let flow = storage.lookup(&flow).await.map(Json).ok_or(NOT_FOUND)?;
     let mut has_changed = false;
     let mut connection = state.defaults().connection().await?;
@@ -142,7 +142,7 @@ async fn create_flow(
     let uid: i32 = row.get(0);
     tx.commit().await?;
     let flow = state
-        .storage()
+        .storage_old()
         .get_for_data::<Flow>()
         .ok_or(ApiErrorKind::MiscInternal("Missing Flowstorage").into_api())?
         .find_one(&FlowQuery::uid(uid))

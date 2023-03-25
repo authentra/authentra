@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use async_trait::async_trait;
 use axum::{
     extract::{rejection::HostRejection, FromRequestParts, Host, RawQuery, State},
@@ -7,11 +9,11 @@ use axum::{
 };
 use derive_more::From;
 use http::{header::LOCATION, request::Parts, StatusCode};
-use model::{FlowDesignation, Tenant, TenantQuery};
+use model::{FlowDesignation, Tenant};
 use once_cell::sync::Lazy;
-use storage::datacache::{Data, DataRef, LookupRef};
+use storage::StorageError;
 
-use crate::SharedState;
+use crate::{api::ApiError, SharedState};
 
 pub fn setup_flow_router() -> Router<SharedState> {
     Router::new().route("/:flow_designation", get(tenant_flow_redirect))
@@ -28,26 +30,27 @@ fn base_uri() -> &'static str {
 }
 
 pub async fn tenant_flow_redirect(
-    tenant: Data<Tenant>,
+    tenant: Arc<Tenant>,
     designation: FlowDesignation,
     State(state): State<SharedState>,
     RawQuery(query): RawQuery,
-) -> Response {
+) -> Result<Response, ApiError> {
     if let Some(flow) = tenant.get_flow(&designation) {
-        if let Some(flow) = state.storage().lookup(&flow).await {
+        if let Some(flow) = state.storage().get_flow(flow).await? {
             let uri = match query {
                 Some(query) => format!("{}/flow/{}?{query}", *INTERFACE_BASE_URI, flow.slug),
                 None => format!("{}/flow/{}", *INTERFACE_BASE_URI, flow.slug),
             };
-            return (StatusCode::FOUND, [(LOCATION, uri)]).into_response();
+            return Ok((StatusCode::FOUND, [(LOCATION, uri)]).into_response());
         }
     }
-    StatusCode::NOT_FOUND.into_response()
+    Ok(StatusCode::NOT_FOUND.into_response())
 }
 
 #[derive(From)]
 pub enum TenantRejection {
     Host(HostRejection),
+    Internal(StorageError),
     NotFound,
 }
 
@@ -56,20 +59,20 @@ impl IntoResponse for TenantRejection {
         match self {
             TenantRejection::Host(host) => host.into_response(),
             TenantRejection::NotFound => StatusCode::NOT_FOUND.into_response(),
+            TenantRejection::Internal(err) => ApiError::from(err).into_response(),
         }
     }
 }
 
 #[async_trait]
-impl FromRequestParts<SharedState> for Data<Tenant> {
+impl FromRequestParts<SharedState> for Arc<Tenant> {
     type Rejection = TenantRejection;
     async fn from_request_parts(
         parts: &mut Parts,
         state: &SharedState,
     ) -> Result<Self, Self::Rejection> {
         let host = Host::from_request_parts(parts, state).await?;
-        let reference: DataRef<Tenant> = DataRef::new(TenantQuery::host(host.0));
-        if let Some(tenant) = state.storage().lookup(&reference).await {
+        if let Some(tenant) = state.storage().get_tenant_by_host(host.0.as_str()).await? {
             return Ok(tenant);
         }
         state.defaults().tenant().ok_or(TenantRejection::NotFound)

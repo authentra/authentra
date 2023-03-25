@@ -1,4 +1,3 @@
-use datacache::DataRef;
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 
@@ -45,7 +44,7 @@ pub enum StageKind {
         bindings: Vec<PromptBinding>,
     },
     Identification {
-        password: Option<DataRef<Stage>>,
+        password_stage: Option<i32>,
         user_fields: Vec<UserField>,
     },
     UserLogin,

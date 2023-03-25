@@ -3,10 +3,9 @@ use axum::{
     extract::{rejection::PathRejection, Path},
     http::request::Parts,
 };
-use datacache::DataRef;
 use serde::Serialize;
 
-use crate::{Flow, FlowDesignation};
+use crate::FlowDesignation;
 
 #[derive(Debug, Clone, Serialize)]
 #[cfg_attr(feature = "datacache", derive(datacache::DataMarker))]
@@ -20,17 +19,17 @@ pub struct Tenant {
     pub logo: String,
     pub favicon: String,
 
-    pub invalidation_flow: Option<DataRef<Flow>>,
-    pub authentication_flow: Option<DataRef<Flow>>,
-    pub authorization_flow: Option<DataRef<Flow>>,
-    pub enrollment_flow: Option<DataRef<Flow>>,
-    pub recovery_flow: Option<DataRef<Flow>>,
-    pub unenrollment_flow: Option<DataRef<Flow>>,
-    pub configuration_flow: Option<DataRef<Flow>>,
+    pub invalidation_flow: Option<i32>,
+    pub authentication_flow: Option<i32>,
+    pub authorization_flow: Option<i32>,
+    pub enrollment_flow: Option<i32>,
+    pub recovery_flow: Option<i32>,
+    pub unenrollment_flow: Option<i32>,
+    pub configuration_flow: Option<i32>,
 }
 
 impl Tenant {
-    pub fn get_flow(&self, designation: &FlowDesignation) -> Option<DataRef<Flow>> {
+    pub fn get_flow(&self, designation: &FlowDesignation) -> Option<i32> {
         match designation {
             FlowDesignation::Invalidation => self.invalidation_flow.clone(),
             FlowDesignation::Authentication => self.authentication_flow.clone(),

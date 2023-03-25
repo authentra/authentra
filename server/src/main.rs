@@ -1,11 +1,11 @@
 use std::ops::DerefMut;
-
 use std::sync::Arc;
 use std::time::Duration;
 
 use crate::api::setup_api_v1;
-use crate::config::PostgresConfiguration;
-use crate::config::{AuthustConfiguration, InternalAuthustConfiguration};
+use crate::config::{
+    AuthustConfiguration, InternalAuthustConfiguration, ListenConfiguration, PostgresConfiguration,
+};
 use crate::interface::setup_interface_router;
 use crate::otel_middleware::{otel_layer, ExtensionLayer};
 use crate::service::user::UserService;
@@ -20,7 +20,7 @@ use executor::FlowExecutor;
 use futures::{Future, FutureExt};
 use http::StatusCode;
 use jsonwebtoken::{DecodingKey, EncodingKey};
-use model::{Flow, Policy, Prompt, Stage, Tenant, TenantQuery};
+use model::Tenant;
 
 use opentelemetry::sdk::resource::{EnvResourceDetector, ResourceDetector};
 use opentelemetry::{sdk::Resource, Key, KeyValue};
@@ -29,8 +29,7 @@ use opentelemetry_otlp::{self as otlp, ExportConfig};
 use otlp::{SpanExporterBuilder, TonicExporterBuilder, WithExportConfig};
 use service::policy::PolicyService;
 
-use storage::datacache::{Data, DataStorage};
-use storage::{StorageError, StorageManager};
+use storage::{Storage, StorageManager};
 use tokio::signal;
 use tower::ServiceBuilder;
 use tower_cookies::CookieManagerLayer;
@@ -128,12 +127,17 @@ async fn setup() {
     tracing::subscriber::set_global_default(registry).unwrap();
     LogTracer::init().unwrap();
     info!("Setting up database...");
+    let pool = setup_database(&configuration.postgres, &password).await;
+    let listen = configuration.listen.clone();
+    let state = create_state(configuration, pool).await;
+    let router = router(state).await;
+
     let shutdown_future = signal::ctrl_c().map(|fut| {
         fut.expect("Error occurred while waiting for Ctrl+C signal");
         tracing::info!("Received shutdown signal");
     });
-    let pool = setup_database(&configuration.postgres, &password).await;
-    let app_future = start_server(configuration, pool, shutdown_future);
+
+    let app_future = start_server(listen, router, shutdown_future);
     app_future.await;
     tracing::info!("Shutting down opentelemetry provider");
     opentelemetry::global::shutdown_tracer_provider();
@@ -168,48 +172,6 @@ pub struct AuthustState {
     pub configuration: AuthustConfiguration,
 }
 
-async fn preload(storage: &StorageManager) -> Result<(), Arc<StorageError>> {
-    info!("Preloading flows...");
-    let flows = storage
-        .get_for_data::<Flow>()
-        .expect("Failed to get storage")
-        .find_all(None)
-        .await?
-        .len();
-    info!("Preloading stages...");
-    let stages = storage
-        .get_for_data::<Stage>()
-        .expect("Failed to get storage")
-        .find_all(None)
-        .await?
-        .len();
-    info!("Preloading policies...");
-    let policies = storage
-        .get_for_data::<Policy>()
-        .expect("Failed to get storage")
-        .find_all(None)
-        .await?
-        .len();
-    info!("Preloading prompts...");
-    let prompts = storage
-        .get_for_data::<Prompt>()
-        .expect("Failed to get storage")
-        .find_all(None)
-        .await?
-        .len();
-    info!("Preloading tenants...");
-    let tenants = storage
-        .get_for_data::<Tenant>()
-        .expect("Failed to get storage")
-        .find_all(None)
-        .await?
-        .len();
-
-    info!("Preload complete");
-    info!("Loaded {flows} flows,{stages} stages, {policies} policies, {prompts} prompts and {tenants} tenants");
-    Ok(())
-}
-
 #[derive(Clone)]
 pub struct SharedState(Arc<InternalSharedState>);
 
@@ -225,9 +187,12 @@ impl SharedState {
     pub fn auth_data(&self) -> &AuthServiceData {
         &self.0.auth_data
     }
-
-    pub fn storage(&self) -> &StorageManager {
+    pub fn storage(&self) -> &Storage {
         &self.0.storage
+    }
+
+    pub fn storage_old(&self) -> &StorageManager {
+        &self.0.storage_old
     }
     pub fn defaults(&self) -> &Defaults {
         &self.0.defaults.as_ref()
@@ -241,19 +206,19 @@ struct InternalSharedState {
     users: UserService,
     executor: FlowExecutor,
     auth_data: AuthServiceData,
-    storage: StorageManager,
+    storage: Storage,
+    storage_old: StorageManager,
     defaults: Arc<Defaults>,
     policies: PolicyService,
 }
 
 pub struct Defaults {
-    storage: StorageManager,
     pool: Pool,
-    tenant: Option<Data<Tenant>>,
+    tenant: Option<Arc<Tenant>>,
 }
 
 impl Defaults {
-    pub fn tenant(&self) -> Option<Data<Tenant>> {
+    pub fn tenant(&self) -> Option<Arc<Tenant>> {
         self.tenant.clone()
     }
     pub fn pool(&self) -> Pool {
@@ -265,23 +230,19 @@ impl Defaults {
 }
 
 impl Defaults {
-    pub async fn new(storage: StorageManager, pool: Pool) -> Self {
+    pub async fn new(storage: &Storage, pool: Pool) -> Self {
         let default = Self::find_default(
-            &storage,
+            storage,
             &pool.get().await.expect("Failed to get connection"),
         )
         .await;
         Defaults {
-            storage,
             pool,
             tenant: default,
         }
     }
 
-    async fn find_default(
-        storage: &StorageManager,
-        client: &impl GenericClient,
-    ) -> Option<Data<Tenant>> {
+    async fn find_default(storage: &Storage, client: &impl GenericClient) -> Option<Arc<Tenant>> {
         let statement = client
             .prepare_cached("select uid from tenants where is_default = true")
             .await
@@ -292,28 +253,19 @@ impl Defaults {
             .await
             .expect("Failed to execute statement") else { return None };
         let tenant = storage
-            .get_for_data::<Tenant>()
-            .expect("Failed to get Tenant storage")
-            .find_optional(&TenantQuery::uid(row.get("uid")))
+            .get_tenant(row.get("uid"))
             .await
             .expect("An error occurred while loading tenant");
         tenant
     }
 }
 
-async fn start_server(
-    config: InternalAuthustConfiguration,
-    pool: Pool,
-    future: impl Future<Output = ()>,
-) {
-    #[cfg(debug_assertions)]
-    #[cfg(feature = "dev-mode")]
-    let cors = tower_http::cors::CorsLayer::very_permissive();
-    let storage = storage::create_manager(pool.clone());
-    preload(&storage).await.expect("Preloading failed");
+async fn create_state(config: InternalAuthustConfiguration, pool: Pool) -> SharedState {
+    let storage = Storage::new(pool.clone()).await.unwrap();
+    let storage_old = storage::create_manager(pool.clone());
     let policies = PolicyService::new(storage.clone(), pool.clone());
-    let defaults = Defaults::new(storage.clone(), pool.clone()).await;
-    let executor = FlowExecutor::new(storage.clone(), policies.clone());
+    let defaults = Defaults::new(&storage, pool.clone()).await;
+    let executor = FlowExecutor::new(Arc::new(storage.clone()), policies.clone());
     let users = UserService::new();
     let internal_state = InternalSharedState {
         users,
@@ -322,11 +274,19 @@ async fn start_server(
             encoding_key: EncodingKey::from_secret(config.secret.as_bytes()),
             decoding_key: DecodingKey::from_secret(config.secret.as_bytes()),
         },
-        storage: storage.clone(),
+        storage,
+        storage_old: storage_old.clone(),
         defaults: Arc::new(defaults),
         policies,
     };
     let state = SharedState(Arc::new(internal_state));
+    state
+}
+
+async fn router(state: SharedState) -> Router<()> {
+    #[cfg(debug_assertions)]
+    #[cfg(feature = "dev-mode")]
+    let cors = tower_http::cors::CorsLayer::very_permissive();
     let service = ServiceBuilder::new()
         .layer(ExtensionLayer)
         .layer(otel_layer())
@@ -338,12 +298,20 @@ async fn start_server(
     let service = service.layer(cors);
     let router = Router::new()
         .route("/test", get(hello_world))
-        .nest("/api/v1", setup_api_v1(&config.secret, state.clone()).await)
+        .nest("/api/v1", setup_api_v1(state.clone()).await)
         .nest("/", setup_interface_router())
         .layer(service)
         .with_state(state);
-    let bind = axum::Server::bind(&config.listen.http);
-    info!("Listening on {}...", config.listen.http);
+    router
+}
+
+async fn start_server(
+    listen: ListenConfiguration,
+    router: Router<()>,
+    future: impl Future<Output = ()>,
+) {
+    let bind = axum::Server::bind(&listen.http);
+    info!("Listening on {}...", listen.http);
     bind.serve(router.into_make_service())
         .with_graceful_shutdown(future)
         .await

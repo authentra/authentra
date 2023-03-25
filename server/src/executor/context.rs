@@ -2,10 +2,11 @@ use std::{
     any::{Any, TypeId},
     collections::HashMap,
     marker::PhantomData,
+    sync::Arc,
 };
 
-use model::{PendingUser, Stage};
-use storage::{datacache::DataRef, FreezedStorage};
+use model::PendingUser;
+use storage::ExecutorStorage;
 use time::OffsetDateTime;
 use uuid::Uuid;
 
@@ -15,17 +16,17 @@ pub struct ExecutionContext {
     pub fields: FieldStorage,
     pub pending: Option<PendingUser>,
     pub user: Option<PolicyUser>,
-    pub storage: FreezedStorage,
+    pub storage: Arc<dyn ExecutorStorage>,
     pub error: Option<ExecutionError>,
 }
 
 pub struct ExecutionError {
-    pub stage: Option<DataRef<Stage>>,
+    pub stage: Option<i32>,
     pub message: String,
 }
 
 impl ExecutionContext {
-    pub fn new(session_id: String, storage: FreezedStorage) -> Self {
+    pub fn new(session_id: String, storage: Arc<dyn ExecutorStorage>) -> Self {
         Self {
             session_id,
             start_time: OffsetDateTime::now_utc(),

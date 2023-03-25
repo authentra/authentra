@@ -1,9 +1,6 @@
-use datacache::DataRef;
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
-
-use super::{Policy, Stage};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSql, FromSql)]
 #[postgres(name = "authentication_requirement")]
@@ -67,14 +64,14 @@ pub struct FlowBinding {
 pub enum FlowBindingKind {
     Group(Uuid),
     User(Uuid),
-    Policy(DataRef<Policy>),
+    Policy(i32),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FlowEntry {
     pub ordering: i16,
     pub bindings: Vec<FlowBinding>,
-    pub stage: DataRef<Stage>,
+    pub stage: i32,
 }
 
 #[cfg(feature = "axum")]

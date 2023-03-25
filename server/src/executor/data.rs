@@ -18,11 +18,11 @@ impl AsComponent for Stage {
             }),
             StageKind::Prompt { bindings: _ } => todo!(),
             StageKind::Identification {
-                password,
+                password_stage,
                 user_fields,
             } => {
-                let _stage = match password {
-                    Some(v) => Some(execution.lookup_stage(&v).await),
+                let _stage = match password_stage {
+                    Some(v) => Some(execution.lookup_stage(*v).await),
                     None => None,
                 };
                 Some(FlowComponent::Identification {
@@ -31,7 +31,7 @@ impl AsComponent for Stage {
                         sources: vec![],
                         show_source_labels: false,
                     },
-                    password: password.clone().map(|_| PasswordComponentData {
+                    password: password_stage.clone().map(|_| PasswordComponentData {
                         recovery_url: "".into(),
                     }),
                 })

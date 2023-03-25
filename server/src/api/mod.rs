@@ -1,4 +1,4 @@
-use std::fmt::Debug;
+use std::{fmt::Debug, marker::PhantomData};
 
 use async_trait::async_trait;
 use axum::{
@@ -18,8 +18,7 @@ use model::{error::SubmissionError, Flow, FlowParam, FlowQuery};
 use serde::Deserialize;
 use storage::{
     datacache::{DataMarker, DataRef},
-    storage::EntityId,
-    StorageError,
+    EntityId, StorageError,
 };
 use tokio_postgres::error::SqlState;
 use tracing_error::SpanTrace;
@@ -270,11 +269,11 @@ pub async fn ping_handler() -> &'static str {
     "Pong!"
 }
 
-pub struct SlugWrapper<D: DataMarker>(pub DataRef<D>);
+pub struct SlugWrapper<D: DataMarker>(pub String, PhantomData<D>);
 
 impl<D: DataMarker> SlugWrapper<D> {
-    pub fn new(query: D::Query) -> Self {
-        Self(DataRef::new(query))
+    pub fn new(slug: String) -> Self {
+        Self(slug, PhantomData)
     }
 }
 
@@ -288,7 +287,7 @@ where
     async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
         let path: Path<FlowParam> = Path::from_request_parts(parts, state).await?;
         let flow_slug = path.0.flow_slug;
-        Ok(SlugWrapper::new(FlowQuery::slug(flow_slug)))
+        Ok(SlugWrapper::new(flow_slug))
     }
 }
 

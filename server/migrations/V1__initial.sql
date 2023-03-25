@@ -1,12 +1,12 @@
 create table users
 (
-    uid                  uuid      default gen_random_uuid() primary key not null,
-    name                 varchar(32) unique                              not null check ( name = lower(name) ),
+    uid                  uuid                     default gen_random_uuid() primary key not null,
+    name                 varchar(32) unique                                             not null check ( name = lower(name) ),
     email                varchar(64) unique,
     display_name         varchar(32),
-    password             varchar(255)                                    not null,
+    password             varchar(255)                                                   not null,
     password_change_date timestamp with time zone default now()                         not null,
-    administrator        boolean   default false                         not null
+    administrator        boolean                  default false                         not null
 );
 
 create unique index users_name_lower on users ((lower(name)));
@@ -19,31 +19,13 @@ create table sessions
 
 create type policy_kind as enum ('password_expiry', 'password_strength', 'expression');
 
-create table password_expiration_policies
-(
-    uid     serial primary key,
-    max_age int4 not null
-);
-
-create table password_strength_policies
-(
-    uid serial primary key
-);
-
-create table expression_policies
-(
-    uid        serial primary key,
-    expression text not null
-);
-
 create table policies
 (
-    uid                 serial primary key,
-    slug                varchar(128) not null unique check ( slug = lower(slug) ),
-    kind                policy_kind  not null,
-    password_expiration int4 references password_expiration_policies,
-    password_strength   int4 references password_strength_policies,
-    expression          int4 references expression_policies
+    uid              serial primary key,
+    slug             varchar(128) not null unique check ( slug = lower(slug) ),
+    kind             policy_kind  not null,
+    password_max_age int4,
+    expression       text
 );
 
 create unique index policy_slug ON policies ((lower(slug)));
@@ -109,7 +91,7 @@ create table stage_prompt_bindings
     primary key (prompt, stage)
 );
 
-create index stage_prompt_bindings_stage on stage_prompt_bindings(stage);
+create index stage_prompt_bindings_stage on stage_prompt_bindings (stage);
 
 create type authentication_requirement as enum ('required', 'none', 'superuser', 'ignored');
 create type flow_designation as enum ('invalidation', 'authentication', 'authorization', 'enrollment', 'recovery', 'unenrollment', 'configuration');
@@ -146,7 +128,8 @@ create table flow_bindings
 
     ordering      int2 not null,
     enabled       bool not null,
-    negate_result bool not null
+    negate_result bool not null,
+    primary key (policy, flow, entry)
 );
 
 
@@ -178,11 +161,11 @@ create table tenants
     logo                varchar(255) not null,
     favicon             varchar(255) not null,
 
-    invalidation_flow   int4 references flows on delete set null,
-    authentication_flow int4 references flows on delete set null,
-    authorization_flow  int4 references flows on delete set null,
-    enrollment_flow     int4 references flows on delete set null,
-    recovery_flow       int4 references flows on delete set null,
-    unenrollment_flow   int4 references flows on delete set null,
-    configuration_flow  int4 references flows on delete set null
+    invalidation_flow   int4         references flows on delete set null,
+    authentication_flow int4         references flows on delete set null,
+    authorization_flow  int4         references flows on delete set null,
+    enrollment_flow     int4         references flows on delete set null,
+    recovery_flow       int4         references flows on delete set null,
+    unenrollment_flow   int4         references flows on delete set null,
+    configuration_flow  int4         references flows on delete set null
 );

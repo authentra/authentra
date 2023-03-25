@@ -2,8 +2,8 @@ use async_trait::async_trait;
 use datacache::{DataQueryExecutor, DataRef, LookupRef};
 use deadpool_postgres::GenericClient;
 use model::{
-    ConsentMode, PasswordBackend, PgConsentMode, PromptBinding, PromptQuery, Stage, StageKind,
-    StageQuery, UserField,
+    ConsentMode, PasswordBackend, PgConsentMode, Prompt, PromptBinding, PromptQuery, Stage,
+    StageKind, StageQuery, UserField,
 };
 use postgres_types::FromSql;
 use tokio_postgres::Row;
@@ -129,7 +129,7 @@ async fn identification_stage(
     client: &impl GenericClient,
     row: &Row,
 ) -> Result<StageKind, StorageError> {
-    let password_stage_id: Option<i32> = row.get("identification_password_stage");
+    let password_stage: Option<i32> = row.get("identification_password_stage");
     let identification_id: i32 = row.get("identification_stage");
     let statement = client
         .prepare_cached(include_sql!("stage/identification-by-id"))
@@ -137,7 +137,7 @@ async fn identification_stage(
     let id_row = client.query_one(&statement, &[&identification_id]).await?;
     let user_fields: Vec<UserField> = id_row.get("fields");
     Ok(StageKind::Identification {
-        password: password_stage_id.map(|uid| DataRef::new(StageQuery::uid(uid))),
+        password_stage,
         user_fields,
     })
 }
@@ -181,7 +181,7 @@ async fn prompt_stage(
         .into_iter()
         .map(|row| PromptBinding {
             order: row.get("ordering"),
-            prompt: DataRef::new(PromptQuery::uid(row.get("prompt"))),
+            prompt: row.get("prompt"),
         })
         .collect();
     bindings.sort_by_key(|v| v.order);
@@ -194,17 +194,20 @@ impl ReverseLookup<Stage> for ProxiedStorage {
         match &sub.kind {
             model::StageKind::Prompt { bindings } => {
                 for binding in bindings {
-                    self.lookup(&binding.prompt)
+                    self.lookup(&DataRef::<Prompt>::new(PromptQuery::uid(binding.prompt)))
                         .await
                         .expect("Failed to lookup prompt");
                 }
             }
             model::StageKind::Identification {
-                password,
+                password_stage,
                 user_fields: _,
             } => {
-                if let Some(password) = password {
-                    let stage = self.lookup(password).await.expect("Failed to lookup stage");
+                if let Some(password) = password_stage {
+                    let stage = self
+                        .lookup(&DataRef::<Stage>::new(StageQuery::uid(password.clone())))
+                        .await
+                        .expect("Failed to lookup stage");
                     self.reverse_lookup(&*stage).await;
                 }
             }

@@ -1,7 +1,7 @@
 use async_trait::async_trait;
-use datacache::{DataQueryExecutor, DataRef};
+use datacache::DataQueryExecutor;
 use deadpool_postgres::GenericClient;
-use model::{FlowQuery, Tenant, TenantQuery};
+use model::{Tenant, TenantQuery};
 use tokio_postgres::Row;
 
 use crate::{include_sql, StorageError};
@@ -88,26 +88,12 @@ pub(crate) fn from_row(row: Row) -> Tenant {
         title: row.get("title"),
         logo: row.get("logo"),
         favicon: row.get("favicon"),
-        invalidation_flow: row
-            .get::<_, Option<i32>>("invalidation_flow")
-            .map(|uid| DataRef::new(FlowQuery::uid(uid))),
-        authentication_flow: row
-            .get::<_, Option<i32>>("authentication_flow")
-            .map(|uid| DataRef::new(FlowQuery::uid(uid))),
-        authorization_flow: row
-            .get::<_, Option<i32>>("authorization_flow")
-            .map(|uid| DataRef::new(FlowQuery::uid(uid))),
-        enrollment_flow: row
-            .get::<_, Option<i32>>("enrollment_flow")
-            .map(|uid| DataRef::new(FlowQuery::uid(uid))),
-        recovery_flow: row
-            .get::<_, Option<i32>>("recovery_flow")
-            .map(|uid| DataRef::new(FlowQuery::uid(uid))),
-        unenrollment_flow: row
-            .get::<_, Option<i32>>("unenrollment_flow")
-            .map(|uid| DataRef::new(FlowQuery::uid(uid))),
-        configuration_flow: row
-            .get::<_, Option<i32>>("configuration_flow")
-            .map(|uid| DataRef::new(FlowQuery::uid(uid))),
+        invalidation_flow: row.get("invalidation_flow"),
+        authentication_flow: row.get("authentication_flow"),
+        authorization_flow: row.get("authorization_flow"),
+        enrollment_flow: row.get("enrollment_flow"),
+        recovery_flow: row.get("recovery_flow"),
+        unenrollment_flow: row.get("unenrollment_flow"),
+        configuration_flow: row.get("configuration_flow"),
     }
 }

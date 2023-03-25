@@ -1,7 +1,10 @@
 use async_trait::async_trait;
 use datacache::{DataQueryExecutor, DataRef, LookupRef};
 use deadpool_postgres::GenericClient;
-use model::{Flow, FlowBinding, FlowBindingKind, FlowEntry, FlowQuery, PolicyQuery, StageQuery};
+use model::{
+    Flow, FlowBinding, FlowBindingKind, FlowEntry, FlowQuery, Policy, PolicyQuery, Stage,
+    StageQuery,
+};
 use tokio_postgres::{Row, Statement};
 use uuid::Uuid;
 
@@ -118,7 +121,7 @@ fn binding_from_row(row: Row) -> FlowBinding {
     } else if let Some(group) = row.get::<_, Option<Uuid>>("group_binding") {
         kind = FlowBindingKind::Group(group);
     } else if let Some(policy) = row.get::<_, Option<i32>>("policy") {
-        kind = FlowBindingKind::Policy(DataRef::new(PolicyQuery::uid(policy)))
+        kind = FlowBindingKind::Policy(policy)
     } else {
         tracing::warn!(row = ?row, "Invalid flow binding");
         kind = FlowBindingKind::User(Uuid::nil());
@@ -151,7 +154,7 @@ async fn entry_from_row(client: &impl GenericClient, row: Row) -> Result<FlowEnt
     Ok(FlowEntry {
         ordering: row.get("ordering"),
         bindings,
-        stage: DataRef::new(StageQuery::uid(row.get("stage"))),
+        stage: row.get("stage"),
     })
 }
 
@@ -163,17 +166,21 @@ impl ReverseLookup<Flow> for ProxiedStorage {
             .expect("Failed to lookup flow");
         for binding in &sub.bindings {
             if let FlowBindingKind::Policy(policy) = &binding.kind {
-                self.lookup(policy).await.expect("Failed to lookup policy");
+                self.lookup(&DataRef::<Policy>::new(PolicyQuery::uid(policy.clone())))
+                    .await
+                    .expect("Failed to lookup policy");
             }
         }
         for entry in &sub.entries {
             for binding in &entry.bindings {
                 if let FlowBindingKind::Policy(policy) = &binding.kind {
-                    self.lookup(policy).await.expect("Failed to lookup policy");
+                    self.lookup(&DataRef::<Policy>::new(PolicyQuery::uid(policy.clone())))
+                        .await
+                        .expect("Failed to lookup policy");
                 }
             }
             let stage = self
-                .lookup(&entry.stage)
+                .lookup(&DataRef::<Stage>::new(StageQuery::uid(entry.stage)))
                 .await
                 .expect("Failed to lookup stage");
             self.reverse_lookup(&*stage).await;
