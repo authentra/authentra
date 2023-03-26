@@ -80,7 +80,6 @@ impl Defaults {
         let statement = client
             .prepare_cached("select uid from tenants where is_default = true")
             .await
-            .ok()
             .expect("Failed to prepare statement");
         let Some(row) = client
             .query_opt(&statement, &[])

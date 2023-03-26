@@ -111,7 +111,7 @@ where
 }
 
 pub enum AuthExtension {
-    Valid(AuthExtensionData),
+    Valid(Box<AuthExtensionData>),
     MissingCookie,
 }
 
@@ -151,7 +151,7 @@ pub struct Claims {
     pub is_admin: bool,
 }
 
-const VALIDATION: Lazy<Validation> = Lazy::new(|| {
+static VALIDATION: Lazy<Validation> = Lazy::new(|| {
     let mut validation = Validation::new(Algorithm::HS256);
     validation.set_required_spec_claims(&["iss"]);
     validation.set_issuer(&["authust"]);
@@ -192,14 +192,14 @@ fn handle_auth<B>(req: &mut Request<B>, data: &AuthServiceData) -> Result<(), Re
     let value = cookie.value();
     let token = decode_token(&data.decoding_key, value).map_err(|err| err.into_response())?;
     req.extensions_mut()
-        .insert(AuthExtension::Valid(AuthExtensionData {
+        .insert(AuthExtension::Valid(Box::new(AuthExtensionData {
             header: token.header,
             claims: token.claims,
-        }));
+        })));
     Ok(())
 }
 
-fn get_auth_extension_data(req: &mut Parts) -> Result<AuthExtensionData, ApiError> {
+fn get_auth_extension_data(req: &mut Parts) -> Result<&AuthExtensionData, ApiError> {
     let Some(extension): Option<&AuthExtension> = req.extensions.get() else {
             return Err(ApiErrorKind::MissingMiddleware("auth").into_api());
         };
@@ -209,7 +209,7 @@ fn get_auth_extension_data(req: &mut Parts) -> Result<AuthExtensionData, ApiErro
             return Err(ApiErrorKind::SessionCookieMissing.into_api());
         }
     };
-    Ok(data.to_owned())
+    Ok(data.as_ref())
 }
 
 async fn make_new_session<C: GenericClient>(
@@ -257,7 +257,7 @@ impl FromRequestParts<SharedState> for Session {
                 _ => Err(err),
             },
         }?;
-        let claims = data.claims;
+        let claims = &data.claims;
         let statement = connection
             .prepare_cached("select user_id from sessions where uid = $1")
             .await?;
@@ -267,7 +267,7 @@ impl FromRequestParts<SharedState> for Session {
             .map(|v| v.get::<_, Option<Uuid>>(0));
         if let Some(user_id) = res {
             Ok(Session {
-                session_id: claims.sid,
+                session_id: claims.sid.clone(),
                 user_id,
                 is_admin: claims.is_admin,
             })

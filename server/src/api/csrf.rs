@@ -121,7 +121,7 @@ where
 fn check_csrf<B>(
     req: &Request<B>,
     allowed_hosts_wildcard: bool,
-    allowed_hosts: &Vec<String>,
+    allowed_hosts: &[String],
 ) -> Result<(), Response> {
     if matches!(
         req.method(),
@@ -183,7 +183,7 @@ fn check_cookie<B>(req: &Request<B>, add: bool) -> Result<(), CsrfCookieError> {
         }
         return Err(CsrfCookieError::MissingCookie);
     };
-    let Some(header) = req.headers().get(CSRF_HEADER) else { return Err(CsrfCookieError::InvalidHeader) };
+    let Some(header) = req.headers().get(CSRF_HEADER.clone()) else { return Err(CsrfCookieError::InvalidHeader) };
     let Ok(str) = header.to_str() else { return Err(CsrfCookieError::InvalidHeader) };
     if validate_token(str, cookie.value()) {
         Ok(())

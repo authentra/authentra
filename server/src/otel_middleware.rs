@@ -7,7 +7,7 @@ use futures::future::BoxFuture;
 use futures::{Future, FutureExt};
 use http::request::Parts;
 use http::{header, uri::Scheme, Method, Request, Response, Version};
-use once_cell::unsync::Lazy;
+
 use opentelemetry::sdk::trace::{IdGenerator, RandomIdGenerator};
 use tower::{Layer, Service};
 use tower_http::{
@@ -15,8 +15,6 @@ use tower_http::{
     trace::{MakeSpan, OnBodyChunk, OnEos, OnFailure, OnRequest, OnResponse, TraceLayer},
 };
 use tracing::{field::Empty, Span};
-
-const ID_GENERATOR: Lazy<RandomIdGenerator> = Lazy::new(RandomIdGenerator::default);
 
 #[derive(Clone)]
 pub struct ExtensionLayer;
@@ -167,7 +165,7 @@ impl<B> MakeSpan<B> for OtelData {
         let method = http_method(req.method());
         let flavor = http_flavor(req.version());
         let name = format!("{method} {route}");
-        let trace_id = ID_GENERATOR.new_trace_id();
+        let trace_id = RandomIdGenerator::default().new_trace_id();
         let span = tracing::info_span!(
             "Http Request",
             otel.name = name,

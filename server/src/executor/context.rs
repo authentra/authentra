@@ -50,6 +50,7 @@ pub enum FieldStorageError {
     WrongType,
 }
 
+#[derive(Default)]
 pub struct FieldStorage {
     fields: HashMap<String, Box<dyn Any + Send + Sync>>,
 }

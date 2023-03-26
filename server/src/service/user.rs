@@ -6,7 +6,7 @@ use uuid::Uuid;
 
 use crate::api::ApiError;
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct UserService {}
 
 impl UserService {
@@ -35,12 +35,12 @@ impl UserService {
             .await?;
         let result = client.query_opt(&statement, &[&uid]).await?;
         Ok(result.map(|res| PartialUser {
-                uid: res.get("uid"),
-                name: res.get("name"),
-                avatar_url: None,
-                is_admin: res.get("administrator"),
-                password_change_date: get_password_change_date(&res),
-            }))
+            uid: res.get("uid"),
+            name: res.get("name"),
+            avatar_url: None,
+            is_admin: res.get("administrator"),
+            password_change_date: get_password_change_date(&res),
+        }))
     }
 
     pub async fn lookup_user(

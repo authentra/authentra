@@ -7,9 +7,9 @@ use std::{
 };
 
 use http::Uri;
-use parking_lot::{lock_api::RwLockReadGuard, Mutex, RawRwLock, RwLock};
 use policy_engine::{execute, uri::Scheme, LogEntry};
 use storage::ExecutorStorage;
+use tokio::sync::{RwLock, RwLockReadGuard};
 use uuid::Uuid;
 
 use crate::{
@@ -27,8 +27,9 @@ use super::{data::AsComponent, ExecutionContext, ExecutionError, FlowExecutor, F
 pub struct FlowExecution(pub(super) Arc<FlowExecutionInternal>);
 
 impl FlowExecution {
-    pub fn get_context(&self) -> RwLockReadGuard<RawRwLock, ExecutionContext> {
-        self.0.context.read()
+    #[inline(always)]
+    pub async fn get_context(&self) -> RwLockReadGuard<ExecutionContext> {
+        self.0.context.read().await
     }
     pub fn use_mut_context<F: FnOnce(&mut ExecutionContext)>(&self, func: F) {
         let mut lock = self.0.context.try_write().expect("Context is locked");
@@ -38,9 +39,9 @@ impl FlowExecution {
         self.use_mut_context(|ctx| ctx.error = Some(error));
     }
 
-    pub fn get_check_context(&self, context: CheckContextRequest) -> CheckContext {
-        let pending_user = self.get_context().pending.clone();
-        
+    pub async fn get_check_context(&self, context: CheckContextRequest) -> CheckContext {
+        let pending_user = self.get_context().await.pending.clone();
+
         CheckContext {
             inner: CheckContextData {
                 request: context,
@@ -58,7 +59,7 @@ impl FlowExecution {
             title: flow.title.clone(),
         };
         let is_completed = self.0.is_completed.load(Ordering::Relaxed);
-        if let Some(_) = self.check(context).await.expect("FlowCheck failed") {
+        if let Some(_message) = self.check(context).await.expect("FlowCheck failed") {
             if !is_completed {
                 return FlowData {
                     flow: flow_info,
@@ -70,6 +71,7 @@ impl FlowExecution {
                 };
             }
         }
+        let exc_context = self.get_context().await;
         let component = if is_completed {
             match &context.request.query.next {
                 Some(to) => {
@@ -81,7 +83,7 @@ impl FlowExecution {
                 },
             }
         } else {
-            match &self.get_context().error {
+            match &exc_context.error {
                 Some(err) => FlowComponent::Error {
                     message: err.message.clone(),
                 },
@@ -96,12 +98,12 @@ impl FlowExecution {
         FlowData {
             flow: flow_info,
             component,
-            pending_user: self.0.context.read().pending.clone(),
+            pending_user: exc_context.pending.clone(),
             error,
         }
     }
     pub fn get_entry(&self) -> &FlowEntry {
-        let entry_idx = self.0.current_entry_idx.lock().to_owned();
+        let entry_idx = *self.0.current_entry_idx.lock();
         let Some(entry) =self.0.flow.entries.get(entry_idx) else { panic!("Entry index out of bounds") };
         entry
     }
@@ -273,7 +275,7 @@ async fn check_policy(context: &CheckContext, policy: &Policy) -> FlowCheckOutpu
     match &policy.kind {
         model::PolicyKind::PasswordExpiry { max_age } => {
             let duration = time::Duration::seconds(*max_age as i64);
-            let start_time = context.execution.get_context().start_time;
+            let start_time = context.execution.get_context().await.start_time;
             context
                 .request
                 .user
@@ -373,7 +375,7 @@ pub(super) struct FlowExecutionInternal {
     pub(super) key: FlowKey,
     pub(super) storage: Arc<dyn ExecutorStorage>,
     pub(super) context: RwLock<ExecutionContext>,
-    pub(super) current_entry_idx: Mutex<usize>,
+    pub(super) current_entry_idx: parking_lot::Mutex<usize>,
     pub(super) is_completed: AtomicBool,
     pub(super) executor: FlowExecutor,
     pub(super) policy_service: PolicyService,

@@ -23,7 +23,9 @@ pub use v1::setup_api_v1;
 
 pub mod csrf;
 mod v1;
-pub const CSRF_HEADER: HeaderName = HeaderName::from_static("x-csrf-token");
+
+pub static CSRF_HEADER: HeaderName = HeaderName::from_static("x-csrf-token");
+
 #[derive(Debug, Display, Error)]
 #[display("{} \n Trace: \n {:?}", self.kind, match &self.st {
     Some(v) => format!("{v}"),

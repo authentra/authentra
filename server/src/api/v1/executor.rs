@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use argon2::{password_hash::Encoding, PasswordHash};
 use axum::{
-    extract::{Host, OriginalUri, State},
+    extract::{Host, OriginalUri, Path, State},
     response::{IntoResponse, Redirect, Response},
     routing::{get, MethodRouter},
     Form, Json, Router,
@@ -70,15 +70,16 @@ async fn get_flow(
         query: query.unwrap_or_default(),
         user: session.get_user(&connection, &state).await?,
     };
-    let context = execution.get_check_context(context);
+    let context = execution.get_check_context(context).await;
     let data = execution.data(None, &context).await;
     Ok(Json(data))
 }
 
-#[instrument(skip(state, session, form, cookies, uri))]
+#[allow(clippy::too_many_arguments)]
+#[instrument(skip(session, state, uri, cookies, form))]
 async fn post_flow(
     session: Session,
-    SlugWrapper(slug, _): SlugWrapper<Flow>,
+    Path(slug): Path<String>,
     State(state): State<SharedState>,
     OriginalUri(uri): OriginalUri,
     cookies: Cookies,
@@ -107,7 +108,7 @@ async fn post_flow(
         query: query.unwrap_or_default(),
         user: session.get_user(&connection, &state).await?,
     };
-    let context = execution.get_check_context(context);
+    let context = execution.get_check_context(context).await;
     if let Ok(Some(_)) = execution.check(&context).await {
         return Ok(Json(execution.data(None, &context).await).into_response());
     }
@@ -230,7 +231,7 @@ async fn handle_password_stage(
     execution: &FlowExecution,
     backends: &Vec<PasswordBackend>,
 ) -> Result<(), ApiError> {
-    let pending = match execution.get_context().pending.clone() {
+    let pending = match execution.get_context().await.pending.clone() {
         Some(v) => v,
         None => return Err(SubmissionError::NoPendingUser.into()),
     };
@@ -262,9 +263,9 @@ async fn handle_password_stage(
                 };
                 if is_valid {
                     execution.use_mut_context(|ctx| {
-                        ctx.pending
-                            .as_mut()
-                            .map(|pending| pending.authenticated = true);
+                        if let Some(pending) = ctx.pending.as_mut() {
+                            pending.authenticated = true;
+                        }
                     });
                     return Ok(());
                 }
@@ -319,6 +320,7 @@ async fn complete(
             StageKind::UserLogin => {
                 let user = execution
                     .get_context()
+                    .await
                     .pending
                     .as_ref()
                     .cloned()

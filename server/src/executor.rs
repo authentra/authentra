@@ -6,7 +6,7 @@ use std::{
 use ::storage::ExecutorStorage;
 use derive_more::Display;
 use moka::sync::Cache;
-use parking_lot::{Mutex, RwLock};
+use tokio::sync::RwLock;
 
 use crate::{api::ApiError, auth::Session, service::policy::PolicyService};
 use model::{PolicyKind, PolicyResult};
@@ -115,7 +115,7 @@ impl FlowExecutor {
             flow,
             context: RwLock::new(context),
             storage,
-            current_entry_idx: Mutex::new(0),
+            current_entry_idx: parking_lot::Mutex::new(0),
             is_completed: AtomicBool::new(false),
             executor: self.clone(),
             key: key.clone(),
@@ -146,8 +146,7 @@ impl Validate for PolicyKind {
                 .as_ref()
                 .map(|user| user.password_change_date)
                 .map_or(PolicyResult::NotApplicable, |date| {
-                    (&(context.start_time - date) > &time::Duration::seconds(*max_age as i64))
-                        .into()
+                    ((context.start_time - date) > time::Duration::seconds(*max_age as i64)).into()
                 }),
             PolicyKind::PasswordStrength => todo!(),
             PolicyKind::Expression(..) => todo!(),

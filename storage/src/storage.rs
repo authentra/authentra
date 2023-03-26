@@ -56,9 +56,10 @@ impl ExecutorStorage for Storage {
 }
 
 pub type MokaCache<I, T> = Cache<I, Arc<Mutex<Option<Option<Arc<T>>>>>>;
-
+pub type GetterFunc<I, T, E> =
+    dyn Fn(Object, I) -> BoxFuture<'static, Result<Option<T>, E>> + Send + Sync;
 struct DataCache<I, T, E> {
-    getter: Arc<dyn Fn(Object, I) -> BoxFuture<'static, Result<Option<T>, E>> + Send + Sync>,
+    getter: Arc<GetterFunc<I, T, E>>,
     cache: MokaCache<I, T>,
     // locks: DashMap<i32, Mutex<Option<Option<Arc<T>>>>>,
     _error: PhantomData<E>,
