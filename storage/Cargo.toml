@@ -20,5 +20,3 @@ tokio-postgres = { workspace = true, features = [
 ] }
 async-trait = "0.1.64"
 postgres-types = { version = "0.2.4", features = ["derive", "with-time-0_3"] }
-parking_lot.workspace = true
-dashmap = "5.4.0"

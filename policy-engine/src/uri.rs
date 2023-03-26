@@ -32,8 +32,10 @@ impl<'a> TryFrom<&'a http::uri::Scheme> for Scheme {
 
     fn try_from(value: &'a http::uri::Scheme) -> Result<Self, Self::Error> {
         Ok(if value == &http::uri::Scheme::HTTP {
+            println!("HTTP");
             Self::Http
         } else if value == &http::uri::Scheme::HTTPS {
+            println!("HTTPS");
             Self::Https
         } else {
             return Err(RhaiUriError::UnsupportedScheme);
@@ -127,22 +129,22 @@ mod test {
     use super::Scheme;
     use crate::{tests::preload::*, uri::UriPackage};
 
-    fn uri(uri: &'static str) -> RhaiUri {
-        RhaiUri::create(Scheme::Http, "host".into(), &Uri::from_static(uri))
+    fn uri(scheme: Scheme, uri: &'static str) -> RhaiUri {
+        RhaiUri::create(scheme, "host".into(), &Uri::from_static(uri))
             .expect("Failed to construct uri")
     }
 
-    eval_test!(test_to_string("uri": uri("http://host/this/is/a/path")) -> String | ("http://host/this/is/a/path".to_owned()): "uri.to_string()", UriPackage);
+    eval_test!(test_to_string("uri": uri(Scheme::Http,"http://host/this/is/a/path")) -> String | ("http://host/this/is/a/path".to_owned()): "uri.to_string()", UriPackage);
 
-    eval_test!(test_http_port("uri": uri("http://host/")) -> u16 | (80): "uri.port", UriPackage);
-    eval_test!(test_https_port("uri": uri("https://host/")) -> u16 | (443): "uri.port", UriPackage);
-    eval_test!(test_custom_port("uri": uri("http://host:90/")) -> u16 | (90): "uri.port", UriPackage);
+    eval_test!(test_http_port("uri": uri(Scheme::Http,"http://host/")) -> u16 | (80): "uri.port", UriPackage);
+    eval_test!(test_https_port("uri": uri(Scheme::Https,"https://host/")) -> u16 | (443): "uri.port", UriPackage);
+    eval_test!(test_custom_port("uri": uri(Scheme::Http,"http://host:90/")) -> u16 | (90): "uri.port", UriPackage);
 
-    eval_test!(test_host("uri": uri("http://host/")) -> String | ("host".to_owned()): "uri.host", UriPackage);
-    eval_test!(test_path("uri": uri("http://host/this/is/a/path")) -> String | ("/this/is/a/path".to_owned()): "uri.path", UriPackage);
-    eval_test!(test_query("uri": uri("http://host/path?this=is&a=query")) -> Option<ImmutableString> | (Some(ImmutableString::from("this=is&a=query"))): "uri.query", UriPackage);
+    eval_test!(test_host("uri": uri(Scheme::Http,"http://host/")) -> String | ("host".to_owned()): "uri.host", UriPackage);
+    eval_test!(test_path("uri": uri(Scheme::Http,"http://host/this/is/a/path")) -> String | ("/this/is/a/path".to_owned()): "uri.path", UriPackage);
+    eval_test!(test_query("uri": uri(Scheme::Http,"http://host/path?this=is&a=query")) -> Option<ImmutableString> | (Some(ImmutableString::from("this=is&a=query"))): "uri.query", UriPackage);
 
-    eval_test!(test_scheme("uri": uri("http://host/")) -> Scheme | (Scheme::Http): "uri.scheme", UriPackage);
-    eval_test!(test_scheme_is_http("uri": uri("http://host/")) -> bool | (true): "uri.scheme.is_http()", UriPackage);
-    eval_test!(test_scheme_is_https("uri": uri("https://host/")) -> bool | (true): "uri.scheme.is_https()", UriPackage);
+    eval_test!(test_scheme("uri": uri(Scheme::Http,"http://host/")) -> Scheme | (Scheme::Http): "uri.scheme", UriPackage);
+    eval_test!(test_scheme_is_http("uri": uri(Scheme::Http,"http://host/")) -> bool | (true): "uri.scheme.is_http()", UriPackage);
+    eval_test!(test_scheme_is_https("uri": uri(Scheme::Https,"https://host/")) -> bool | (true): "uri.scheme.is_https()", UriPackage);
 }

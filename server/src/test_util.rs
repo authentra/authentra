@@ -5,10 +5,9 @@ use axum::Router;
 use config::ConfigError;
 use deadpool_postgres::{Config, Pool};
 use futures::Future;
-use http::{header::HOST, Method, Request, Version};
+use http::{header::HOST, Method, Request};
 use once_cell::sync::Lazy;
 use tokio::sync::Mutex;
-use tracing::Level;
 
 use crate::{
     config::InternalAuthustConfiguration,
@@ -55,11 +54,19 @@ async fn configure_database(mut config: Config) -> Pool {
     config.pool = Some(pool);
     let pool = create_database_pool(config);
     let mut lock = RAN_MIGRATIONS.lock().await;
+    let mut client = pool.get().await.expect("Failed to get connection");
     if !*lock {
-        let mut client = pool.get().await.expect("Failed to get connection");
         run_migrations(&mut client).await;
         *lock = true;
     }
+    let statement = client
+        .prepare_cached("begin")
+        .await
+        .expect("Failed to cache 'begin' query");
+    client
+        .execute(&statement, &[])
+        .await
+        .expect("Failed to begin transaction");
     pool
 }
 pub async fn body_to_string<B>(body: B) -> String

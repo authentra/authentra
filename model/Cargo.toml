@@ -12,7 +12,6 @@ axum = ["dep:axum", "dep:async-trait"]
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 uuid = { workspace = true, features = ["serde"] }
-impl-tools = { workspace = true }
 async-trait = { workspace = true, optional = true }
 axum = { workspace = true, optional = true }
 derive_more = { workspace = true, features = ["error", "display", "from"] }

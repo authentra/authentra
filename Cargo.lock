@@ -110,7 +110,6 @@ dependencies = [
  "async-trait",
  "axum",
  "derive_more",
- "impl-tools",
  "postgres-types",
  "serde",
  "serde_json",
@@ -927,30 +926,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "impl-tools"
-version = "0.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2bde75c0fa563af28932bd7317eaa58186d4d29043858f5f3a8c199076c06da7"
-dependencies = [
- "autocfg",
- "impl-tools-lib",
- "proc-macro-error",
- "syn 1.0.109",
-]
-
-[[package]]
-name = "impl-tools-lib"
-version = "0.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4ffdf3b0bdfaa18798f4df71bc965704f63fba521b24d425cd61fb2bc771a77b"
-dependencies = [
- "proc-macro-error",
- "proc-macro2",
- "quote",
- "syn 1.0.109",
-]
-
-[[package]]
 name = "indexmap"
 version = "1.9.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1550,30 +1525,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "proc-macro-error"
-version = "1.0.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "da25490ff9892aab3fcf7c36f08cfb902dd3e71ca0f9f9517bea02a73a5ce38c"
-dependencies = [
- "proc-macro-error-attr",
- "proc-macro2",
- "quote",
- "syn 1.0.109",
- "version_check",
-]
-
-[[package]]
-name = "proc-macro-error-attr"
-version = "1.0.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a1be40180e52ecc98ad80b184934baf3d0d29f979574e439af5a55274b35f869"
-dependencies = [
- "proc-macro2",
- "quote",
- "version_check",
-]
-
-[[package]]
 name = "proc-macro-hack"
 version = "0.5.20+deprecated"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1581,9 +1532,9 @@ checksum = "dc375e1527247fe1a97d8b7156678dfe7c1af2fc075c9a4db3690ecd2a148068"
 
 [[package]]
 name = "proc-macro2"
-version = "1.0.53"
+version = "1.0.54"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ba466839c78239c09faf015484e5cc04860f88242cff4d03eb038f04b4699b73"
+checksum = "e472a104799c74b514a57226160104aa483546de37e839ec50e3c2e41dd87534"
 dependencies = [
  "unicode-ident",
 ]
@@ -2106,11 +2057,9 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "authust_model",
- "dashmap",
  "deadpool-postgres",
  "futures",
  "moka",
- "parking_lot",
  "postgres-types",
  "serde",
  "tokio",
