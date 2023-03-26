@@ -112,7 +112,7 @@ async fn post_flow(
         return Ok(Json(execution.data(None, &context).await).into_response());
     }
     if let Err(err) =
-        handle_submission(&connection, form, executor, &state.users(), &execution).await
+        handle_submission(&connection, form, executor, state.users(), &execution).await
     {
         match &err.kind {
             ApiErrorKind::SubmissionError(err) => {
@@ -125,7 +125,7 @@ async fn post_flow(
         complete(
             &connection,
             &execution,
-            &state.auth_data(),
+            state.auth_data(),
             &cookies,
             session,
         )
@@ -161,8 +161,8 @@ async fn handle_stage(
     stage: Arc<Stage>,
 ) -> Result<(), ApiError> {
     match &stage.kind {
-        StageKind::Deny => return Ok(()),
-        StageKind::Prompt { bindings: _ } => return Ok(()),
+        StageKind::Deny => Ok(()),
+        StageKind::Prompt { bindings: _ } => Ok(()),
         StageKind::Identification {
             password_stage,
             user_fields,
@@ -206,21 +206,21 @@ async fn handle_stage(
                 let password = execution.lookup_stage(*password_stage).await;
                 match &password.kind {
                     StageKind::Password { backends } => {
-                        return handle_password_stage(&form, client, execution, &backends).await;
+                        return handle_password_stage(&form, client, execution, backends).await;
                     }
                     _ => unreachable!("Is not password stage"),
                 };
             }
-            return Ok(());
+            Ok(())
         }
-        StageKind::UserLogin => return Ok(()),
-        StageKind::UserLogout => return Ok(()),
-        StageKind::UserWrite => return Ok(()),
+        StageKind::UserLogin => Ok(()),
+        StageKind::UserLogout => Ok(()),
+        StageKind::UserWrite => Ok(()),
         StageKind::Password { backends } => {
-            return handle_password_stage(&form, client, execution, backends).await;
+            handle_password_stage(&form, client, execution, backends).await
         }
-        StageKind::Consent { mode: _ } => return Ok(()),
-    };
+        StageKind::Consent { mode: _ } => Ok(()),
+    }
 }
 
 #[instrument(skip(form, client, execution))]
@@ -272,11 +272,11 @@ async fn handle_password_stage(
             None => return Err(SubmissionError::NoPendingUser.into()),
         }
     }
-    return Err(SubmissionError::Field(FieldError::new(
+    Err(SubmissionError::Field(FieldError::new(
         "password",
         FieldErrorKind::invalid("Invalid Password"),
     ))
-    .into());
+    .into())
 }
 
 fn str_from_field<'a>(name: &'static str, value: &'a Value) -> Result<&'a String, SubmissionError> {
@@ -325,7 +325,7 @@ async fn complete(
                     .ok_or(SubmissionError::NoPendingUser)?;
                 if !user.authenticated {
                     execution.set_error(ExecutionError {
-                        stage: Some(entry.stage.clone()),
+                        stage: Some(entry.stage),
                         message: "Authentication of pending user failed".into(),
                     });
                     break;

@@ -47,7 +47,7 @@ impl DataQueryExecutor<Flow> for FlowExecutor {
     async fn find_all_ids(&self, query: Option<&FlowQuery>) -> Result<Vec<Self::Id>, Self::Error> {
         if let Some(query) = query {
             match query {
-                FlowQuery::uid(id) => return Ok(vec![id.clone()]),
+                FlowQuery::uid(id) => return Ok(vec![*id]),
                 FlowQuery::slug(_slug) => todo!(),
             }
         } else {
@@ -166,7 +166,7 @@ impl ReverseLookup<Flow> for ProxiedStorage {
             .expect("Failed to lookup flow");
         for binding in &sub.bindings {
             if let FlowBindingKind::Policy(policy) = &binding.kind {
-                self.lookup(&DataRef::<Policy>::new(PolicyQuery::uid(policy.clone())))
+                self.lookup(&DataRef::<Policy>::new(PolicyQuery::uid(*policy)))
                     .await
                     .expect("Failed to lookup policy");
             }
@@ -174,7 +174,7 @@ impl ReverseLookup<Flow> for ProxiedStorage {
         for entry in &sub.entries {
             for binding in &entry.bindings {
                 if let FlowBindingKind::Policy(policy) = &binding.kind {
-                    self.lookup(&DataRef::<Policy>::new(PolicyQuery::uid(policy.clone())))
+                    self.lookup(&DataRef::<Policy>::new(PolicyQuery::uid(*policy)))
                         .await
                         .expect("Failed to lookup policy");
                 }

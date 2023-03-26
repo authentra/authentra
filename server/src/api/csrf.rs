@@ -19,7 +19,7 @@ use tower_cookies::{
 
 use super::CSRF_HEADER;
 
-const CSRF_COOKIE_NAME: &'static str = "csrf-token";
+const CSRF_COOKIE_NAME: &str = "csrf-token";
 const CSRF_SECRET_LENGTH: usize = 32;
 const CSRF_TOKEN_LENGTH: usize = CSRF_SECRET_LENGTH * 2;
 
@@ -127,7 +127,7 @@ fn check_csrf<B>(
         req.method(),
         &Method::GET | &Method::HEAD | &Method::OPTIONS | &Method::TRACE
     ) {
-        if let Err(err) = check_cookie(&req, true) {
+        if let Err(err) = check_cookie(req, true) {
             if err == CsrfCookieError::ValidationError {
                 return Err(csrf_error_response());
             }
@@ -153,7 +153,7 @@ fn check_csrf<B>(
             return Err(csrf_error_response());
         }
     }
-    if let Err(err) = check_cookie(&req, true) {
+    if let Err(err) = check_cookie(req, true) {
         if err == CsrfCookieError::ValidationError {
             return Err(csrf_error_response());
         }

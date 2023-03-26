@@ -55,8 +55,8 @@ impl FlowExecutorInternal {
     pub fn new(storage: Arc<dyn ExecutorStorage>, policy_service: PolicyService) -> Self {
         Self {
             executions: Cache::builder()
-                .time_to_idle(TIME_TO_IDLE.clone())
-                .time_to_live(TIME_TO_LIVE.clone())
+                .time_to_idle(TIME_TO_IDLE)
+                .time_to_live(TIME_TO_LIVE)
                 .build(),
             storage,
             policy_service,

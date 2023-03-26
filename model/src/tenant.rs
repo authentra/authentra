@@ -31,13 +31,13 @@ pub struct Tenant {
 impl Tenant {
     pub fn get_flow(&self, designation: &FlowDesignation) -> Option<i32> {
         match designation {
-            FlowDesignation::Invalidation => self.invalidation_flow.clone(),
-            FlowDesignation::Authentication => self.authentication_flow.clone(),
-            FlowDesignation::Authorization => self.authorization_flow.clone(),
-            FlowDesignation::Enrollment => self.enrollment_flow.clone(),
-            FlowDesignation::Recovery => self.enrollment_flow.clone(),
-            FlowDesignation::Unenrollment => self.unenrollment_flow.clone(),
-            FlowDesignation::Configuration => self.configuration_flow.clone(),
+            FlowDesignation::Invalidation => self.invalidation_flow,
+            FlowDesignation::Authentication => self.authentication_flow,
+            FlowDesignation::Authorization => self.authorization_flow,
+            FlowDesignation::Enrollment => self.enrollment_flow,
+            FlowDesignation::Recovery => self.enrollment_flow,
+            FlowDesignation::Unenrollment => self.unenrollment_flow,
+            FlowDesignation::Configuration => self.configuration_flow,
         }
     }
 }

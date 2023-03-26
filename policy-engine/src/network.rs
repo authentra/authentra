@@ -42,7 +42,7 @@ mod ip_module {
     #[rhai_fn(global, pure, return_raw)]
     pub fn as_ipv4(addr: &mut IpAddr) -> Result<Ipv4Addr, Box<EvalAltResult>> {
         match addr {
-            IpAddr::V4(addr) => Ok(addr.clone()),
+            IpAddr::V4(addr) => Ok(*addr),
             IpAddr::V6(..) => Err("Address is not an ipv4 address".into()),
         }
     }
@@ -50,7 +50,7 @@ mod ip_module {
     pub fn as_ipv6(addr: &mut IpAddr) -> Result<Ipv6Addr, Box<EvalAltResult>> {
         match addr {
             IpAddr::V4(..) => Err("Address is not an ipv6 address".into()),
-            IpAddr::V6(addr) => Ok(addr.clone()),
+            IpAddr::V6(addr) => Ok(*addr),
         }
     }
 }
@@ -65,7 +65,7 @@ mod ipv4_module {
 
     #[rhai_fn(global, pure)]
     pub fn octets(addr: &mut Ipv4Addr) -> [u8; 4] {
-        addr.octets().clone()
+        addr.octets()
     }
     #[rhai_fn(global, pure)]
     pub fn is_unspecified(addr: &mut Ipv4Addr) -> bool {
@@ -106,11 +106,11 @@ mod ipv6_module {
 
     #[rhai_fn(global, pure)]
     pub fn segments(addr: &mut Ipv6Addr) -> [u16; 8] {
-        addr.segments().clone()
+        addr.segments()
     }
     #[rhai_fn(global, pure)]
     pub fn octets(addr: &mut Ipv6Addr) -> [u8; 16] {
-        addr.octets().clone()
+        addr.octets()
     }
 
     #[rhai_fn(global, pure)]

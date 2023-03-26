@@ -105,7 +105,7 @@ where
             if let Err(err) = handle_auth(&mut req, &data) {
                 return Ok(err);
             }
-            Ok(inner.call(req).await.map(IntoResponse::into_response)?)
+            inner.call(req).await.map(IntoResponse::into_response)
         })
     }
 }
@@ -230,7 +230,7 @@ async fn make_new_session<C: GenericClient>(
         is_admin: false,
     };
     let cookies: &Cookies = parts.extensions.get().expect("Cookie layer is missing");
-    set_session_cookie(&data.encoding_key, &cookies, &claims)?;
+    set_session_cookie(&data.encoding_key, cookies, &claims)?;
     Ok(Session {
         session_id: session_key,
         user_id: None,

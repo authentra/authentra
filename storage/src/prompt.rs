@@ -37,7 +37,7 @@ impl DataQueryExecutor<Prompt> for PromptExecutor {
     ) -> Result<Vec<Self::Id>, Self::Error> {
         if let Some(query) = query {
             match query {
-                PromptQuery::uid(id) => return Ok(vec![id.clone()]),
+                PromptQuery::uid(id) => return Ok(vec![*id]),
             }
         } else {
             let conn = self.get_conn().await?;

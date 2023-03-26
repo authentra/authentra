@@ -45,7 +45,7 @@ impl DataQueryExecutor<Policy> for PolicyExecutor {
     ) -> Result<Vec<Self::Id>, Self::Error> {
         if let Some(query) = query {
             match query {
-                PolicyQuery::uid(id) => return Ok(vec![id.clone()]),
+                PolicyQuery::uid(id) => return Ok(vec![*id]),
                 PolicyQuery::slug(_slug) => todo!(),
             }
         } else {

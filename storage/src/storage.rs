@@ -21,6 +21,7 @@ pub trait ExecutorStorage: Send + Sync {
     async fn get_tenant_by_host(&self, host: &str) -> StorageResult<Option<Arc<Tenant>>>;
 
     async fn list_policies(&self) -> StorageResult<Vec<Policy>>;
+    async fn list_flows(&self) -> StorageResult<Vec<Flow>>;
 }
 
 #[async_trait]
@@ -48,6 +49,9 @@ impl ExecutorStorage for Storage {
     }
     async fn list_policies(&self) -> StorageResult<Vec<Policy>> {
         self.list_policies().await
+    }
+    async fn list_flows(&self) -> StorageResult<Vec<Flow>> {
+        self.list_flows().await
     }
 }
 
@@ -126,7 +130,7 @@ impl<
     }
 
     pub async fn invalidate(&self, id: &I) {
-        self.cache.invalidate(&id).await;
+        self.cache.invalidate(id).await;
     }
 }
 
@@ -265,6 +269,10 @@ impl Storage {
         let client = self.get_client().await?;
         list_policies_from_db(&client).await
     }
+    pub async fn list_flows(&self) -> StorageResult<Vec<Flow>> {
+        let client = self.get_client().await?;
+        list_flows_from_db(&client).await
+    }
 }
 
 fn arced<T, E>(v: Result<Option<T>, E>) -> Result<Option<Arc<T>>, E> {
@@ -295,17 +303,6 @@ async fn stage_from_db(client: &Object, id: i32) -> StorageResult<Option<Stage>>
         None => Ok(None),
     }
 }
-async fn list_policies_from_db(client: &Object) -> StorageResult<Vec<Policy>> {
-    let statement = client
-        .prepare_cached(include_sql!("policy/list-all"))
-        .await?;
-    client
-        .query(&statement, &[])
-        .await?
-        .into_iter()
-        .map(crate::policy::from_row)
-        .collect()
-}
 async fn policy_from_db(client: &Object, id: i32) -> StorageResult<Option<Policy>> {
     let statement = client.prepare_cached(include_sql!("policy/by-id")).await?;
     match client.query_opt(&statement, &[&id]).await? {
@@ -335,4 +332,27 @@ async fn tenant_from_db_by_host(client: &Object, host: &str) -> StorageResult<Op
         Some(row) => Ok(Some(crate::tenant::from_row(row))),
         None => Ok(None),
     }
+}
+
+async fn list_policies_from_db(client: &Object) -> StorageResult<Vec<Policy>> {
+    let statement = client
+        .prepare_cached(include_sql!("policy/list-all"))
+        .await?;
+    client
+        .query(&statement, &[])
+        .await?
+        .into_iter()
+        .map(crate::policy::from_row)
+        .collect()
+}
+
+async fn list_flows_from_db(client: &Object) -> StorageResult<Vec<Flow>> {
+    let statement = client.prepare_cached(include_sql!("flow/list-all")).await?;
+    let iter = client.query(&statement, &[]).await?.into_iter();
+    let mut flows = Vec::new();
+    for row in iter {
+        let flow = crate::flow::from_row(client, row).await?;
+        flows.push(flow);
+    }
+    Ok(flows)
 }

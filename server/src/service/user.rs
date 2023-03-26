@@ -34,17 +34,13 @@ impl UserService {
             )
             .await?;
         let result = client.query_opt(&statement, &[&uid]).await?;
-        Ok(if let Some(res) = result {
-            Some(PartialUser {
+        Ok(result.map(|res| PartialUser {
                 uid: res.get("uid"),
                 name: res.get("name"),
                 avatar_url: None,
                 is_admin: res.get("administrator"),
                 password_change_date: get_password_change_date(&res),
-            })
-        } else {
-            None
-        })
+            }))
     }
 
     pub async fn lookup_user(
@@ -110,6 +106,6 @@ impl UserService {
                 }));
             }
         }
-        return Ok(None);
+        Ok(None)
     }
 }

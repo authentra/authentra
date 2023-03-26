@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use deadpool_postgres::Pool;
 use moka::sync::Cache;
 use policy_engine::{compile, rhai::AST};
 use storage::Storage;
@@ -12,10 +11,9 @@ use super::DUMMY_SCOPE;
 pub struct PolicyService(Arc<InternalPolicyService>);
 
 impl PolicyService {
-    pub fn new(storage: Storage, pool: Pool) -> Self {
+    pub fn new(storage: Storage) -> Self {
         Self(Arc::new(InternalPolicyService {
             storage,
-            pool,
             asts: Cache::builder().build(),
         }))
     }
@@ -31,7 +29,6 @@ impl PolicyService {
 
 struct InternalPolicyService {
     storage: Storage,
-    pool: Pool,
     asts: Cache<i32, Option<Arc<AST>>>,
 }
 
@@ -39,11 +36,7 @@ impl InternalPolicyService {
     pub async fn get_ast(&self, id: i32) -> Option<Arc<AST>> {
         let policy = match self.storage.get_policy(id).await {
             Ok(opt) => {
-                if let Some(value) = opt {
-                    value
-                } else {
-                    return None;
-                }
+                opt?
             }
             Err(err) => {
                 tracing::error!(
@@ -56,7 +49,7 @@ impl InternalPolicyService {
         self.asts
             .optionally_get_with(policy.uid, move || match &policy.kind {
                 model::PolicyKind::Expression(expr) => {
-                    let compiled = compile(&expr, &DUMMY_SCOPE);
+                    let compiled = compile(expr, &DUMMY_SCOPE);
                     Some(match compiled {
                         Ok(ast) => Some(Arc::new(ast)),
                         Err(err) => {

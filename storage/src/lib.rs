@@ -145,11 +145,11 @@ pub fn create_manager(pool: Pool) -> StorageManager {
 
 pub fn create_proxied(manager: &StorageManager) -> ProxiedStorage {
     let mut proxied = StorageManager::new();
-    register_proxied::<model::Flow>(&manager, &mut proxied);
-    register_proxied::<model::Stage>(&manager, &mut proxied);
-    register_proxied::<model::Policy>(&manager, &mut proxied);
-    register_proxied::<model::Prompt>(&manager, &mut proxied);
-    register_proxied::<model::Tenant>(&manager, &mut proxied);
+    register_proxied::<model::Flow>(manager, &mut proxied);
+    register_proxied::<model::Stage>(manager, &mut proxied);
+    register_proxied::<model::Policy>(manager, &mut proxied);
+    register_proxied::<model::Prompt>(manager, &mut proxied);
+    register_proxied::<model::Tenant>(manager, &mut proxied);
     ProxiedStorage(proxied)
 }
 
@@ -416,14 +416,14 @@ where
     Id: Send + Sync + Hash + Eq + Debug + Clone,
 {
     async fn find_one(&self, query: &D::Query) -> Result<Data<D>, Infallible> {
-        let id = self.find_id(&query);
+        let id = self.find_id(query);
         self.get_data(id)
     }
     async fn find_all(&self, _: Option<&D::Query>) -> Result<Vec<Data<D>>, Infallible> {
         panic!("Unsupported operation")
     }
     async fn find_optional(&self, query: &D::Query) -> Result<Option<Data<D>>, Infallible> {
-        let id = self.find_id(&query);
+        let id = self.find_id(query);
         Ok(self.data.data.get(id).cloned())
     }
 

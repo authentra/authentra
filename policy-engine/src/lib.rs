@@ -39,7 +39,7 @@ pub fn create_engine() -> Engine {
     engine
 }
 
-static DEFAULT_ENGINE: Lazy<Engine> = Lazy::new(|| create_engine());
+static DEFAULT_ENGINE: Lazy<Engine> = Lazy::new(create_engine);
 
 #[derive(Debug)]
 pub enum ExpressionCompilationError {

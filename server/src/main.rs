@@ -22,6 +22,7 @@ use http::StatusCode;
 use jsonwebtoken::{DecodingKey, EncodingKey};
 use model::Tenant;
 
+use once_cell::sync::Lazy;
 use opentelemetry::sdk::resource::{EnvResourceDetector, ResourceDetector};
 use opentelemetry::{sdk::Resource, Key, KeyValue};
 use opentelemetry_otlp::{self as otlp, ExportConfig};
@@ -45,6 +46,22 @@ pub mod executor;
 pub mod interface;
 mod otel_middleware;
 pub mod service;
+
+pub static INTERFACE_BASE_URI: Lazy<&'static str> = Lazy::new(base_uri);
+
+fn base_uri() -> &'static str {
+    let env = std::env::var("INTERFACE_BASE_URI").ok();
+    match env {
+        Some(v) => {
+            tracing::info!("Serving web interface from url '{}' ", v);
+            Box::leak(v.into_boxed_str())
+        }
+        None => {
+            tracing::info!("Serving web interface from files");
+            ""
+        }
+    }
+}
 
 #[tokio::main]
 async fn main() {
@@ -99,14 +116,14 @@ async fn setup() {
     }
     let mut configuration =
         InternalAuthustConfiguration::load().expect("Failed to load configuration");
-    let password = std::mem::replace(&mut configuration.postgres.password, String::new());
+    let password = std::mem::take(&mut configuration.postgres.password);
 
     let config = ExportConfig::default();
     let resource = Resource::from_detectors(
         Duration::from_secs(0),
         vec![
             Box::new(ServiceNameDetector),
-            Box::new(EnvResourceDetector::default()),
+            Box::<EnvResourceDetector>::default(),
         ],
     );
     let tracer = otlp::new_pipeline()
@@ -127,6 +144,12 @@ async fn setup() {
     tracing::subscriber::set_global_default(registry).unwrap();
     LogTracer::init().unwrap();
     info!("Setting up database...");
+
+    // Initialize INTERFACE_BASE_URI
+    #[allow(unused_must_use)]
+    {
+        INTERFACE_BASE_URI.len();
+    }
     let pool = setup_database(&configuration.postgres, &password).await;
     let listen = configuration.listen.clone();
     let state = create_state(configuration, pool).await;
@@ -150,7 +173,7 @@ async fn setup_database(configuration: &PostgresConfiguration, password: &str) -
         .port(configuration.port)
         .dbname(&configuration.database)
         .user(&configuration.user)
-        .password(&password)
+        .password(password)
         .application_name("Authust");
     let mgr_config = ManagerConfig {
         recycling_method: deadpool_postgres::RecyclingMethod::Fast,
@@ -195,7 +218,7 @@ impl SharedState {
         &self.0.storage_old
     }
     pub fn defaults(&self) -> &Defaults {
-        &self.0.defaults.as_ref()
+        self.0.defaults.as_ref()
     }
     pub fn policies(&self) -> &PolicyService {
         &self.0.policies
@@ -252,18 +275,18 @@ impl Defaults {
             .query_opt(&statement, &[])
             .await
             .expect("Failed to execute statement") else { return None };
-        let tenant = storage
+        
+        storage
             .get_tenant(row.get("uid"))
             .await
-            .expect("An error occurred while loading tenant");
-        tenant
+            .expect("An error occurred while loading tenant")
     }
 }
 
 async fn create_state(config: InternalAuthustConfiguration, pool: Pool) -> SharedState {
     let storage = Storage::new(pool.clone()).await.unwrap();
     let storage_old = storage::create_manager(pool.clone());
-    let policies = PolicyService::new(storage.clone(), pool.clone());
+    let policies = PolicyService::new(storage.clone());
     let defaults = Defaults::new(&storage, pool.clone()).await;
     let executor = FlowExecutor::new(Arc::new(storage.clone()), policies.clone());
     let users = UserService::new();
@@ -279,8 +302,8 @@ async fn create_state(config: InternalAuthustConfiguration, pool: Pool) -> Share
         defaults: Arc::new(defaults),
         policies,
     };
-    let state = SharedState(Arc::new(internal_state));
-    state
+    
+    SharedState(Arc::new(internal_state))
 }
 
 async fn router(state: SharedState) -> Router<()> {
@@ -296,13 +319,13 @@ async fn router(state: SharedState) -> Router<()> {
     #[cfg(debug_assertions)]
     #[cfg(feature = "dev-mode")]
     let service = service.layer(cors);
-    let router = Router::new()
+    
+    Router::new()
         .route("/test", get(hello_world))
         .nest("/api/v1", setup_api_v1(state.clone()).await)
         .nest("/", setup_interface_router())
         .layer(service)
-        .with_state(state);
-    router
+        .with_state(state)
 }
 
 async fn start_server(

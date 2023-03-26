@@ -33,7 +33,7 @@ mod user_module {
     }
     #[rhai_fn(get = "authenticated", pure)]
     pub fn get_authenticated_pending(obj: &mut PendingUser) -> bool {
-        obj.authenticated.clone()
+        obj.authenticated
     }
 
     #[rhai_fn(global, pure, get = "uid")]
@@ -51,6 +51,6 @@ mod user_module {
     }
     #[rhai_fn(get = "authenticated", pure)]
     pub fn get_is_admin_partial(obj: &mut PartialUser) -> bool {
-        obj.is_admin.clone()
+        obj.is_admin
     }
 }

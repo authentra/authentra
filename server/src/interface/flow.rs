@@ -10,23 +10,12 @@ use axum::{
 use derive_more::From;
 use http::{header::LOCATION, request::Parts, StatusCode};
 use model::{FlowDesignation, Tenant};
-use once_cell::sync::Lazy;
 use storage::StorageError;
 
-use crate::{api::ApiError, SharedState};
+use crate::{api::ApiError, SharedState, INTERFACE_BASE_URI};
 
 pub fn setup_flow_router() -> Router<SharedState> {
     Router::new().route("/:flow_designation", get(tenant_flow_redirect))
-}
-
-static INTERFACE_BASE_URI: Lazy<&'static str> = Lazy::new(base_uri);
-
-fn base_uri() -> &'static str {
-    let env = std::env::var("INTERFACE_BASE_URI").ok();
-    match env {
-        Some(v) => Box::leak(v.into_boxed_str()),
-        None => "",
-    }
 }
 
 pub async fn tenant_flow_redirect(

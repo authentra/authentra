@@ -58,7 +58,7 @@ fn leak_string(str: String) -> &'static str {
 fn leak_vec(vec: Vec<String>) -> &'static [&'static str] {
     Box::leak(
         vec.into_iter()
-            .map(|v| leak_string(v))
+            .map(leak_string)
             .collect::<Vec<&'static str>>()
             .into_boxed_slice(),
     )

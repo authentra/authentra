@@ -22,14 +22,14 @@ pub async fn setup_api_v1(state: SharedState) -> Router<SharedState> {
     let service = ServiceBuilder::new()
         .layer(CsrfLayer::new(vec!["*".into()]))
         .layer(AuthLayer::new(state.auth_data().clone()));
-    let router = Router::new()
+    
+    Router::new()
         .route("/ping", get(ping_handler))
         .nest("/flows", setup_flow_router())
         .nest("/flow/executor", setup_executor_router())
         .nest("/auth", setup_auth_router())
         .nest("/policies", setup_policy_router())
-        .layer(service);
-    router
+        .layer(service)
 }
 
 async fn ping_handler() -> &'static str {

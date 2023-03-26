@@ -259,9 +259,9 @@ where
     ) -> Result<ExecutorQuery, Self::Rejection> {
         let query: Query<InternalExecutorQuery> = Query::from_request_parts(parts, state)
             .await
-            .map_err(|err| ExecutorQueryRejection::Chained(err))?;
+            .map_err(ExecutorQueryRejection::Chained)?;
         Ok(serde_urlencoded::from_str(query.0.query.as_str())
-            .map_err(|err| ExecutorQueryRejection::FailedToDeserializeQueryString(err))?)
+            .map_err(ExecutorQueryRejection::FailedToDeserializeQueryString)?)
     }
 }
 

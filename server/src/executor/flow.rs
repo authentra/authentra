@@ -32,7 +32,7 @@ impl FlowExecution {
     }
     pub fn use_mut_context<F: FnOnce(&mut ExecutionContext)>(&self, func: F) {
         let mut lock = self.0.context.try_write().expect("Context is locked");
-        func(&mut *lock);
+        func(&mut lock);
     }
     pub fn set_error(&self, error: ExecutionError) {
         self.use_mut_context(|ctx| ctx.error = Some(error));
@@ -40,14 +40,14 @@ impl FlowExecution {
 
     pub fn get_check_context(&self, context: CheckContextRequest) -> CheckContext {
         let pending_user = self.get_context().pending.clone();
-        let context = CheckContext {
+        
+        CheckContext {
             inner: CheckContextData {
                 request: context,
                 pending_user,
             },
             execution: self.clone(),
-        };
-        context
+        }
     }
 
     pub async fn data(&self, error: Option<SubmissionError>, context: &CheckContext) -> FlowData {
@@ -58,7 +58,7 @@ impl FlowExecution {
             title: flow.title.clone(),
         };
         let is_completed = self.0.is_completed.load(Ordering::Relaxed);
-        if let Some(_) = self.check(&context).await.expect("FlowCheck failed") {
+        if let Some(_) = self.check(context).await.expect("FlowCheck failed") {
             if !is_completed {
                 return FlowData {
                     flow: flow_info,
@@ -134,13 +134,13 @@ impl FlowExecution {
             return Ok(Some(auth_check.message(context)));
         }
         for binding in &flow.bindings {
-            if let Some(message) = check_binding(&binding, context).await? {
+            if let Some(message) = check_binding(binding, context).await? {
                 return Ok(Some(message));
             }
         }
         let entry = self.get_entry();
         for binding in &entry.bindings {
-            if let Some(message) = check_binding(&binding, context).await? {
+            if let Some(message) = check_binding(binding, context).await? {
                 return Ok(Some(message));
             }
         }
@@ -164,7 +164,7 @@ async fn check_binding(
     };
     let result = *result;
     if !result {
-        Ok(Some(check.message(&context)))
+        Ok(Some(check.message(context)))
     } else {
         Ok(None)
     }
@@ -273,7 +273,7 @@ async fn check_policy(context: &CheckContext, policy: &Policy) -> FlowCheckOutpu
     match &policy.kind {
         model::PolicyKind::PasswordExpiry { max_age } => {
             let duration = time::Duration::seconds(*max_age as i64);
-            let start_time = context.execution.get_context().start_time.clone();
+            let start_time = context.execution.get_context().start_time;
             context
                 .request
                 .user
@@ -286,7 +286,7 @@ async fn check_policy(context: &CheckContext, policy: &Policy) -> FlowCheckOutpu
         model::PolicyKind::Expression(_) => {
             let ast = context.execution.0.policy_service.get_ast(policy.uid).await;
             if let Some(ast) = ast {
-                let scope = create_scope(&context);
+                let scope = create_scope(context);
                 let result = execute(ast.as_ref(), || scope);
                 let passed = match result.result {
                     Ok(res) => res,

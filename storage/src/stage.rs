@@ -46,7 +46,7 @@ impl DataQueryExecutor<Stage> for StageExecutor {
     async fn find_all_ids(&self, query: Option<&StageQuery>) -> Result<Vec<Self::Id>, Self::Error> {
         if let Some(query) = query {
             match query {
-                StageQuery::uid(id) => return Ok(vec![id.clone()]),
+                StageQuery::uid(id) => return Ok(vec![*id]),
                 StageQuery::slug(_slug) => todo!(),
             }
         } else {
@@ -110,12 +110,12 @@ pub(crate) async fn from_row(client: &impl GenericClient, row: Row) -> Result<St
     let kind = match simple_kind {
         PgStageKind::Deny => StageKind::Deny,
         PgStageKind::Prompt => prompt_stage(client, uid).await?,
-        PgStageKind::Identification => identification_stage(client, &row).await?,
+        PgStageKind::Identification => identification_stage(&row).await?,
         PgStageKind::UserLogin => StageKind::UserLogin,
         PgStageKind::UserLogout => StageKind::UserWrite,
         PgStageKind::UserWrite => StageKind::UserWrite,
-        PgStageKind::Password => password_stage(client, &row).await?,
-        PgStageKind::Consent => consent_stage(client, &row).await?,
+        PgStageKind::Password => password_stage(&row).await?,
+        PgStageKind::Consent => consent_stage(&row).await?,
     };
     Ok(Stage {
         uid,
@@ -125,44 +125,28 @@ pub(crate) async fn from_row(client: &impl GenericClient, row: Row) -> Result<St
     })
 }
 
-async fn identification_stage(
-    client: &impl GenericClient,
-    row: &Row,
-) -> Result<StageKind, StorageError> {
+async fn identification_stage(row: &Row) -> Result<StageKind, StorageError> {
     let password_stage: Option<i32> = row.get("identification_password_stage");
-    let identification_id: i32 = row.get("identification_stage");
-    let statement = client
-        .prepare_cached(include_sql!("stage/identification-by-id"))
-        .await?;
-    let id_row = client.query_one(&statement, &[&identification_id]).await?;
-    let user_fields: Vec<UserField> = id_row.get("fields");
+    let user_fields: Vec<UserField> = row.get("identification_fields");
     Ok(StageKind::Identification {
         password_stage,
         user_fields,
     })
 }
-async fn password_stage(
-    _client: &impl GenericClient,
-    _row: &Row,
-) -> Result<StageKind, StorageError> {
+async fn password_stage(_row: &Row) -> Result<StageKind, StorageError> {
     //TODO: Make Password backend configurable
     Ok(StageKind::Password {
         backends: vec![PasswordBackend::Internal],
     })
 }
 
-async fn consent_stage(client: &impl GenericClient, row: &Row) -> Result<StageKind, StorageError> {
-    let statement = client
-        .prepare_cached(include_sql!("stage/consent-by-id"))
-        .await?;
-    let consent_id: i32 = row.get("consent_stage");
-    let consent_row = client.query_one(&statement, &[&consent_id]).await?;
-    let mode: PgConsentMode = consent_row.get("mode");
+async fn consent_stage(row: &Row) -> Result<StageKind, StorageError> {
+    let mode: PgConsentMode = row.get("consent_mode");
     let mode = match mode {
         PgConsentMode::Always => ConsentMode::Always,
         PgConsentMode::Once => ConsentMode::Once,
         PgConsentMode::Until => ConsentMode::Until {
-            duration: consent_row.get("until"),
+            duration: row.get("consent_until"),
         },
     };
     Ok(StageKind::Consent { mode })
@@ -205,7 +189,7 @@ impl ReverseLookup<Stage> for ProxiedStorage {
             } => {
                 if let Some(password) = password_stage {
                     let stage = self
-                        .lookup(&DataRef::<Stage>::new(StageQuery::uid(password.clone())))
+                        .lookup(&DataRef::<Stage>::new(StageQuery::uid(*password)))
                         .await
                         .expect("Failed to lookup stage");
                     self.reverse_lookup(&*stage).await;

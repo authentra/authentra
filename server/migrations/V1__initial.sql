@@ -1,3 +1,11 @@
+create type authentication_requirement as enum ('required', 'none', 'superuser', 'ignored');
+create type flow_designation as enum ('invalidation', 'authentication', 'authorization', 'enrollment', 'recovery', 'unenrollment', 'configuration');
+create type policy_kind as enum ('password_expiry', 'password_strength', 'expression');
+create type prompt_kind as enum ('username', 'email', 'password', 'text', 'text_read_only', 'signed_number', 'unsigned_number', 'checkbox', 'switch', 'date', 'date_time', 'seperator', 'static', 'locale');
+create type stage_kind as enum ('deny', 'prompt', 'identification', 'user_login', 'user_logout', 'user_write', 'password', 'consent');
+create type consent_mode as enum ('always', 'once', 'until');
+create type userid_field as enum ('email', 'name', 'uuid');
+
 create table users
 (
     uid                  uuid                     default gen_random_uuid() primary key not null,
@@ -17,8 +25,6 @@ create table sessions
     user_id uuid references users
 );
 
-create type policy_kind as enum ('password_expiry', 'password_strength', 'expression');
-
 create table policies
 (
     uid              serial primary key,
@@ -29,16 +35,6 @@ create table policies
 );
 
 create unique index policy_slug ON policies ((lower(slug)));
-
-create table policy_bindings
-(
-    uid           serial primary key,
-    enabled       bool not null,
-    negate_result bool not null,
-    policy        int4 not null references policies
-);
-
-create type prompt_kind as enum ('username', 'email', 'password', 'text', 'text_read_only', 'signed_number', 'unsigned_number', 'checkbox', 'switch', 'date', 'date_time', 'seperator', 'static', 'locale');
 
 create table prompts
 (
@@ -51,25 +47,6 @@ create table prompts
     help_text   varchar(128)
 );
 
-create type stage_kind as enum ('deny', 'prompt', 'identification', 'user_login', 'user_logout', 'user_write', 'password', 'consent');
-
-create type consent_mode as enum ('always', 'once', 'until');
-
-create table consent_stages
-(
-    uid   serial primary key,
-    mode  consent_mode not null,
-    until int4
-);
-
-create type userid_field as enum ('email', 'name', 'uuid');
-
-create table identification_stages
-(
-    uid    serial primary key,
-    fields userid_field[] not null
-);
-
 create table stages
 (
     uid                           serial primary key,
@@ -77,24 +54,12 @@ create table stages
     kind                          stage_kind   not null,
     timeout                       int4         not null,
     identification_password_stage int4 references stages,
-    identification_stage          int4 references stages,
-    consent_stage                 int4 references consent_stages
+    identification_fields userid_field[],
+    consent_mode consent_mode,
+    consent_until int4
 );
 
 create unique index stage_slug on stages ((lower(slug)));
-
-create table stage_prompt_bindings
-(
-    prompt   int4 not null references prompts,
-    stage    int4 not null references stages,
-    ordering int2 not null,
-    primary key (prompt, stage)
-);
-
-create index stage_prompt_bindings_stage on stage_prompt_bindings (stage);
-
-create type authentication_requirement as enum ('required', 'none', 'superuser', 'ignored');
-create type flow_designation as enum ('invalidation', 'authentication', 'authorization', 'enrollment', 'recovery', 'unenrollment', 'configuration');
 
 create table flows
 (

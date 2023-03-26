@@ -45,7 +45,7 @@ impl DataQueryExecutor<Tenant> for TenantExecutor {
     ) -> Result<Vec<Self::Id>, Self::Error> {
         if let Some(query) = query {
             match query {
-                TenantQuery::uid(id) => return Ok(vec![id.clone()]),
+                TenantQuery::uid(id) => return Ok(vec![*id]),
                 TenantQuery::host(_host) => todo!(),
             }
         } else {

@@ -31,7 +31,7 @@ impl AsComponent for Stage {
                         sources: vec![],
                         show_source_labels: false,
                     },
-                    password: password_stage.clone().map(|_| PasswordComponentData {
+                    password: (*password_stage).map(|_| PasswordComponentData {
                         recovery_url: "".into(),
                     }),
                 })
