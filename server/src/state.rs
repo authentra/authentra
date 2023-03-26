@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use deadpool_postgres::{GenericClient, Object, Pool, PoolError};
 use model::Tenant;
-use storage::{Storage, StorageManager};
+use storage::Storage;
 
 use crate::{
     api::AuthServiceData,
@@ -29,9 +29,6 @@ impl SharedState {
         &self.0.storage
     }
 
-    pub fn storage_old(&self) -> &StorageManager {
-        &self.0.storage_old
-    }
     pub fn defaults(&self) -> &Defaults {
         self.0.defaults.as_ref()
     }
@@ -45,7 +42,6 @@ pub(super) struct InternalSharedState {
     pub(super) executor: FlowExecutor,
     pub(super) auth_data: AuthServiceData,
     pub(super) storage: Storage,
-    pub(super) storage_old: StorageManager,
     pub(super) defaults: Arc<Defaults>,
     pub(super) policies: PolicyService,
 }

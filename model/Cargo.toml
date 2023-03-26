@@ -18,5 +18,3 @@ axum = { workspace = true, optional = true }
 derive_more = { workspace = true, features = ["error", "display", "from"] }
 postgres-types = { version = "0.2.4", features = ["derive", "with-time-0_3"] }
 time = { workspace = true, features = ["serde"] }
-# datacache = { git = "https://github.com/authust/datacache", optional = true }
-datacache = { workspace = true, optional = true, features = ["serde"] }

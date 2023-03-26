@@ -19,11 +19,8 @@ impl From<Policy> for PartialPolicy {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "datacache", derive(datacache::DataMarker))]
 pub struct Policy {
-    #[cfg_attr(feature = "datacache", datacache(queryable))]
     pub uid: i32,
-    #[cfg_attr(feature = "datacache", datacache(queryable))]
     pub slug: String,
     pub kind: PolicyKind,
 }

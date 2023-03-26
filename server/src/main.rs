@@ -197,7 +197,6 @@ pub struct AuthustState {
 }
 async fn create_state(config: InternalAuthustConfiguration, pool: Pool) -> SharedState {
     let storage = Storage::new(pool.clone()).await.unwrap();
-    let storage_old = storage::create_manager(pool.clone());
     let policies = PolicyService::new(storage.clone());
     let defaults = Defaults::new(&storage, pool.clone()).await;
     let executor = FlowExecutor::new(Arc::new(storage.clone()), policies.clone());
@@ -210,7 +209,6 @@ async fn create_state(config: InternalAuthustConfiguration, pool: Pool) -> Share
             decoding_key: DecodingKey::from_secret(config.secret.as_bytes()),
         },
         storage,
-        storage_old: storage_old.clone(),
         defaults: Arc::new(defaults),
         policies,
     };

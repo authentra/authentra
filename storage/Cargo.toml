@@ -12,15 +12,13 @@ moka = { workspace = true, features = ["future"] }
 serde = { workspace = true }
 uuid = { workspace = true, default-features = false, features = ["serde"] }
 tracing = { workspace = true }
-model = { path = "../model", package = "authust_model", features = ["datacache"] }
+model = { path = "../model", package = "authust_model" }
 deadpool-postgres.workspace = true
 tokio-postgres = { workspace = true, features = [
   "with-uuid-1",
   "with-time-0_3",
 ] }
 async-trait = "0.1.64"
-# datacache = { git = "https://github.com/authust/datacache" }
-datacache.workspace = true
 postgres-types = { version = "0.2.4", features = ["derive", "with-time-0_3"] }
 parking_lot.workspace = true
 dashmap = "5.4.0"

@@ -4,11 +4,8 @@ use serde::{Deserialize, Serialize};
 use super::PromptBinding;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "datacache", derive(datacache::DataMarker))]
 pub struct Stage {
-    #[cfg_attr(feature = "datacache", datacache(queryable))]
     pub uid: i32,
-    #[cfg_attr(feature = "datacache", datacache(queryable))]
     pub slug: String,
     pub kind: StageKind,
     pub timeout: i32,

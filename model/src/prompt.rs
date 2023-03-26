@@ -8,9 +8,7 @@ pub struct PromptBinding {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "datacache", derive(datacache::DataMarker))]
 pub struct Prompt {
-    #[cfg_attr(feature = "datacache", datacache(queryable))]
     pub uid: i32,
     pub field_key: String,
     pub label: String,

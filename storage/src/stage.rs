@@ -1,88 +1,12 @@
-use async_trait::async_trait;
-use datacache::{DataQueryExecutor, DataRef, LookupRef};
 use deadpool_postgres::GenericClient;
 use model::{
-    ConsentMode, PasswordBackend, PgConsentMode, Prompt, PromptBinding, PromptQuery, Stage,
-    StageKind, StageQuery, UserField,
+    ConsentMode, PasswordBackend, PgConsentMode, PromptBinding, Stage, StageKind, UserField,
 };
 use postgres_types::FromSql;
 use tokio_postgres::Row;
 
-use crate::{include_sql, ProxiedStorage, ReverseLookup, StorageError};
+use crate::{include_sql, StorageError};
 
-datacache::storage!(pub StageStorage(StageExecutor, Stage), id(uid: i32), unique(slug: String), fields());
-
-crate::executor!(pub StageExecutor);
-
-#[async_trait]
-impl DataQueryExecutor<Stage> for StageExecutor {
-    type Error = StorageError;
-    type Id = i32;
-
-    fn get_id(&self, data: &Stage) -> Self::Id {
-        data.uid
-    }
-
-    async fn find_one(&self, query: &StageQuery) -> Result<Stage, Self::Error> {
-        let conn = self.get_conn().await?;
-        let row = match query {
-            StageQuery::uid(uid) => {
-                conn.query_one(
-                    &conn.prepare_cached(include_sql!("stage/by-id")).await?,
-                    &[&uid],
-                )
-                .await?
-            }
-            StageQuery::slug(slug) => {
-                conn.query_one(
-                    &conn.prepare_cached(include_sql!("stage/by-slug")).await?,
-                    &[&slug],
-                )
-                .await?
-            }
-        };
-        from_row(&conn, row).await
-    }
-    async fn find_all_ids(&self, query: Option<&StageQuery>) -> Result<Vec<Self::Id>, Self::Error> {
-        if let Some(query) = query {
-            match query {
-                StageQuery::uid(id) => return Ok(vec![*id]),
-                StageQuery::slug(_slug) => todo!(),
-            }
-        } else {
-            let conn = self.get_conn().await?;
-            let statement = conn.prepare_cached(include_sql!("stage/all-ids")).await?;
-            let ids = conn.query(&statement, &[]).await?;
-            Ok(ids.into_iter().map(|row| row.get("uid")).collect())
-        }
-    }
-    async fn find_optional(&self, query: &StageQuery) -> Result<Option<Stage>, Self::Error> {
-        let conn = self.get_conn().await?;
-        let row = match query {
-            StageQuery::uid(uid) => {
-                conn.query_opt(
-                    &conn.prepare_cached(include_sql!("stage/by-id")).await?,
-                    &[&uid],
-                )
-                .await?
-            }
-            StageQuery::slug(slug) => {
-                conn.query_opt(
-                    &conn.prepare_cached(include_sql!("stage/by-slug")).await?,
-                    &[&slug],
-                )
-                .await?
-            }
-        };
-        Ok(match row {
-            Some(row) => Some(from_row(&conn, row).await?),
-            None => None,
-        })
-    }
-    async fn delete(&self, _data: &StageQuery) -> Result<Vec<Self::Id>, Self::Error> {
-        todo!()
-    }
-}
 #[derive(Debug, FromSql)]
 #[postgres(name = "stage_kind")]
 enum PgStageKind {
@@ -170,32 +94,4 @@ async fn prompt_stage(
         .collect();
     bindings.sort_by_key(|v| v.order);
     Ok(StageKind::Prompt { bindings })
-}
-
-#[async_trait]
-impl ReverseLookup<Stage> for ProxiedStorage {
-    async fn reverse_lookup(&self, sub: &Stage) {
-        match &sub.kind {
-            model::StageKind::Prompt { bindings } => {
-                for binding in bindings {
-                    self.lookup(&DataRef::<Prompt>::new(PromptQuery::uid(binding.prompt)))
-                        .await
-                        .expect("Failed to lookup prompt");
-                }
-            }
-            model::StageKind::Identification {
-                password_stage,
-                user_fields: _,
-            } => {
-                if let Some(password) = password_stage {
-                    let stage = self
-                        .lookup(&DataRef::<Stage>::new(StageQuery::uid(*password)))
-                        .await
-                        .expect("Failed to lookup stage");
-                    self.reverse_lookup(&*stage).await;
-                }
-            }
-            _ => {}
-        }
-    }
 }

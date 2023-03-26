@@ -14,12 +14,9 @@ use derive_more::{Display, Error, From};
 use http::{header::HeaderName, request::Parts, StatusCode};
 
 use jsonwebtoken::{errors::ErrorKind, DecodingKey, EncodingKey};
-use model::{error::SubmissionError, Flow, FlowParam, FlowQuery};
+use model::{error::SubmissionError, Flow, FlowParam};
 use serde::Deserialize;
-use storage::{
-    datacache::{DataMarker, DataRef},
-    EntityId, StorageError,
-};
+use storage::{EntityId, StorageError};
 use tokio_postgres::error::SqlState;
 use tracing_error::SpanTrace;
 pub use v1::setup_api_v1;
@@ -269,9 +266,9 @@ pub async fn ping_handler() -> &'static str {
     "Pong!"
 }
 
-pub struct SlugWrapper<D: DataMarker>(pub String, PhantomData<D>);
+pub struct SlugWrapper<D>(pub String, PhantomData<D>);
 
-impl<D: DataMarker> SlugWrapper<D> {
+impl<D> SlugWrapper<D> {
     pub fn new(slug: String) -> Self {
         Self(slug, PhantomData)
     }
@@ -288,23 +285,5 @@ where
         let path: Path<FlowParam> = Path::from_request_parts(parts, state).await?;
         let flow_slug = path.0.flow_slug;
         Ok(SlugWrapper::new(flow_slug))
-    }
-}
-
-#[derive(Deserialize)]
-#[serde(transparent)]
-struct FlowNumId {
-    flow_id: i32,
-}
-
-pub struct RefWrapper<D: DataMarker>(pub DataRef<D>);
-
-#[async_trait]
-impl<S> FromRequestParts<S> for RefWrapper<Flow> {
-    type Rejection = PathRejection;
-
-    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
-        let path: Path<FlowNumId> = Path::from_request_parts(parts, &()).await?;
-        Ok(Self(DataRef::new(FlowQuery::uid(path.0.flow_id))))
     }
 }

@@ -1,89 +1,9 @@
-use async_trait::async_trait;
-use datacache::{DataQueryExecutor, DataRef, LookupRef};
 use deadpool_postgres::GenericClient;
-use model::{
-    Flow, FlowBinding, FlowBindingKind, FlowEntry, FlowQuery, Policy, PolicyQuery, Stage,
-    StageQuery,
-};
+use model::{Flow, FlowBinding, FlowBindingKind, FlowEntry};
 use tokio_postgres::{Row, Statement};
 use uuid::Uuid;
 
-use crate::{include_sql, ProxiedStorage, ReverseLookup, StorageError};
-
-datacache::storage!(pub FlowStorage(FlowExecutor, Flow), id(uid: i32), unique(slug: String), fields());
-
-crate::executor!(pub FlowExecutor);
-
-#[async_trait]
-impl DataQueryExecutor<Flow> for FlowExecutor {
-    type Error = StorageError;
-
-    type Id = i32;
-
-    fn get_id(&self, data: &Flow) -> Self::Id {
-        data.uid
-    }
-
-    async fn find_one(&self, query: &FlowQuery) -> Result<Flow, Self::Error> {
-        let conn = self.get_conn().await?;
-        let row = match query {
-            FlowQuery::uid(uid) => {
-                conn.query_one(
-                    &conn.prepare_cached(include_sql!("flow/by-id")).await?,
-                    &[uid],
-                )
-                .await?
-            }
-            FlowQuery::slug(slug) => {
-                conn.query_one(
-                    &conn.prepare_cached(include_sql!("flow/by-slug")).await?,
-                    &[slug],
-                )
-                .await?
-            }
-        };
-        Ok(from_row(&conn, row).await?)
-    }
-    async fn find_all_ids(&self, query: Option<&FlowQuery>) -> Result<Vec<Self::Id>, Self::Error> {
-        if let Some(query) = query {
-            match query {
-                FlowQuery::uid(id) => return Ok(vec![*id]),
-                FlowQuery::slug(_slug) => todo!(),
-            }
-        } else {
-            let conn = self.get_conn().await?;
-            let statement = conn.prepare_cached(include_sql!("flow/all-ids")).await?;
-            let ids = conn.query(&statement, &[]).await?;
-            Ok(ids.into_iter().map(|row| row.get("uid")).collect())
-        }
-    }
-    async fn find_optional(&self, query: &FlowQuery) -> Result<Option<Flow>, Self::Error> {
-        let conn = self.get_conn().await?;
-        let row = match query {
-            FlowQuery::uid(uid) => {
-                conn.query_opt(
-                    &conn.prepare_cached(include_sql!("flow/by-id")).await?,
-                    &[&uid],
-                )
-                .await?
-            }
-            FlowQuery::slug(slug) => {
-                conn.query_opt(
-                    &conn.prepare_cached(include_sql!("flow/by-slug")).await?,
-                    &[&slug],
-                )
-                .await?
-            }
-        };
-        Ok(match row {
-            Some(row) => Some(from_row(&conn, row).await?),
-            None => None,
-        })
-    }
-    async fn delete(&self, _data: &FlowQuery) -> Result<Vec<Self::Id>, Self::Error> {
-        todo!()
-    }
-}
+use crate::{include_sql, StorageError};
 
 pub(crate) async fn from_row(client: &impl GenericClient, row: Row) -> Result<Flow, StorageError> {
     let binding_statement = client
@@ -156,34 +76,4 @@ async fn entry_from_row(client: &impl GenericClient, row: Row) -> Result<FlowEnt
         bindings,
         stage: row.get("stage"),
     })
-}
-
-#[async_trait]
-impl ReverseLookup<Flow> for ProxiedStorage {
-    async fn reverse_lookup(&self, sub: &Flow) {
-        self.lookup(&DataRef::<Flow>::new(FlowQuery::uid(sub.uid)))
-            .await
-            .expect("Failed to lookup flow");
-        for binding in &sub.bindings {
-            if let FlowBindingKind::Policy(policy) = &binding.kind {
-                self.lookup(&DataRef::<Policy>::new(PolicyQuery::uid(*policy)))
-                    .await
-                    .expect("Failed to lookup policy");
-            }
-        }
-        for entry in &sub.entries {
-            for binding in &entry.bindings {
-                if let FlowBindingKind::Policy(policy) = &binding.kind {
-                    self.lookup(&DataRef::<Policy>::new(PolicyQuery::uid(*policy)))
-                        .await
-                        .expect("Failed to lookup policy");
-                }
-            }
-            let stage = self
-                .lookup(&DataRef::<Stage>::new(StageQuery::uid(entry.stage)))
-                .await
-                .expect("Failed to lookup stage");
-            self.reverse_lookup(&*stage).await;
-        }
-    }
 }
