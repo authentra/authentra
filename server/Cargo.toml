@@ -11,7 +11,7 @@ dev-mode = []
 otlp-http-proto = ["opentelemetry-otlp/http-proto"]
 
 [dependencies]
-serde = { workspace = true, features = ["derive"] }
+serde = { workspace = true, features = ["derive", "rc"] }
 config = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "signal"] }
 once_cell = { workspace = true }

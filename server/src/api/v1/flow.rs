@@ -1,14 +1,15 @@
+use std::sync::Arc;
+
 use axum::{
     extract::{Path, State},
     routing::MethodRouter,
     Json, Router,
 };
-use model::{AuthenticationRequirement, Flow, FlowDesignation, FlowQuery};
+use model::{AuthenticationRequirement, Flow, FlowDesignation};
 use serde::Deserialize;
-use storage::datacache::{Data, DataStorage, LookupRef};
 
 use crate::{
-    api::{errors::NOT_FOUND, ApiError, ApiErrorKind, RefWrapper},
+    api::{errors::NOT_FOUND, ApiError, ApiErrorKind},
     SharedState,
 };
 
@@ -29,26 +30,19 @@ pub fn setup_flow_router() -> Router<SharedState> {
 async fn get_flows(
     _: AdminSession,
     State(state): State<SharedState>,
-) -> Result<Json<Vec<Data<Flow>>>, ApiError> {
-    state
-        .storage_old()
-        .get_for_data::<Flow>()
-        .ok_or(ApiErrorKind::MiscInternal("Missing Flowstorage").into_api())?
-        .find_all(None)
-        .await
-        .map(Json)
-        .map_err(Into::into)
+) -> Result<Json<Vec<Flow>>, ApiError> {
+    Ok(Json(state.storage().list_flows().await?))
 }
 
 async fn get_flow(
     _: AdminSession,
-    RefWrapper(flow): RefWrapper<Flow>,
+    Path(flow): Path<i32>,
     State(state): State<SharedState>,
-) -> Result<Json<Data<Flow>>, ApiError> {
+) -> Result<Json<Arc<Flow>>, ApiError> {
     state
-        .storage_old()
-        .lookup(&flow)
-        .await
+        .storage()
+        .get_flow(flow)
+        .await?
         .map(Json)
         .ok_or(NOT_FOUND)
 }
@@ -61,12 +55,11 @@ struct UpdateModel {
 
 async fn update_flow(
     _: AdminSession,
-    RefWrapper(flow): RefWrapper<Flow>,
+    Path(flow): Path<i32>,
     State(state): State<SharedState>,
     Json(body): Json<UpdateModel>,
 ) -> Result<(), ApiError> {
-    let storage = state.storage_old();
-    let flow = storage.lookup(&flow).await.map(Json).ok_or(NOT_FOUND)?;
+    let flow = state.storage().get_flow(flow).await?.ok_or(NOT_FOUND)?;
     let mut has_changed = false;
     let mut connection = state.defaults().connection().await?;
     let tx = connection.transaction().await?;
@@ -100,13 +93,8 @@ async fn update_flow(
     }
 
     if has_changed {
-        let flow_storage = storage
-            .get_for_data::<Flow>()
-            .ok_or(ApiErrorKind::MiscInternal("missing flow storage"))?;
-        let query = FlowQuery::uid(flow.uid);
         tx.commit().await?;
-        flow_storage.invalidate(&query).await?;
-        flow_storage.find_one(&query).await?;
+        // TODO: Make sure to invalidate cache when caching is implemented
     }
 
     Ok(())
@@ -124,7 +112,7 @@ async fn create_flow(
     _: AdminSession,
     State(state): State<SharedState>,
     Json(body): Json<CreateModel>,
-) -> Result<Json<Data<Flow>>, ApiError> {
+) -> Result<Json<Arc<Flow>>, ApiError> {
     let mut connection = state.defaults().connection().await?;
     let tx = connection.transaction().await?;
     let statement = tx.prepare_cached("insert into flows(slug,title,designation, authentication) values($1,$2,$3,$4) returning uid").await?;
@@ -142,12 +130,12 @@ async fn create_flow(
     let uid: i32 = row.get(0);
     tx.commit().await?;
     let flow = state
-        .storage_old()
-        .get_for_data::<Flow>()
-        .ok_or(ApiErrorKind::MiscInternal("Missing Flowstorage").into_api())?
-        .find_one(&FlowQuery::uid(uid))
-        .await?;
-    Ok(Json(flow))
+        .storage()
+        .get_flow(uid)
+        .await?
+        .map(Json)
+        .ok_or(NOT_FOUND)?;
+    Ok(flow)
 }
 
 async fn delete_flow(

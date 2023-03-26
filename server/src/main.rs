@@ -14,13 +14,12 @@ use api::AuthServiceData;
 use axum::error_handling::HandleErrorLayer;
 use axum::routing::get;
 use axum::{BoxError, Router};
-use deadpool_postgres::{GenericClient, Manager, ManagerConfig, Object, Pool, PoolError};
+use deadpool_postgres::{Manager, ManagerConfig, Pool};
 
 use executor::FlowExecutor;
 use futures::{Future, FutureExt};
 use http::StatusCode;
 use jsonwebtoken::{DecodingKey, EncodingKey};
-use model::Tenant;
 
 use once_cell::sync::Lazy;
 use opentelemetry::sdk::resource::{EnvResourceDetector, ResourceDetector};
@@ -30,7 +29,7 @@ use opentelemetry_otlp::{self as otlp, ExportConfig};
 use otlp::{SpanExporterBuilder, TonicExporterBuilder, WithExportConfig};
 use service::policy::PolicyService;
 
-use storage::{Storage, StorageManager};
+use storage::Storage;
 use tokio::signal;
 use tower::ServiceBuilder;
 use tower_cookies::CookieManagerLayer;
@@ -46,6 +45,8 @@ pub mod executor;
 pub mod interface;
 mod otel_middleware;
 pub mod service;
+mod state;
+pub use state::*;
 
 pub static INTERFACE_BASE_URI: Lazy<&'static str> = Lazy::new(base_uri);
 
@@ -194,95 +195,6 @@ async fn setup_database(configuration: &PostgresConfiguration, password: &str) -
 pub struct AuthustState {
     pub configuration: AuthustConfiguration,
 }
-
-#[derive(Clone)]
-pub struct SharedState(Arc<InternalSharedState>);
-
-impl SharedState {
-    pub fn users(&self) -> &UserService {
-        &self.0.users
-    }
-
-    pub fn executor(&self) -> &FlowExecutor {
-        &self.0.executor
-    }
-
-    pub fn auth_data(&self) -> &AuthServiceData {
-        &self.0.auth_data
-    }
-    pub fn storage(&self) -> &Storage {
-        &self.0.storage
-    }
-
-    pub fn storage_old(&self) -> &StorageManager {
-        &self.0.storage_old
-    }
-    pub fn defaults(&self) -> &Defaults {
-        self.0.defaults.as_ref()
-    }
-    pub fn policies(&self) -> &PolicyService {
-        &self.0.policies
-    }
-}
-
-struct InternalSharedState {
-    users: UserService,
-    executor: FlowExecutor,
-    auth_data: AuthServiceData,
-    storage: Storage,
-    storage_old: StorageManager,
-    defaults: Arc<Defaults>,
-    policies: PolicyService,
-}
-
-pub struct Defaults {
-    pool: Pool,
-    tenant: Option<Arc<Tenant>>,
-}
-
-impl Defaults {
-    pub fn tenant(&self) -> Option<Arc<Tenant>> {
-        self.tenant.clone()
-    }
-    pub fn pool(&self) -> Pool {
-        self.pool.clone()
-    }
-    pub async fn connection(&self) -> Result<Object, PoolError> {
-        self.pool.get().await
-    }
-}
-
-impl Defaults {
-    pub async fn new(storage: &Storage, pool: Pool) -> Self {
-        let default = Self::find_default(
-            storage,
-            &pool.get().await.expect("Failed to get connection"),
-        )
-        .await;
-        Defaults {
-            pool,
-            tenant: default,
-        }
-    }
-
-    async fn find_default(storage: &Storage, client: &impl GenericClient) -> Option<Arc<Tenant>> {
-        let statement = client
-            .prepare_cached("select uid from tenants where is_default = true")
-            .await
-            .ok()
-            .expect("Failed to prepare statement");
-        let Some(row) = client
-            .query_opt(&statement, &[])
-            .await
-            .expect("Failed to execute statement") else { return None };
-        
-        storage
-            .get_tenant(row.get("uid"))
-            .await
-            .expect("An error occurred while loading tenant")
-    }
-}
-
 async fn create_state(config: InternalAuthustConfiguration, pool: Pool) -> SharedState {
     let storage = Storage::new(pool.clone()).await.unwrap();
     let storage_old = storage::create_manager(pool.clone());
@@ -302,7 +214,7 @@ async fn create_state(config: InternalAuthustConfiguration, pool: Pool) -> Share
         defaults: Arc::new(defaults),
         policies,
     };
-    
+
     SharedState(Arc::new(internal_state))
 }
 
@@ -319,7 +231,7 @@ async fn router(state: SharedState) -> Router<()> {
     #[cfg(debug_assertions)]
     #[cfg(feature = "dev-mode")]
     let service = service.layer(cors);
-    
+
     Router::new()
         .route("/test", get(hello_world))
         .nest("/api/v1", setup_api_v1(state.clone()).await)
