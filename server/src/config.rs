@@ -11,7 +11,7 @@ pub struct AuthustConfiguration {
 #[derive(Debug, Clone, Deserialize)]
 pub struct InternalAuthustConfiguration {
     pub listen: ListenConfiguration,
-    pub postgres: PostgresConfiguration,
+    pub postgres: deadpool_postgres::Config,
     pub secret: String,
     pub jaeger_endpoint: Option<String>,
     // pub allowed_hosts: Vec<String>,

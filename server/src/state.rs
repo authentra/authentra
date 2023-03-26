@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
-use deadpool_postgres::{GenericClient, Object, Pool, PoolError};
+use deadpool_postgres::{Object, Pool, PoolError};
 use model::Tenant;
-use storage::Storage;
+use storage::{ExecutorStorage, Storage};
 
 use crate::{
     api::AuthServiceData,
@@ -65,30 +65,13 @@ impl Defaults {
 
 impl Defaults {
     pub async fn new(storage: &Storage, pool: Pool) -> Self {
-        let default = Self::find_default(
-            storage,
-            &pool.get().await.expect("Failed to get connection"),
-        )
-        .await;
+        let default = storage
+            .get_default_tenant()
+            .await
+            .expect("An error ocurred while loading tenant");
         Defaults {
             pool,
-            tenant: default,
+            tenant: default.map(Arc::new),
         }
-    }
-
-    async fn find_default(storage: &Storage, client: &impl GenericClient) -> Option<Arc<Tenant>> {
-        let statement = client
-            .prepare_cached("select uid from tenants where is_default = true")
-            .await
-            .expect("Failed to prepare statement");
-        let Some(row) = client
-            .query_opt(&statement, &[])
-            .await
-            .expect("Failed to execute statement") else { return None };
-
-        storage
-            .get_tenant(row.get("uid"))
-            .await
-            .expect("An error occurred while loading tenant")
     }
 }

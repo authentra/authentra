@@ -44,10 +44,11 @@ tracing-opentelemetry.workspace = true
 policy-engine = { path = "../policy-engine" }
 tracing-log.workspace = true
 refinery = { workspace = true, features = ["tokio-postgres"] }
-deadpool-postgres.workspace = true
+deadpool-postgres = { workspace = true, features = ["serde"] }
 tokio-postgres = { workspace = true, features = [
   "with-uuid-1",
   "with-time-0_3",
 ] }
-opentelemetry-otlp = { version = "0.11.0" }
+opentelemetry-otlp.workspace = true
 storage = { path = "../storage" }
+hyper = "0.14.25"

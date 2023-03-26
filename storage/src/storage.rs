@@ -6,7 +6,7 @@ use futures::{future::BoxFuture, Future, FutureExt};
 use model::{Flow, Policy, Prompt, Stage, Tenant};
 use moka::future::Cache;
 use serde::Serialize;
-use tokio::sync::{Mutex, RwLock, RwLockReadGuard};
+use tokio::sync::Mutex;
 
 use crate::{include_sql, StorageError};
 
@@ -22,6 +22,7 @@ pub trait ExecutorStorage: Send + Sync {
 
     async fn list_policies(&self) -> StorageResult<Vec<Policy>>;
     async fn list_flows(&self) -> StorageResult<Vec<Flow>>;
+    async fn get_default_tenant(&self) -> StorageResult<Option<Tenant>>;
 }
 
 #[async_trait]
@@ -52,6 +53,9 @@ impl ExecutorStorage for Storage {
     }
     async fn list_flows(&self) -> StorageResult<Vec<Flow>> {
         self.list_flows().await
+    }
+    async fn get_default_tenant(&self) -> StorageResult<Option<Tenant>> {
+        self.get_default_tenant().await
     }
 }
 
@@ -138,13 +142,13 @@ impl<
 #[derive(Clone)]
 pub struct Storage {
     pool: Pool,
-    connection: Arc<RwLock<Object>>,
+    // connection: Arc<RwLock<Object>>,
 }
 
 impl Storage {
     pub async fn new(pool: Pool) -> Result<Self, PoolError> {
         Ok(Self {
-            connection: Arc::new(RwLock::new(pool.get().await?)),
+            // connection: Arc::new(RwLock::new(pool.get().await?)),
             pool,
         })
     }
@@ -219,22 +223,27 @@ impl Storage {
         vec![]
     }
 
-    async fn get_client(&self) -> Result<RwLockReadGuard<Object>, PoolError> {
-        let guard = self.connection.read().await;
-        if guard.is_closed() {
-            drop(guard);
-            let mut guard = self.connection.write().await;
-            if !guard.is_closed() {
-                drop(guard);
-                return Ok(self.connection.read().await);
-            }
-            *guard = self.pool.get().await?;
-            drop(guard);
-            let guard = self.connection.read().await;
-            Ok(guard)
-        } else {
-            Ok(guard)
-        }
+    // async fn get_client(&self) -> Result<RwLockReadGuard<Object>, PoolError> {
+    //     let guard = self.connection.read().await;
+    //     if guard.is_closed() {
+    //         drop(guard);
+    //         let mut guard = self.connection.write().await;
+    //         if !guard.is_closed() {
+    //             drop(guard);
+    //             return Ok(self.connection.read().await);
+    //         }
+    //         *guard = self.pool.get().await?;
+    //         drop(guard);
+    //         let guard = self.connection.read().await;
+    //         Ok(guard)
+    //     } else {
+    //         Ok(guard)
+    //     }
+    // }
+
+    #[inline(always)]
+    async fn get_client(&self) -> Result<Object, PoolError> {
+        self.pool.get().await
     }
 
     pub async fn get_flow(&self, id: i32) -> StorageResult<Option<Arc<Flow>>> {
@@ -273,6 +282,11 @@ impl Storage {
     pub async fn list_flows(&self) -> StorageResult<Vec<Flow>> {
         let client = self.get_client().await?;
         list_flows_from_db(&client).await
+    }
+
+    async fn get_default_tenant(&self) -> StorageResult<Option<Tenant>> {
+        let client = self.get_client().await?;
+        default_tenant_from_db(&client).await
     }
 }
 
@@ -321,6 +335,15 @@ async fn prompt_from_db(client: &Object, id: i32) -> StorageResult<Option<Prompt
 async fn tenant_from_db(client: &Object, id: i32) -> StorageResult<Option<Tenant>> {
     let statement = client.prepare_cached(include_sql!("tenant/by-id")).await?;
     match client.query_opt(&statement, &[&id]).await? {
+        Some(row) => Ok(Some(crate::tenant::from_row(row))),
+        None => Ok(None),
+    }
+}
+async fn default_tenant_from_db(client: &Object) -> StorageResult<Option<Tenant>> {
+    let statement = client
+        .prepare_cached(include_sql!("tenant/get-default"))
+        .await?;
+    match client.query_opt(&statement, &[]).await? {
         Some(row) => Ok(Some(crate::tenant::from_row(row))),
         None => Ok(None),
     }

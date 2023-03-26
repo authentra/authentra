@@ -132,6 +132,7 @@ dependencies = [
  "futures",
  "futures-util",
  "http",
+ "hyper",
  "jsonwebtoken",
  "moka",
  "once_cell",
@@ -483,6 +484,7 @@ dependencies = [
  "deadpool-runtime",
  "num_cpus",
  "retain_mut",
+ "serde",
  "tokio",
 ]
 
@@ -494,6 +496,7 @@ checksum = "836a24a9d49deefe610b8b60c767a7412e9a931d79a89415cd2d2d71630ca8d7"
 dependencies = [
  "deadpool",
  "log",
+ "serde",
  "tokio",
  "tokio-postgres",
 ]
