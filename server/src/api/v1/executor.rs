@@ -101,6 +101,7 @@ async fn post_flow(
         .ok_or(ApiErrorKind::NotFound.into_api())?;
     let mut connection = state.defaults().connection().await?;
     let connection = connection.transaction().await?;
+    connection
     let context = CheckContextRequest {
         uri: uri.clone(),
         host,

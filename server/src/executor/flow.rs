@@ -74,10 +74,7 @@ impl FlowExecution {
         let exc_context = self.get_context().await;
         let component = if is_completed {
             match &context.request.query.next {
-                Some(to) => {
-                    self.0.executor.invalidate_flow(&self.0.key);
-                    FlowComponent::Redirect { to: to.clone() }
-                }
+                Some(to) => FlowComponent::Redirect { to: to.clone() },
                 None => FlowComponent::Error {
                     message: "Missing Redirect".to_owned(),
                 },
@@ -115,6 +112,7 @@ impl FlowExecution {
             *lock = new;
         } else {
             self.0.is_completed.store(true, Ordering::Relaxed);
+            self.0.executor.invalidate_flow(&self.0.key);
         }
     }
 
