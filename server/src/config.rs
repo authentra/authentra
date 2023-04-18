@@ -9,12 +9,12 @@ pub struct AuthustConfiguration {
 }
 
 #[derive(Debug, Clone, Deserialize)]
-pub struct InternalAuthustConfiguration {
+pub struct AuthustStartupConfiguration {
     pub listen: ListenConfiguration,
     pub postgres: deadpool_postgres::Config,
     pub secret: String,
     pub jaeger_endpoint: Option<String>,
-    // pub allowed_hosts: Vec<String>,
+    pub allowed_hosts: Vec<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -43,10 +43,10 @@ impl Default for ListenConfiguration {
     }
 }
 
-impl From<InternalAuthustConfiguration> for AuthustConfiguration {
-    fn from(_value: InternalAuthustConfiguration) -> Self {
+impl From<AuthustStartupConfiguration> for AuthustConfiguration {
+    fn from(value: AuthustStartupConfiguration) -> Self {
         Self {
-            allowed_hosts: leak_vec(vec![]), // allowed_hosts: leak_vec(value.allowed_hosts),
+            allowed_hosts: leak_vec(value.allowed_hosts),
         }
     }
 }
@@ -64,15 +64,18 @@ fn leak_vec(vec: Vec<String>) -> &'static [&'static str] {
     )
 }
 
-impl InternalAuthustConfiguration {
+impl AuthustStartupConfiguration {
     pub fn load() -> Result<Self, ConfigError> {
         let default_listen = ListenConfiguration::default();
         let loaded = Config::builder()
             .add_source(
                 config::Environment::with_prefix("AUTHUST")
                     .ignore_empty(true)
+                    .try_parsing(true)
                     .separator("__")
-                    .prefix_separator("_"),
+                    .prefix_separator("_")
+                    .with_list_parse_key("allowed_hosts")
+                    .list_separator(" "),
             )
             .set_default("listen.http", default_listen.http.to_string())?
             .set_default("listen.metrics", default_listen.metrics.to_string())?

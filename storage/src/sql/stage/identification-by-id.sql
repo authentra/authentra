@@ -1,1 +1,0 @@
-select * from identification_stages where uid = $1

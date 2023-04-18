@@ -1,54 +1,34 @@
 [package]
-name = "authust_server"
+name = "server"
 version = "0.1.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
-[features]
-# This feature only has an effect when debug_assertions are turned on
-dev-mode = []
-otlp-http-proto = ["opentelemetry-otlp/http-proto"]
+[[bin]]
+name = "authust"
+path = "src/main.rs"
 
 [dependencies]
-serde = { workspace = true, features = ["derive", "rc"] }
-config = { workspace = true }
-tokio = { workspace = true, features = ["macros", "rt-multi-thread", "signal"] }
-once_cell = { workspace = true }
-tracing = { workspace = true, features = ["log"] }
-tracing-subscriber = { workspace = true, features = ["env-filter"] }
-http.workspace = true
-uuid = { workspace = true, features = ["serde"] }
-time = { workspace = true, features = ["serde"] }
-parking_lot.workspace = true
-jsonwebtoken.workspace = true
-rand.workspace = true
-futures-util.workspace = true
-# Wait for tower-cookies to update to new version
-async-trait = { workspace = true }
 argon2.workspace = true
-derive_more = { workspace = true, features = ["error", "display", "from"] }
-tracing-error.workspace = true
-moka.workspace = true
-serde_json = { workspace = true, features = ["preserve_order"] }
-axum = { workspace = true, features = ["headers", "macros", "http2"] }
-tower = { workspace = true, features = ["timeout"] }
-futures.workspace = true
-pin-project.workspace = true
-tower-http = { workspace = true, features = ["trace", "cors", "fs"] }
-serde_urlencoded.workspace = true
-tower-cookies.workspace = true
-model = { path = "../model", features = ["axum"], package = "authust_model" }
-opentelemetry = { workspace = true, features = ["trace", "rt-tokio"] }
-tracing-opentelemetry.workspace = true
-policy-engine = { path = "../policy-engine" }
-tracing-log.workspace = true
-refinery = { workspace = true, features = ["tokio-postgres"] }
+axum = { workspace = true, features = ["http2"] }
+config.workspace = true
 deadpool-postgres = { workspace = true, features = ["serde"] }
-tokio-postgres = { workspace = true, features = [
-  "with-uuid-1",
-  "with-time-0_3",
-] }
+derive_more = { workspace = true, features = ["from", "error", "display"] }
+jsonwebtoken.workspace = true
+once_cell.workspace = true
+opentelemetry = { workspace = true, features = ["rt-tokio"] }
 opentelemetry-otlp.workspace = true
-storage = { path = "../storage" }
-hyper = "0.14.25"
+rand.workspace = true
+refinery = { workspace = true, features = ["tokio-postgres"] }
+serde.workspace = true
+serde_json.workspace = true
+socket2 = "0.5.2"
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "signal", "tracing", "socket2"] }
+tokio-postgres = { workspace = true, features = ["with-uuid-1"] }
+tower.workspace = true
+tower-http = { workspace = true, features = ["trace", "sensitive-headers", "cors"] }
+tracing.workspace = true
+tracing-error = "0.2.0"
+tracing-opentelemetry.workspace = true
+tracing-subscriber = { workspace = true, features = ["env-filter"] }

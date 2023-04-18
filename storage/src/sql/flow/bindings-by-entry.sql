@@ -1,1 +1,0 @@
-select * from flow_bindings where entry = $1

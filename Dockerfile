@@ -25,18 +25,18 @@ FROM chef AS builder
 COPY --from=planner /app/recipe.json recipe.json
 ENV CARGO_REGISTRIES_CRATES_IO_PROTOCOL=sparse
 # Notice that we are specifying the --target flag!
-RUN cargo chef cook --release --target x86_64-unknown-linux-musl --recipe-path recipe.json --bin authust_server
+RUN cargo chef cook --release --target x86_64-unknown-linux-musl --recipe-path recipe.json --bin authust
 COPY model/ model/
 COPY storage/ storage/
 COPY server/ server/
 COPY policy-engine/ policy-engine/
 COPY Cargo.lock .
 COPY Cargo.toml .
-RUN cargo build --release --target x86_64-unknown-linux-musl --bin authust_server
-RUN strip target/x86_64-unknown-linux-musl/release/authust_server
+RUN cargo build --release --target x86_64-unknown-linux-musl --bin authust
+RUN strip target/x86_64-unknown-linux-musl/release/authust
 
 FROM scratch AS runtime
-COPY --from=builder /app/target/x86_64-unknown-linux-musl/release/authust_server /authust/server
+COPY --from=builder /app/target/x86_64-unknown-linux-musl/release/authust /authust/server
 COPY --from=frontend-build dist/ /authust/dist/
 WORKDIR /authust
 CMD [ "./server" ]

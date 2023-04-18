@@ -1,1 +1,0 @@
-select * from password_strength_policies where uid = $1

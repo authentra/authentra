@@ -1,1 +1,0 @@
-select * from policies where uid = $1

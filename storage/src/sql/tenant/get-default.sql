@@ -1,1 +1,0 @@
-select * from tenants where is_default = true
