@@ -58,7 +58,7 @@ impl<B> MakeSpan<B> for OtelMakeSpan {
         let flavor = http_flavor(request.version());
         let name = format!("{method} {route}");
         let trace_id = RandomIdGenerator::default().new_trace_id();
-        let _span = tracing::info_span!(
+        let span = tracing::info_span!(
             "Http Request",
             otel.name = name,
             http.method = %method,
@@ -72,7 +72,7 @@ impl<B> MakeSpan<B> for OtelMakeSpan {
             otel.kind = "server",
             trace_id = %trace_id,
         );
-        todo!()
+        span
     }
 }
 
@@ -115,9 +115,7 @@ fn http_method(method: &Method) -> Cow<'static, str> {
 pub struct OtelOnRequest;
 
 impl<B> OnRequest<B> for OtelOnRequest {
-    fn on_request(&mut self, _request: &Request<B>, _span: &Span) {
-        todo!()
-    }
+    fn on_request(&mut self, _request: &Request<B>, _span: &Span) {}
 }
 
 #[derive(Clone)]
