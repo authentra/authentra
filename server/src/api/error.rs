@@ -1,3 +1,5 @@
+use std::{borrow::Cow, fmt::Debug};
+
 use argon2::password_hash::Error as ArgonError;
 use axum::{
     http::StatusCode,
@@ -5,12 +7,22 @@ use axum::{
 };
 use deadpool_postgres::PoolError;
 use derive_more::{Display, Error};
+use jsonwebtoken::errors::{Error as JwtError, ErrorKind as JwtErrorKind};
 use tracing_error::SpanTrace;
 
-#[derive(Debug)]
 pub struct Error {
     kind: ErrorKind,
+    response_error: ResponseError,
     trace: Option<SpanTrace>,
+}
+
+impl Debug for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Error")
+            .field("kind", &self.kind)
+            .field("trace", &self.trace)
+            .finish()
+    }
 }
 
 impl Error {
@@ -25,62 +37,124 @@ impl Error {
 
 #[derive(Debug, Display, Error)]
 pub enum ErrorKind {
+    #[display("403 Forbidden")]
     Forbidden,
+    #[display("Deadpool: {}", _0)]
     PoolError(PoolError),
+    #[display("Postgres: {}", _0)]
     PostgresError(tokio_postgres::Error),
+    #[display("JWT: {}", _0)]
+    Jwt(JwtError),
+    #[display("Argon: {}", _0)]
     Argon(#[error(not(source))] ArgonError),
 }
 
 impl<T: Into<ErrorKind>> From<T> for Error {
     fn from(value: T) -> Self {
         let value = value.into();
-        if value.is_internal() {
+        let response_error = value.response();
+        let status = response_error.status;
+        if true {
             let trace = SpanTrace::capture();
             Self {
                 kind: value,
+                response_error,
                 trace: Some(trace),
             }
         } else {
             Self {
                 kind: value,
+                response_error,
                 trace: None,
             }
         }
     }
 }
 
-fn argon_is_internal(err: &ArgonError) -> bool {
+fn argon_error(err: &ArgonError) -> ResponseError {
     match err {
-        ArgonError::Password => false,
-        _ => true,
+        ArgonError::Password => (StatusCode::UNAUTHORIZED, "Invalid password").into(),
+        _ => StatusCode::INTERNAL_SERVER_ERROR.into(),
+    }
+}
+
+fn jwt_response(err: &JwtError) -> ResponseError {
+    match err.kind() {
+        JwtErrorKind::InvalidToken => (StatusCode::UNAUTHORIZED, "JWT: Malformed").into(),
+        JwtErrorKind::InvalidSignature => {
+            (StatusCode::UNAUTHORIZED, "JWT: Invalid signature").into()
+        }
+        JwtErrorKind::InvalidEcdsaKey
+        | JwtErrorKind::InvalidRsaKey(_)
+        | JwtErrorKind::RsaFailedSigning
+        | JwtErrorKind::InvalidAlgorithmName
+        | JwtErrorKind::MissingAlgorithm
+        | JwtErrorKind::InvalidKeyFormat => StatusCode::INTERNAL_SERVER_ERROR.into(),
+        JwtErrorKind::MissingRequiredClaim(_) => StatusCode::INTERNAL_SERVER_ERROR.into(),
+        JwtErrorKind::ExpiredSignature => (StatusCode::UNAUTHORIZED, "JWT: Expired").into(),
+        JwtErrorKind::InvalidIssuer => (StatusCode::UNAUTHORIZED, "JWT: Invalid issuer").into(),
+        JwtErrorKind::InvalidAudience => (StatusCode::UNAUTHORIZED, "JWT: Invalid audience").into(),
+        JwtErrorKind::InvalidSubject => (StatusCode::UNAUTHORIZED, "JWT: Invalid subject").into(),
+        JwtErrorKind::ImmatureSignature => {
+            (StatusCode::BAD_REQUEST, "JWT: Immature signature").into()
+        }
+        JwtErrorKind::InvalidAlgorithm => {
+            (StatusCode::BAD_REQUEST, "JWT: Invalid algorithm").into()
+        }
+        JwtErrorKind::Base64(_) => (StatusCode::BAD_REQUEST, "JWT: Invalid").into(),
+        JwtErrorKind::Json(_) => StatusCode::INTERNAL_SERVER_ERROR.into(),
+        JwtErrorKind::Utf8(_) => StatusCode::INTERNAL_SERVER_ERROR.into(),
+        JwtErrorKind::Crypto(_) => StatusCode::INTERNAL_SERVER_ERROR.into(),
+        _ => StatusCode::INTERNAL_SERVER_ERROR.into(),
+    }
+}
+
+#[derive(Clone)]
+pub struct ResponseError {
+    status: StatusCode,
+    message: Option<Cow<'static, str>>,
+}
+
+impl From<StatusCode> for ResponseError {
+    fn from(status: StatusCode) -> Self {
+        Self {
+            status,
+            message: None,
+        }
+    }
+}
+impl From<(StatusCode, &'static str)> for ResponseError {
+    fn from(value: (StatusCode, &'static str)) -> Self {
+        Self {
+            status: value.0,
+            message: Some(Cow::Borrowed(value.1)),
+        }
+    }
+}
+
+impl IntoResponse for ResponseError {
+    fn into_response(self) -> Response {
+        let cow = self.message.unwrap_or(Cow::Borrowed(""));
+        (self.status, cow).into_response()
     }
 }
 
 impl ErrorKind {
-    fn status(&self) -> StatusCode {
+    fn response(&self) -> ResponseError {
         match self {
             ErrorKind::PoolError(_) | ErrorKind::PostgresError(_) => {
-                StatusCode::INTERNAL_SERVER_ERROR
+                StatusCode::INTERNAL_SERVER_ERROR.into()
             }
-            ErrorKind::Forbidden => StatusCode::FORBIDDEN,
-            ErrorKind::Argon(err) => match argon_is_internal(err) {
-                true => StatusCode::INTERNAL_SERVER_ERROR,
-                false => StatusCode::FORBIDDEN,
-            },
-        }
-    }
-    fn is_internal(&self) -> bool {
-        match self {
-            ErrorKind::PoolError(_) | ErrorKind::PostgresError(_) => true,
-            ErrorKind::Forbidden => false,
-            ErrorKind::Argon(err) => argon_is_internal(err),
+            ErrorKind::Forbidden => StatusCode::FORBIDDEN.into(),
+            ErrorKind::Jwt(err) => jwt_response(err),
+            ErrorKind::Argon(err) => argon_error(err),
         }
     }
 }
 
 impl IntoResponse for Error {
     fn into_response(self) -> Response {
-        let mut response = (self.kind.status(), "").into_response();
+        let mut response = self.response_error.clone().into_response();
         response.extensions_mut().insert(self);
         response
     }

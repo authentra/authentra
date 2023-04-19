@@ -12,14 +12,18 @@ path = "src/main.rs"
 [dependencies]
 argon2.workspace = true
 axum = { workspace = true, features = ["http2"] }
+base64.workspace = true
 config.workspace = true
 deadpool-postgres = { workspace = true, features = ["serde"] }
 derive_more = { workspace = true, features = ["from", "error", "display"] }
+futures.workspace = true
 jsonwebtoken.workspace = true
 once_cell.workspace = true
 opentelemetry = { workspace = true, features = ["rt-tokio"] }
 opentelemetry-otlp.workspace = true
+pin-project = "1.0.12"
 rand.workspace = true
+rand_chacha = "0.3.1"
 refinery = { workspace = true, features = ["tokio-postgres"] }
 serde.workspace = true
 serde_json.workspace = true
@@ -27,8 +31,10 @@ socket2 = "0.5.2"
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "signal", "tracing", "socket2"] }
 tokio-postgres = { workspace = true, features = ["with-uuid-1"] }
 tower.workspace = true
+tower-cookies = "0.9.0"
 tower-http = { workspace = true, features = ["trace", "sensitive-headers", "cors"] }
 tracing.workspace = true
 tracing-error = "0.2.0"
 tracing-opentelemetry.workspace = true
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
+uuid = { workspace = true, features = ["serde"] }

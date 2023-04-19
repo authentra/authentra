@@ -13,6 +13,7 @@ use crate::config::AuthustStartupConfiguration;
 
 mod api;
 mod config;
+pub mod middleware;
 mod telemetry;
 pub mod utils;
 

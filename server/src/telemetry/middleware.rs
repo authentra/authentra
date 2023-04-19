@@ -129,7 +129,9 @@ impl<B> OnResponse<B> for OtelOnResponse {
         span.record("otel.status_code", "OK");
         if let Some(error) = response.extensions().get::<Error>() {
             span.record("exception.message", format!("{}", error.kind()));
-            span.record("exception.stacktrace", format!("{:?}", error.trace()));
+            if let Some(trace) = error.trace() {
+                span.record("exception.stacktrace", format!("{:?}", trace));
+            }
         }
     }
 }
