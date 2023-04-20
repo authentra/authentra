@@ -5,11 +5,10 @@ use std::{
 
 use axum::{Router, Server};
 use deadpool_postgres::{Config, Object, Pool};
-use socket2::{Domain, Protocol, SockAddr, Type};
 use tokio::signal;
 use tracing::info;
 
-use crate::config::AuthustStartupConfiguration;
+use crate::{config::AuthustStartupConfiguration, middleware::auth::AuthState};
 
 mod api;
 mod config;
@@ -37,18 +36,21 @@ async fn main_tokio() {
         run_migrations(&mut conn).await;
     }
 
-    let router = Router::new().nest("/api", api::setup_router());
+    let auth_state = AuthState::new(configuration.secret);
+
+    let router = Router::new().nest("/api", api::setup_router(auth_state));
     let addr = SocketAddr::new("::".parse().unwrap(), 8000);
     let shutdown_future = async { signal::ctrl_c().await.unwrap() };
-    let socket =
-        socket2::Socket::new(Domain::for_address(addr), Type::STREAM, Some(Protocol::TCP)).unwrap();
-    socket.set_only_v6(false).unwrap();
-    socket.bind(&SockAddr::from(addr)).unwrap();
-    socket.listen(128).unwrap();
-    let tcp: TcpListener = socket.into();
+    // let socket =
+    //     socket2::Socket::new(Domain::for_address(addr), Type::STREAM, Some(Protocol::TCP)).unwrap();
+    // socket.set_only_v6(false).unwrap();
+    // socket.bind(&SockAddr::from(addr)).unwrap();
+    // socket.listen(128).unwrap();
+    // let tcp: TcpListener = socket.into();
     // let tcp = TcpListener::bind(addr).unwrap();
-    Server::from_tcp(tcp)
-        .unwrap()
+    // Server::from_tcp(tcp)
+    // .unwrap()
+    Server::bind(&addr)
         .serve(router.into_make_service_with_connect_info::<SocketAddr>())
         .with_graceful_shutdown(shutdown_future)
         .await

@@ -6,7 +6,7 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use deadpool_postgres::PoolError;
-use derive_more::{Display, Error};
+use derive_more::{Display, Error, From};
 use jsonwebtoken::errors::{Error as JwtError, ErrorKind as JwtErrorKind};
 use tracing_error::SpanTrace;
 
@@ -35,7 +35,7 @@ impl Error {
     }
 }
 
-#[derive(Debug, Display, Error)]
+#[derive(Debug, Display, Error, From)]
 pub enum ErrorKind {
     #[display("403 Forbidden")]
     Forbidden,
@@ -43,10 +43,14 @@ pub enum ErrorKind {
     PoolError(PoolError),
     #[display("Postgres: {}", _0)]
     PostgresError(tokio_postgres::Error),
+    #[display("Invalid Authorization header")]
+    InvalidAuthorizationHeader,
     #[display("JWT: {}", _0)]
     Jwt(JwtError),
     #[display("Argon: {}", _0)]
     Argon(#[error(not(source))] ArgonError),
+    #[display("Header '{header_name}' contains non ascii chars")]
+    HeaderNotAscii { header_name: &'static str },
 }
 
 impl<T: Into<ErrorKind>> From<T> for Error {
@@ -131,6 +135,14 @@ impl From<(StatusCode, &'static str)> for ResponseError {
         }
     }
 }
+impl From<(StatusCode, String)> for ResponseError {
+    fn from(value: (StatusCode, String)) -> Self {
+        Self {
+            status: value.0,
+            message: Some(Cow::Owned(value.1)),
+        }
+    }
+}
 
 impl IntoResponse for ResponseError {
     fn into_response(self) -> Response {
@@ -148,6 +160,14 @@ impl ErrorKind {
             ErrorKind::Forbidden => StatusCode::FORBIDDEN.into(),
             ErrorKind::Jwt(err) => jwt_response(err),
             ErrorKind::Argon(err) => argon_error(err),
+            ErrorKind::HeaderNotAscii { header_name } => (
+                StatusCode::BAD_REQUEST,
+                format!("Header '{header_name}' contains non-ascii chars"),
+            )
+                .into(),
+            ErrorKind::InvalidAuthorizationHeader => {
+                (StatusCode::UNAUTHORIZED, "Invalid Authorization header").into()
+            }
         }
     }
 }

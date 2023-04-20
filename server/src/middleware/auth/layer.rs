@@ -2,8 +2,15 @@ use tower::Layer;
 
 use super::{service::AuthService, AuthState};
 
+#[derive(Clone)]
 pub struct AuthLayer {
     state: AuthState,
+}
+
+impl AuthLayer {
+    pub fn new(state: AuthState) -> Self {
+        Self { state }
+    }
 }
 
 impl<S> Layer<S> for AuthLayer {

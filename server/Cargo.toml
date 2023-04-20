@@ -25,9 +25,9 @@ pin-project = "1.0.12"
 rand.workspace = true
 rand_chacha = "0.3.1"
 refinery = { workspace = true, features = ["tokio-postgres"] }
+regex = "1.7.3"
 serde.workspace = true
 serde_json.workspace = true
-socket2 = "0.5.2"
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "signal", "tracing", "socket2"] }
 tokio-postgres = { workspace = true, features = ["with-uuid-1"] }
 tower.workspace = true

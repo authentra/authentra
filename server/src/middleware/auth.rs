@@ -8,7 +8,9 @@ use jsonwebtoken::{DecodingKey, EncodingKey};
 pub use layer::AuthLayer;
 use rand::{rngs::adapter::ReseedingRng, SeedableRng};
 use rand_chacha::{rand_core::OsRng, ChaCha20Core};
+use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
+use uuid::Uuid;
 
 pub type AuthRng = ReseedingRng<ChaCha20Core, OsRng>;
 
@@ -17,6 +19,16 @@ pub struct AuthState {
     rng: Arc<Mutex<AuthRng>>,
     encoding: Arc<EncodingKey>,
     decoding: Arc<DecodingKey>,
+}
+pub struct AuthExtension {
+    pub claims: Claims,
+    pub is_generated: bool,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Claims {
+    iss: String,
+    sid: String,
+    sub: Option<Uuid>,
 }
 
 impl AuthState {
