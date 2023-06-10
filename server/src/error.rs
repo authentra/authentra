@@ -4,11 +4,16 @@ use argon2::password_hash::Error as ArgonError;
 use axum::{
     http::StatusCode,
     response::{IntoResponse, Response},
+    Json,
 };
 use deadpool_postgres::PoolError;
 use derive_more::{Display, Error, From};
 use jsonwebtoken::errors::{Error as JwtError, ErrorKind as JwtErrorKind};
+use serde::Serialize;
+use tokio::task::JoinError;
 use tracing_error::SpanTrace;
+
+use crate::auth::AuthError;
 
 pub struct Error {
     kind: ErrorKind,
@@ -37,7 +42,7 @@ impl Error {
 
 #[derive(Debug, Display, Error, From)]
 pub enum ErrorKind {
-    #[display("403 Forbidden")]
+    #[display("Forbidden")]
     Forbidden,
     #[display("Deadpool: {}", _0)]
     PoolError(PoolError),
@@ -45,20 +50,24 @@ pub enum ErrorKind {
     PostgresError(tokio_postgres::Error),
     #[display("Invalid Authorization header")]
     InvalidAuthorizationHeader,
+    #[display("{}", _0)]
+    Auth(#[error(not(source))] AuthError),
     #[display("JWT: {}", _0)]
     Jwt(JwtError),
     #[display("Argon: {}", _0)]
     Argon(#[error(not(source))] ArgonError),
     #[display("Header '{header_name}' contains non ascii chars")]
     HeaderNotAscii { header_name: &'static str },
+    #[display("Join failed")]
+    TokioJoin(JoinError),
 }
 
 impl<T: Into<ErrorKind>> From<T> for Error {
     fn from(value: T) -> Self {
-        let value = value.into();
+        let value: ErrorKind = value.into();
         let response_error = value.response();
         let status = response_error.status;
-        if true {
+        if status.is_server_error() {
             let trace = SpanTrace::capture();
             Self {
                 kind: value,
@@ -147,14 +156,27 @@ impl From<(StatusCode, String)> for ResponseError {
 impl IntoResponse for ResponseError {
     fn into_response(self) -> Response {
         let cow = self.message.unwrap_or(Cow::Borrowed(""));
-        (self.status, cow).into_response()
+        (
+            self.status,
+            Json(JsonErrorResponse {
+                success: false,
+                message: cow,
+            }),
+        )
+            .into_response()
     }
+}
+
+#[derive(Serialize)]
+struct JsonErrorResponse {
+    success: bool,
+    message: Cow<'static, str>,
 }
 
 impl ErrorKind {
     fn response(&self) -> ResponseError {
         match self {
-            ErrorKind::PoolError(_) | ErrorKind::PostgresError(_) => {
+            ErrorKind::PoolError(_) | ErrorKind::PostgresError(_) | ErrorKind::TokioJoin(_) => {
                 StatusCode::INTERNAL_SERVER_ERROR.into()
             }
             ErrorKind::Forbidden => StatusCode::FORBIDDEN.into(),
@@ -167,6 +189,17 @@ impl ErrorKind {
                 .into(),
             ErrorKind::InvalidAuthorizationHeader => {
                 (StatusCode::UNAUTHORIZED, "Invalid Authorization header").into()
+            }
+            ErrorKind::Auth(auth) => {
+                let status = StatusCode::UNAUTHORIZED;
+                match auth {
+                    AuthError::MissingCookie => (status, "Authentication cookie missing").into(),
+                    AuthError::InvalidSession => (status, "Invalid session").into(),
+                    AuthError::MissingHeader => (status, "Authorization header missing").into(),
+                    AuthError::InvalidHeader => (status, "Authorization header is invalid").into(),
+                    AuthError::InvalidCredentials => (status, "Invalid credentials").into(),
+                    AuthError::ClaimsMissingInInfo => (StatusCode::INTERNAL_SERVER_ERROR).into(),
+                }
             }
         }
     }

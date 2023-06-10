@@ -1,80 +1,41 @@
 use std::net::{Ipv6Addr, SocketAddr};
 
-use config::{Config, ConfigError};
+use config::{Config, ConfigError, Environment};
 use serde::Deserialize;
 
-#[derive(Debug, Clone)]
-pub struct AuthustConfiguration {
-    pub allowed_hosts: &'static [&'static str],
-}
-
 #[derive(Debug, Clone, Deserialize)]
-pub struct AuthustStartupConfiguration {
+pub struct AuthustConfiguration {
     pub listen: ListenConfiguration,
     pub postgres: deadpool_postgres::Config,
     pub secret: String,
-    pub jaeger_endpoint: Option<String>,
-    pub allowed_hosts: Vec<String>,
+    pub allowed_origins: Vec<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct ListenConfiguration {
     pub http: SocketAddr,
-    pub https: Option<SocketAddr>,
     pub metrics: SocketAddr,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-pub struct PostgresConfiguration {
-    pub host: String,
-    pub port: u16,
-    pub database: String,
-    pub user: String,
-    pub password: String,
 }
 
 impl Default for ListenConfiguration {
     fn default() -> Self {
         Self {
             http: SocketAddr::new(std::net::IpAddr::V6(Ipv6Addr::UNSPECIFIED), 8080),
-            https: None,
             metrics: SocketAddr::new(std::net::IpAddr::V6(Ipv6Addr::UNSPECIFIED), 3000),
         }
     }
 }
 
-impl From<AuthustStartupConfiguration> for AuthustConfiguration {
-    fn from(value: AuthustStartupConfiguration) -> Self {
-        Self {
-            allowed_hosts: leak_vec(value.allowed_hosts),
-        }
-    }
-}
-
-fn leak_string(str: String) -> &'static str {
-    Box::leak(str.into_boxed_str())
-}
-
-fn leak_vec(vec: Vec<String>) -> &'static [&'static str] {
-    Box::leak(
-        vec.into_iter()
-            .map(leak_string)
-            .collect::<Vec<&'static str>>()
-            .into_boxed_slice(),
-    )
-}
-
-impl AuthustStartupConfiguration {
+impl AuthustConfiguration {
     pub fn load() -> Result<Self, ConfigError> {
         let default_listen = ListenConfiguration::default();
         let loaded = Config::builder()
+            .add_source(Environment::default().separator("_"))
             .add_source(
-                config::Environment::with_prefix("AUTHUST")
+                Environment::default()
                     .ignore_empty(true)
                     .try_parsing(true)
-                    .separator("__")
-                    .prefix_separator("_")
-                    .with_list_parse_key("allowed_hosts")
+                    .with_list_parse_key("allowed_origins")
                     .list_separator(" "),
             )
             .set_default("listen.http", default_listen.http.to_string())?

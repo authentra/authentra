@@ -1,0 +1,35 @@
+{
+	"name": "frontend",
+	"version": "0.0.1",
+	"private": true,
+	"scripts": {
+		"dev": "vite dev",
+		"build": "vite build",
+		"preview": "vite preview",
+		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
+		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
+		"lint": "eslint ."
+	},
+	"devDependencies": {
+		"@iconify-json/fa": "^1.1.4",
+		"@iconify-json/lucide": "^1.1.99",
+		"@sveltejs/adapter-node": "^1.2.4",
+		"@sveltejs/kit": "^1.20.0",
+		"@types/set-cookie-parser": "^2.4.2",
+		"@typescript-eslint/eslint-plugin": "^5.45.0",
+		"@typescript-eslint/parser": "^5.45.0",
+		"@unocss/preset-uno": "^0.53.1",
+		"@unocss/svelte-scoped": "^0.53.1",
+		"eslint": "^8.28.0",
+		"eslint-plugin-svelte": "^2.26.0",
+		"set-cookie-parser": "^2.6.0",
+		"svelte": "next",
+		"svelte-check": "^3.0.1",
+		"tslib": "^2.4.1",
+		"typescript": "^5.0.0",
+		"unocss": "^0.53.1",
+		"unplugin-icons": "^0.16.3",
+		"vite": "^4.3.0"
+	},
+	"type": "module"
+}

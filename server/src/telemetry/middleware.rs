@@ -11,7 +11,7 @@ use tower_http::{
 };
 use tracing::{field::Empty, Span};
 
-use crate::api::Error;
+use crate::error::Error;
 
 pub fn new() -> TraceLayer<
     tower_http::classify::SharedClassifier<tower_http::classify::ServerErrorsAsFailures>,
@@ -48,15 +48,14 @@ impl<B> MakeSpan<B> for OtelMakeSpan {
         let route = request
             .extensions()
             .get::<MatchedPath>()
-            .map(|path| path.as_str())
-            .unwrap();
+            .map(|path| path.as_str());
         let target = request
             .uri()
             .path_and_query()
             .map_or("", |target| target.as_str());
         let method = http_method(request.method());
         let flavor = http_flavor(request.version());
-        let name = format!("{method} {route}");
+        let name = format!("{method} No Route");
         let trace_id = RandomIdGenerator::default().new_trace_id();
         let span = tracing::info_span!(
             "Http Request",
@@ -66,12 +65,15 @@ impl<B> MakeSpan<B> for OtelMakeSpan {
             http.target = target,
             http.host = host,
             http.scheme = scheme,
-            http.route = route,
+            http.route = Empty,
             http.status_code = Empty,
             http.user_agent = user_agent,
             otel.kind = "server",
             trace_id = %trace_id,
         );
+        if let Some(route) = route {
+            span.record("http.route", route);
+        }
         span
     }
 }

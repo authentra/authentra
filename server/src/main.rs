@@ -1,18 +1,20 @@
-use std::{
-    net::{SocketAddr, TcpListener},
-    ops::DerefMut,
-};
+use std::{net::SocketAddr, ops::DerefMut};
 
-use axum::{Router, Server};
+use axum::{response::IntoResponse, Json, Server};
 use deadpool_postgres::{Config, Object, Pool};
+use serde::Serialize;
 use tokio::signal;
+use tower::Layer;
 use tracing::info;
 
-use crate::{config::AuthustStartupConfiguration, middleware::auth::AuthState};
+use crate::{auth::AuthState, config::AuthustConfiguration};
 
-mod api;
+pub mod auth;
 mod config;
-pub mod middleware;
+pub mod routes;
+mod state;
+pub use state::AppState;
+pub mod error;
 mod telemetry;
 pub mod utils;
 
@@ -26,8 +28,10 @@ mod embedded {
     embed_migrations!("./migrations/");
 }
 
+pub type AppResult<T, E = error::Error> = Result<T, E>;
+
 async fn main_tokio() {
-    let configuration = AuthustStartupConfiguration::load().unwrap();
+    let configuration = AuthustConfiguration::load().unwrap();
     telemetry::setup_tracing();
 
     let pool = create_database_pool(configuration.postgres.clone());
@@ -35,22 +39,13 @@ async fn main_tokio() {
         let mut conn = pool.get().await.expect("Failed to get database connection");
         run_migrations(&mut conn).await;
     }
+    let auth_state = AuthState::new(configuration.secret.as_str());
 
-    let auth_state = AuthState::new(configuration.secret);
+    let state = AppState::new(pool, auth_state);
 
-    let router = Router::new().nest("/api", api::setup_router(auth_state));
-    let addr = SocketAddr::new("::".parse().unwrap(), 8000);
+    let router = routes::setup_router().with_state(state);
     let shutdown_future = async { signal::ctrl_c().await.unwrap() };
-    // let socket =
-    //     socket2::Socket::new(Domain::for_address(addr), Type::STREAM, Some(Protocol::TCP)).unwrap();
-    // socket.set_only_v6(false).unwrap();
-    // socket.bind(&SockAddr::from(addr)).unwrap();
-    // socket.listen(128).unwrap();
-    // let tcp: TcpListener = socket.into();
-    // let tcp = TcpListener::bind(addr).unwrap();
-    // Server::from_tcp(tcp)
-    // .unwrap()
-    Server::bind(&addr)
+    Server::bind(&configuration.listen.http)
         .serve(router.into_make_service_with_connect_info::<SocketAddr>())
         .with_graceful_shutdown(shutdown_future)
         .await
@@ -74,5 +69,23 @@ pub async fn run_migrations(client: &mut Object) {
         .run_async(client.as_mut().deref_mut())
         .await
         .expect("Failed to run migrations");
-    info!("Database migration report: {report:?}");
+    info!("Applied {} migrations", report.applied_migrations().len());
+}
+
+pub struct ApiResponse<T>(T);
+
+impl<T: Serialize> IntoResponse for ApiResponse<T> {
+    fn into_response(self) -> axum::response::Response {
+        Json(InternalApiResponse {
+            success: true,
+            response: self.0,
+        })
+        .into_response()
+    }
+}
+
+#[derive(Serialize)]
+struct InternalApiResponse<T> {
+    success: bool,
+    response: T,
 }
