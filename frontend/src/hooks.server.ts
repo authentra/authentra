@@ -27,6 +27,8 @@ export async function handle({ event, resolve }) {
       await api.refreshToken();
     }
     event.locals.user = await api.user.me();
+  } else {
+    event.locals.user = null
   }
   event.locals.api = api;
   const response = await resolve(event, {

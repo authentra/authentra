@@ -1,7 +1,9 @@
 import type { Api } from ".";
+import type { UserRole } from "./types";
 
 export interface User {
     name: string,
+    roles: UserRole[]
 }
 
 export class UserApi {

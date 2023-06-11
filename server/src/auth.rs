@@ -5,8 +5,10 @@ use axum_extra::extract::CookieJar;
 use derive_more::Display;
 use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header, TokenData, Validation};
 use once_cell::sync::Lazy;
+use postgres_types::FromSql;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
+use tracing::instrument;
 use uuid::Uuid;
 
 use crate::{error::Error, AppState};
@@ -52,6 +54,15 @@ impl AuthState {
         &self.decoding
     }
 }
+#[derive(Deserialize, Serialize, FromSql)]
+#[serde(rename_all = "snake_case")]
+#[postgres(name = "user_roles")]
+pub enum UserRole {
+    #[postgres(name = "logs")]
+    Logs,
+    #[postgres(name = "admin")]
+    Admin,
+}
 
 #[derive(Serialize, Deserialize)]
 pub struct Claims {
@@ -61,10 +72,16 @@ pub struct Claims {
     pub sub: Uuid,
     pub sid: Uuid,
     pub aal: u8,
+    pub authust: AuthustClaims,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct AuthustClaims {
+    pub roles: Vec<UserRole>,
 }
 
 impl Claims {
-    pub fn new(user: Uuid, session: Uuid) -> Self {
+    pub fn new(user: Uuid, session: Uuid, authust: AuthustClaims) -> Self {
         Self {
             iss: ISSUER.into(),
             exp: (SystemTime::now() + EXPIRATION_DURATION)
@@ -78,6 +95,7 @@ impl Claims {
             sub: user,
             sid: session,
             aal: 0,
+            authust,
         }
     }
 }
@@ -129,6 +147,7 @@ impl FromRequestParts<AppState> for CookieAuth {
     }
 }
 
+#[instrument(skip_all)]
 async fn cookie_auth(parts: &Parts, state: &AppState) -> Result<SessionInfo, Error> {
     let cookies = CookieJar::from_headers(&parts.headers);
     let Some(session) = cookies.get(SESSION_COOKIE) else { return Err(AuthError::MissingCookie.into()) };
@@ -148,6 +167,7 @@ async fn cookie_auth(parts: &Parts, state: &AppState) -> Result<SessionInfo, Err
     }
 }
 
+#[instrument(skip_all)]
 async fn api_auth(parts: &Parts, state: &AppState) -> Result<SessionInfo, Error> {
     let Some(header) = parts.headers.get("Authorization") else { return Err(AuthError::MissingHeader.into()) };
     let header = header

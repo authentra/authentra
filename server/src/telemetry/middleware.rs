@@ -55,7 +55,11 @@ impl<B> MakeSpan<B> for OtelMakeSpan {
             .map_or("", |target| target.as_str());
         let method = http_method(request.method());
         let flavor = http_flavor(request.version());
-        let name = format!("{method} No Route");
+        let name = if let Some(route) = route {
+            format!("{method} {route}")
+        } else {
+            format!("{method} No Route")
+        };
         let trace_id = RandomIdGenerator::default().new_trace_id();
         let span = tracing::info_span!(
             "Http Request",
@@ -69,6 +73,9 @@ impl<B> MakeSpan<B> for OtelMakeSpan {
             http.status_code = Empty,
             http.user_agent = user_agent,
             otel.kind = "server",
+            otel.status_code = Empty,
+            exception.message = Empty,
+            exception.stacktrace = Empty,
             trace_id = %trace_id,
         );
         if let Some(route) = route {
@@ -129,8 +136,8 @@ impl<B> OnResponse<B> for OtelOnResponse {
         span.record("otel.status_code", "OK");
         if let Some(error) = response.extensions().get::<Error>() {
             span.record("exception.message", format!("{}", error.kind()));
-            if let Some(trace) = error.trace() {
-                span.record("exception.stacktrace", format!("{:?}", trace));
+            if let Some(trace) = error.format_trace() {
+                span.record("exception.stacktrace", trace);
             }
         }
     }

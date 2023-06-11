@@ -1,4 +1,7 @@
-use std::{borrow::Cow, fmt::Debug};
+use std::{
+    borrow::Cow,
+    fmt::{Debug, Display},
+};
 
 use argon2::password_hash::Error as ArgonError;
 use axum::{
@@ -37,6 +40,41 @@ impl Error {
 
     pub fn trace(&self) -> Option<&SpanTrace> {
         self.trace.as_ref()
+    }
+    pub fn format_trace(&self) -> Option<String> {
+        self.trace
+            .as_ref()
+            .map(|trace| WrappedTrace(trace).to_string())
+    }
+}
+
+struct WrappedTrace<'a>(&'a SpanTrace);
+
+macro_rules! try_bool {
+    ($e:expr, $dest:ident) => {{
+        let ret = $e.unwrap_or_else(|e| $dest = Err(e));
+
+        if $dest.is_err() {
+            return false;
+        }
+
+        ret
+    }};
+}
+
+impl<'a> Display for WrappedTrace<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut err = Ok(());
+        self.0.with_spans(|metadata, _| {
+            if let Some((file, line)) = metadata
+                .file()
+                .and_then(|file| metadata.line().map(|line| (file, line)))
+            {
+                try_bool!(write!(f, "\nat {}:{}", file, line), err);
+            }
+            true
+        });
+        err
     }
 }
 
@@ -122,7 +160,7 @@ fn jwt_response(err: &JwtError) -> ResponseError {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct ResponseError {
     status: StatusCode,
     message: Option<Cow<'static, str>>,

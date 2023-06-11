@@ -15,10 +15,11 @@ use rand::{
 };
 use serde::Deserialize;
 use tokio_postgres::IsolationLevel;
+use tracing::instrument;
 use uuid::Uuid;
 
 use crate::{
-    auth::{jwt_header, AuthError, Claims, CookieAuth, SESSION_COOKIE},
+    auth::{jwt_header, AuthError, AuthustClaims, Claims, CookieAuth, SESSION_COOKIE},
     utils::password::{handle_result, hash_password, verify_password},
     ApiResponse, AppResult, AppState,
 };
@@ -51,6 +52,7 @@ async fn registration_enabled() -> AppResult<ApiResponse<bool>> {
     Ok(ApiResponse(true))
 }
 
+#[instrument(skip_all, name = "login_request_handler")]
 async fn login(
     State(state): State<AppState>,
     Json(payload): Json<LoginPayload>,
@@ -98,6 +100,7 @@ fn make_cookies(token: String) -> CookieJar {
     jar.add(cookie)
 }
 
+#[instrument(skip_all, name = "register_request_handler")]
 async fn register(
     State(state): State<AppState>,
     Json(payload): Json<RegisterPayload>,
@@ -122,7 +125,6 @@ async fn logout(State(state): State<AppState>, parts: Parts) -> AppResult<Respon
     let cookies = CookieJar::from_headers(&parts.headers);
     let Some(session) = cookies.get(SESSION_COOKIE) else { return Ok(().into_response()) };
     let value = session.value();
-    println!("Logout");
     let conn = state.conn().await?;
     let stmt = conn
         .prepare_cached("delete from sessions where token = $1")
@@ -135,11 +137,20 @@ async fn logout(State(state): State<AppState>, parts: Parts) -> AppResult<Respon
         .into_response())
 }
 
+#[instrument(skip_all, name = "auth_refresh_handler")]
 async fn refresh(
     State(state): State<AppState>,
     CookieAuth(info): CookieAuth,
 ) -> AppResult<ApiResponse<String>> {
-    let claims = Claims::new(info.user, info.id);
+    let conn = state.conn().await?;
+    let stmt = conn
+        .prepare_cached("select roles from users where uid = $1")
+        .await?;
+    let row = conn.query_one(&stmt, &[&info.user]).await?;
+    let authust = AuthustClaims {
+        roles: row.get("roles"),
+    };
+    let claims = Claims::new(info.user, info.id, authust);
     let token = jsonwebtoken::encode(&jwt_header(), &claims, state.auth().encoding())?;
     Ok(ApiResponse(token))
 }

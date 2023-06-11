@@ -4,7 +4,6 @@ use axum::{response::IntoResponse, Json, Server};
 use deadpool_postgres::{Config, Object, Pool};
 use serde::Serialize;
 use tokio::signal;
-use tower::Layer;
 use tracing::info;
 
 use crate::{auth::AuthState, config::AuthustConfiguration};
