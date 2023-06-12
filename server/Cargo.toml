@@ -11,7 +11,7 @@ path = "src/main.rs"
 
 [dependencies]
 argon2.workspace = true
-axum = { workspace = true, features = ["http2"] }
+axum = { workspace = true, features = ["http2", "tracing", "macros"] }
 axum-extra = { version = "0.7.4", features = ["cookie"] }
 base64.workspace = true
 config.workspace = true

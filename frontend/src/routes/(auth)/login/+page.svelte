@@ -1,7 +1,7 @@
 <script lang="ts">
-    import IconLight from 'virtual:icons/lucide/sun'
-    import type { ActionData, ActionsFailure } from './$types';
+    import type { ActionData} from './$types';
     import { enhance } from '$app/forms';
+    import ThemeToggle from '$lib/components/ThemeToggle.svelte';
 
     export let form: ActionData;
 </script>
@@ -10,7 +10,7 @@
     <main class="auth-card">
         <div class="header">
             <span>Login</span>
-            <IconLight />
+            <ThemeToggle />
         </div>
 
         {#if form && !form.success}

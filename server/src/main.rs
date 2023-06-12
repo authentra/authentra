@@ -66,9 +66,15 @@ pub async fn run_migrations(client: &mut Object) {
     info!("Running migrations on database...");
     let report = embedded::migrations::runner()
         .run_async(client.as_mut().deref_mut())
-        .await
-        .expect("Failed to run migrations");
-    info!("Applied {} migrations", report.applied_migrations().len());
+        .await;
+    match report {
+        Ok(report) => {
+            info!("Applied {} migrations", report.applied_migrations().len());
+        }
+        Err(err) => {
+            tracing::error!("Failed to run migrations! {}", err);
+        }
+    }
 }
 
 pub struct ApiResponse<T>(T);

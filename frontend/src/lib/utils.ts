@@ -48,3 +48,17 @@ export const API_URL: string = env.PUBLIC_API_URL as string
 if (!env.PUBLIC_API_URL) {
     throw Error("PUBLIC_API_URL not set")
 }
+
+export function formatName(first_name: string | null, last_name: string | null): string | null {
+    if (!first_name && !last_name) {
+        return null
+    }
+    if (first_name && last_name) {
+        return first_name + " " + last_name;
+    }
+
+    if (first_name) {
+        return first_name
+    }
+    return null
+}

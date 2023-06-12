@@ -1,5 +1,6 @@
 import { env } from "$env/dynamic/private";
 import { redirectUrl, type Meta } from "$lib/utils";
+import { error } from "@sveltejs/kit";
 import { get } from "svelte/store";
 
 export function createMeta(locals: App.Locals): Meta {
@@ -11,6 +12,13 @@ export function createMeta(locals: App.Locals): Meta {
 export function checkAuth(current: URL, locals: App.Locals) {
     if (!locals.user) {
         redirectUrl(current, '/login', 302)
+    }
+}
+
+export function checkAdmin(current: URL, locals: App.Locals) {
+    checkAuth(current, locals)
+    if (!locals.user || !locals.user.roles.includes('admin')) {
+        throw error(403, { message: 'Forbidden' })
     }
 }
 

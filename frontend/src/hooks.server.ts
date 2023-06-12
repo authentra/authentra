@@ -1,4 +1,5 @@
 import { Api } from '$lib/api';
+import { AdminApi } from '$lib/api/admin';
 import { INTERNAL_API_URL } from '$lib/server/utils';
 import { API_URL } from '$lib/utils';
 
@@ -31,6 +32,7 @@ export async function handle({ event, resolve }) {
     event.locals.user = null
   }
   event.locals.api = api;
+  event.locals.admin = new AdminApi(api);
   const response = await resolve(event, {
     transformPageChunk: ({ html }) => html.replace('%unocss-svelte-scoped.global%', 'unocss_svelte_scoped_global_styles'),
   })

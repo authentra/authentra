@@ -78,10 +78,27 @@ impl<'a> Display for WrappedTrace<'a> {
     }
 }
 
+#[derive(Debug)]
+pub struct ApiError {
+    status: StatusCode,
+    message: String,
+}
+
+impl ApiError {
+    pub fn new(status: StatusCode, message: impl AsRef<str>) -> Self {
+        Self {
+            status,
+            message: message.as_ref().into(),
+        }
+    }
+}
+
 #[derive(Debug, Display, Error, From)]
 pub enum ErrorKind {
-    #[display("Forbidden")]
-    Forbidden,
+    #[display("Status: {}", _0)]
+    Status(#[error(not(source))] StatusCode),
+    #[display("Api")]
+    Api(#[error(not(source))] ApiError),
     #[display("Deadpool: {}", _0)]
     PoolError(PoolError),
     #[display("Postgres: {}", _0)]
@@ -98,6 +115,12 @@ pub enum ErrorKind {
     HeaderNotAscii { header_name: &'static str },
     #[display("Join failed")]
     TokioJoin(JoinError),
+}
+
+impl ErrorKind {
+    pub fn forbidden() -> Self {
+        Self::Status(StatusCode::FORBIDDEN)
+    }
 }
 
 impl<T: Into<ErrorKind>> From<T> for Error {
@@ -217,7 +240,7 @@ impl ErrorKind {
             ErrorKind::PoolError(_) | ErrorKind::PostgresError(_) | ErrorKind::TokioJoin(_) => {
                 StatusCode::INTERNAL_SERVER_ERROR.into()
             }
-            ErrorKind::Forbidden => StatusCode::FORBIDDEN.into(),
+            ErrorKind::Status(status) => status.clone().into(),
             ErrorKind::Jwt(err) => jwt_response(err),
             ErrorKind::Argon(err) => argon_error(err),
             ErrorKind::HeaderNotAscii { header_name } => (
@@ -239,6 +262,7 @@ impl ErrorKind {
                     AuthError::ClaimsMissingInInfo => (StatusCode::INTERNAL_SERVER_ERROR).into(),
                 }
             }
+            ErrorKind::Api(err) => (err.status, err.message.clone()).into(),
         }
     }
 }

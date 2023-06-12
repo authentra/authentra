@@ -1,6 +1,6 @@
 import { get, writable } from "svelte/store";
 import { UserApi } from "./user";
-import type { Cookies } from "@sveltejs/kit";
+import { error, type Cookies } from "@sveltejs/kit";
 
 export type FetchType = (input: RequestInfo | URL, init?: RequestInit | undefined) => Promise<Response>;
 
@@ -18,6 +18,18 @@ export type ApiResponse<T> = SuccessApiResponse<T> | FailedApiResponse;
 
 export interface ExtendedResponse<T> extends Response {
     api: ApiResponse<T> | null
+}
+
+export function checkResponse<T>(res: Promise<ExtendedResponse<T>>): Promise<SuccessApiResponse<T>> {
+    return res.then(res => {
+        if (!res.api) {
+            throw error(500, { message: "Api responded with unexpected content"});
+        }
+        if (!res.api.success) {
+            throw error(500, { message: "Api responded with error" })
+        }
+        return res.api as SuccessApiResponse<T>
+    })
 }
 
 export class Api {

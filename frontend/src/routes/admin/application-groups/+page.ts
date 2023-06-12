@@ -1,0 +1,1 @@
+export type State = { type: 'editing', id: string }

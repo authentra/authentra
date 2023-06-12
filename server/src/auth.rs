@@ -11,7 +11,10 @@ use serde::{Deserialize, Serialize};
 use tracing::instrument;
 use uuid::Uuid;
 
-use crate::{error::Error, AppState};
+use crate::{
+    error::{Error, ErrorKind},
+    AppResult, AppState,
+};
 
 pub const SESSION_COOKIE: &str = "session_token";
 pub const REFRESH_COOKIE: &str = "refresh_token";
@@ -54,7 +57,7 @@ impl AuthState {
         &self.decoding
     }
 }
-#[derive(Deserialize, Serialize, FromSql)]
+#[derive(Deserialize, Serialize, FromSql, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 #[postgres(name = "user_roles")]
 pub enum UserRole {
@@ -120,6 +123,21 @@ pub struct SessionInfo {
     pub id: Uuid,
     pub user: Uuid,
     pub claims: Option<Claims>,
+}
+
+impl SessionInfo {
+    pub fn check_admin(&self) -> AppResult<()> {
+        self.check_role(UserRole::Admin)
+    }
+    #[inline(always)]
+    pub fn check_role(&self, role: UserRole) -> AppResult<()> {
+        if let Some(claims) = &self.claims {
+            if claims.authust.roles.contains(&role) {
+                return Ok(());
+            }
+        }
+        Err(ErrorKind::forbidden().into())
+    }
 }
 
 pub struct ApiAuth(pub SessionInfo);
