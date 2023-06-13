@@ -1,4 +1,5 @@
 <script lang="ts">
+    import { enhance } from "$app/forms";
     import { InternalScopes, type ApplicationGroup } from "$lib/api/admin";
     import type { PageData } from "./$types";
     import IconEdit from "virtual:icons/lucide/edit";
@@ -27,10 +28,15 @@
 
 <dialog bind:this={dialog} on:close={() => (edit = null)}>
     {JSON.stringify(edit)}
-    <form>
+    <form method="post" action="?/replace" use:enhance on:submit={() => dialog.close()}>
+        <input name="id" hidden value={edit?.id}/>
         {#each possible_scopes as scope, i}
-            <input type="checkbox" bind:checked={selected_scopes[i]}/> {scope}
+            <label>
+                <input type="checkbox" name={scope} bind:checked={selected_scopes[i]}/>
+                <span>{scope}</span>
+            </label>
         {/each}
+        <button type="submit">Submit</button>
         <form />
     </form>
 </dialog>
@@ -68,17 +74,3 @@
         {/each}
     </tbody>
 </table>
-
-<style>
-    table {
-        border-collapse: collapse;
-    }
-    th,
-    td {
-        --at-apply: pl-2 py-1 border-2 border-solid text-left border-light-3 dark:border-dark-1;
-        border-color:#dddddd;
-    }
-    tr:nth-child(even) {
-        --at-apply: bg-light-5 dark:bg-dark-1/40 bg-blend-lighten
-    }
-</style>

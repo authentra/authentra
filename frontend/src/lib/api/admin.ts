@@ -1,4 +1,4 @@
-import { handleMeta, type ClientMeta, type Meta } from "$lib/utils";
+import { handleMeta, type ClientMeta, type Meta, jsonBody } from "$lib/utils";
 import { checkResponse, type Api } from ".";
 
 export interface ClientAdminMeta extends ClientMeta {
@@ -39,11 +39,21 @@ class ApplicationGroupApi {
     allGroups(): Promise<ApplicationGroup[]> {
         return checkResponse(this.api.get('/admin/application-groups')).then(res => res.response)
     }
+
+    replace(id: string, scopes: InternalScope[]) {
+        return checkResponse(this.api.put('/admin/application-groups/' + id, {
+            ...jsonBody({ scopes })
+        })).then(res => res.response)
+    }
+    
+    usedBy(id: string): Promise<string[]> {
+        return checkResponse(this.api.get(`/admin/application-groups/${id}/usages`)).then(res => res.response)
+    }
 }
 
 class ApplicationApi {
     private api: Api;
     constructor(api: Api) {
         this.api = api;
-    } 
+    }
 }

@@ -9,6 +9,7 @@ use axum_extra::extract::{
     cookie::{Cookie, SameSite},
     CookieJar,
 };
+use deadpool_postgres::{GenericClient, Object};
 use rand::{
     distributions::{Alphanumeric, DistString},
     thread_rng,
@@ -27,9 +28,10 @@ use crate::{
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/browser/refresh", get(refresh))
-        .route("/browser/login", post(login))
+        .route("/browser/login", post(browser_login))
         .route("/browser/register", post(register))
         .route("/browser/logout", delete(logout))
+        .route("/login", post(api_login))
         .route("/registration", get(registration_enabled))
 }
 
@@ -44,7 +46,7 @@ pub struct RegisterPayload {
     password: String,
 }
 
-fn failed() -> AppResult<Response> {
+fn failed<T>() -> AppResult<T> {
     Err(AuthError::InvalidCredentials.into())
 }
 
@@ -52,12 +54,11 @@ async fn registration_enabled() -> AppResult<ApiResponse<bool>> {
     Ok(ApiResponse(true))
 }
 
-#[instrument(skip_all, name = "login_request_handler")]
-async fn login(
-    State(state): State<AppState>,
-    Json(payload): Json<LoginPayload>,
-) -> AppResult<Response> {
-    let conn = state.conn().await?;
+#[instrument(skip_all, name = "internal_login_handler")]
+async fn handle_login(
+    conn: &impl GenericClient,
+    payload: LoginPayload,
+) -> AppResult<ApiResponse<String>> {
     let stmt = conn
         .prepare_cached("select uid,password from users where name = $1")
         .await?;
@@ -81,13 +82,33 @@ async fn login(
                 .prepare_cached("insert into sessions(user_id,token,address) values($1, $2, null)")
                 .await?;
             conn.execute(&stmt, &[&uid, &token]).await?;
-            passed.map_or_else(
-                || failed(),
-                |_| Ok((make_cookies(token), ApiResponse(())).into_response()),
-            )
+            // passed.map_or_else(
+            //     || failed(),
+            //     |_| Ok((make_cookies(token), ApiResponse(())).into_response()),
+            // )
+            passed.map_or_else(|| failed(), |_| Ok(ApiResponse(token)))
+            // todo!()
         }
         None => failed(),
     }
+}
+#[instrument(skip_all, name = "api_login_request_handler")]
+async fn api_login(
+    State(state): State<AppState>,
+    Json(payload): Json<LoginPayload>,
+) -> AppResult<ApiResponse<String>> {
+    let conn = state.conn().await?;
+    handle_login(&conn, payload).await
+}
+
+#[instrument(skip_all, name = "browser_login_request_handler")]
+async fn browser_login(
+    State(state): State<AppState>,
+    Json(payload): Json<LoginPayload>,
+) -> AppResult<Response> {
+    let conn = state.conn().await?;
+    let v = handle_login(&conn, payload).await?;
+    Ok((make_cookies(v.0), ApiResponse(())).into_response())
 }
 
 fn make_cookies(token: String) -> CookieJar {

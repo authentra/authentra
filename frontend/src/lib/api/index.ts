@@ -1,6 +1,7 @@
 import { get, writable } from "svelte/store";
 import { UserApi } from "./user";
 import { error, type Cookies } from "@sveltejs/kit";
+import { dev } from "$app/environment";
 
 export type FetchType = (input: RequestInfo | URL, init?: RequestInit | undefined) => Promise<Response>;
 
@@ -86,6 +87,12 @@ export class Api {
             ...init
         })
     }
+    put<T = any>(input: string, init?: RequestInit): Promise<ExtendedResponse<T>> {
+        return this.makeRequest(input, {
+            method: 'put',
+            ...init
+        })
+    }
     delete<T = any>(input: string, init?: RequestInit): Promise<ExtendedResponse<T>> {
         return this.makeRequest(input, {
             method: 'delete',
@@ -107,6 +114,7 @@ export class Api {
                         httpOnly: true,
                         path: '/',
                         sameSite: 'strict',
+                        secure: !dev
                     })
                 }
                 this.tokenStore.set(res.api.response);
