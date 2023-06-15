@@ -11,7 +11,7 @@ use crate::{auth::ApiAuth, error::ErrorKind, ApiResponse, AppResult, AppState};
 
 pub fn router() -> Router<AppState> {
     Router::new()
-        .route("/", MethodRouter::new().get(get).put(replace))
+        .route("/", MethodRouter::new().get(get).post(create))
         .route("/:id", MethodRouter::new().put(replace).delete(delete))
         .route("/:id/usages", MethodRouter::new().get(usages))
 }
@@ -106,6 +106,28 @@ async fn replace(
     let row = conn.execute(&stmt, &[&payload.id, &payload.scopes]).await?;
     if row == 0 {
         return Err(ErrorKind::Status(StatusCode::NOT_FOUND).into());
+    } else if row > 1 {
+        tracing::error!("Updated more than one row! Payload: {:?}", payload);
+        return Err(ErrorKind::Status(StatusCode::INTERNAL_SERVER_ERROR).into());
+    } else {
+        Ok(ApiResponse(payload))
+    }
+}
+async fn create(
+    State(state): State<AppState>,
+    ApiAuth(auth): ApiAuth,
+    Json(payload): Json<EncodedApplicationGroup>,
+) -> AppResult<ApiResponse<EncodedApplicationGroup>> {
+    auth.check_admin()?;
+    let conn = state.conn().await?;
+    let stmt = conn
+        .prepare_cached(
+            "insert into application_groups(id, scopes) values($1, $2) on conflict do nothing",
+        )
+        .await?;
+    let row = conn.execute(&stmt, &[&payload.id, &payload.scopes]).await?;
+    if row == 0 {
+        return Err(ErrorKind::Status(StatusCode::CONFLICT).into());
     } else if row > 1 {
         tracing::error!("Updated more than one row! Payload: {:?}", payload);
         return Err(ErrorKind::Status(StatusCode::INTERNAL_SERVER_ERROR).into());

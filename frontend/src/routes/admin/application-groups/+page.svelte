@@ -9,15 +9,27 @@
 
     export let data: PageData;
     let dialog: HTMLDialogElement;
+    let create_dialog: HTMLDialogElement;
     let edit: ApplicationGroup | null = null;
-    const selected_scopes: boolean[] = Array(5).fill(false);
+    let create: ApplicationGroup | null = null;
+    const selected_scopes: boolean[] = Array(possible_scopes.length).fill(
+        false
+    );
     function editRow(row: ApplicationGroup) {
         edit = row;
         for (const [index, value] of possible_scopes.entries()) {
-            selected_scopes[index] = edit.scopes.includes(value)
+            selected_scopes[index] = edit.scopes.includes(value);
         }
 
         dialog.showModal();
+    }
+    function createRow() {
+        create = { id: "", scopes: [] };
+        for (const [index, value] of possible_scopes.entries()) {
+            selected_scopes[index] = create.scopes.includes(value);
+        }
+
+        create_dialog.showModal();
     }
 </script>
 
@@ -28,11 +40,49 @@
 
 <dialog bind:this={dialog} on:close={() => (edit = null)}>
     {JSON.stringify(edit)}
-    <form method="post" action="?/replace" use:enhance on:submit={() => dialog.close()}>
-        <input name="id" hidden value={edit?.id}/>
+    <form
+        method="post"
+        action="?/replace"
+        use:enhance
+        on:submit={() => dialog.close()}
+    >
+        <input name="id" hidden value={edit?.id} readonly/>
         {#each possible_scopes as scope, i}
             <label>
-                <input type="checkbox" name={scope} bind:checked={selected_scopes[i]}/>
+                <input
+                    type="checkbox"
+                    name={scope}
+                    bind:checked={selected_scopes[i]}
+                />
+                <span>{scope}</span>
+            </label>
+        {/each}
+        <button type="submit">Submit</button>
+        <form />
+    </form>
+</dialog>
+
+<dialog bind:this={create_dialog} on:close={() => (create = null)}>
+    {JSON.stringify(create)}
+    <form
+        class="flex flex-col"
+        method="post"
+        action="?/create"
+        use:enhance
+        on:submit={() => create_dialog.close()}
+    >
+        <label>
+            <span>Id</span>
+            <input name="id" />
+        </label>
+
+        {#each possible_scopes as scope, i}
+            <label>
+                <input
+                    type="checkbox"
+                    name={scope}
+                    bind:checked={selected_scopes[i]}
+                />
                 <span>{scope}</span>
             </label>
         {/each}
@@ -62,15 +112,18 @@
                         >
                             <IconEdit />
                         </button>
-                        <button
-                        class="button-transparent-danger"
-                        on:click={() => editRow(group)}
-                    >
-                        <IconDelete />
-                    </button>
+                        <form method="post" action="?/delete" use:enhance>
+                            <input name="id" value={group.id} hidden />
+                            <button
+                                class="button-transparent-danger"
+                            >
+                                <IconDelete />
+                            </button>
+                        </form>
                     </div>
                 </td>
             </tr>
         {/each}
     </tbody>
 </table>
+<button on:click={() => createRow()}>Create</button>

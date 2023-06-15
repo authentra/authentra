@@ -18,16 +18,24 @@ export type FailedApiResponse = { success: false, message: string };
 export type ApiResponse<T> = SuccessApiResponse<T> | FailedApiResponse;
 
 export interface ExtendedResponse<T> extends Response {
-    api: ApiResponse<T> | null
+    api: ApiResponse<T> | null,
 }
 
 export function checkResponse<T>(res: Promise<ExtendedResponse<T>>): Promise<SuccessApiResponse<T>> {
     return res.then(res => {
+        if (!res) {
+            throw error(500, { message: "Response is null" })
+        }
         if (!res.api) {
-            throw error(500, { message: "Api responded with unexpected content"});
+            console.log("Start")
+            console.log(res.status)
+            res.clone().text().then(res => { console.log(res) });
+            console.log("End")
+            throw error(500, { message: "Api responded with unexpected content" });
         }
         if (!res.api.success) {
-            throw error(500, { message: "Api responded with error" })
+            console.log("Api Error: " + "Status: " + res.status + " Message: "+ res.api.message)
+            throw error(500, { message: "Api responded with error Status: " + res.status })
         }
         return res.api as SuccessApiResponse<T>
     })
@@ -133,25 +141,29 @@ export class Api {
     }
 
     async _extendResponse<T>(res: Response): Promise<ExtendedResponse<T>> {
-        const nres = res as ExtendedResponse<T>;
+
+        const api: { api: ApiResponse<T> | null } = {
+            api: null,
+        };
         try {
-            nres.api = await res.clone().json();
-        }catch {
-            nres.api = null;
+            api.api = await res.clone().json();
+        } catch {
+            api.api = null;
         }
-        return nres
+
+        return Object.assign(res.clone(), api);
     }
 
     private async internalRequest<T>(config: RequestConfig): Promise<ExtendedResponse<T>> {
         console.debug('Request to: ' + config.input);
         const finalInit = this.updateInit(config.init ? config.init : {});
         const res = await this._extendResponse<T>(await this.svelteFetch(config.input, finalInit));
-  
-        
+
+
         if (res.ok || (res.status >= 300 && res.status <= 399)) {
             return res
         }
-        
+
         if (res.status == 401 && !res.api?.success) {
             if (res.api?.message == 'JWT: Expired' && config.retry) {
                 await this.refreshToken();

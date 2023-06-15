@@ -1,4 +1,4 @@
-use std::{net::SocketAddr, ops::DerefMut};
+use std::{net::SocketAddr, ops::DerefMut, process::exit};
 
 use axum::{response::IntoResponse, Json, Server};
 use deadpool_postgres::{Config, Object, Pool};
@@ -73,6 +73,7 @@ pub async fn run_migrations(client: &mut Object) {
         }
         Err(err) => {
             tracing::error!("Failed to run migrations! {}", err);
+            exit(1)
         }
     }
 }

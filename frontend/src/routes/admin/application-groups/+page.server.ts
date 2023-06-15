@@ -14,7 +14,6 @@ export const actions: Actions = {
         const formData = await request.formData();
         const id = formData.get('id') as string;
         const scopes: InternalScope[] = [];
-        console.log(JSON.stringify(formData.entries()));
         for (const [index, value] of InternalScopes.entries()) {
             const data = formData.get(value);
             if (data) {
@@ -27,5 +26,22 @@ export const actions: Actions = {
         const formData = await request.formData();
         const id = formData.get('id') as string;
         return await locals.admin.applicationGroups.usedBy(id)
+    },
+    delete: async ({locals, request}) => {
+        const formData = await request.formData();
+        const id = formData.get('id') as string;
+        return await locals.admin.applicationGroups.delete(id)
+    },
+    create: async ({locals, request}) => {
+        const formData = await request.formData();
+        const id = formData.get('id') as string;
+        const scopes: InternalScope[] = [];
+        for (const [index, value] of InternalScopes.entries()) {
+            const data = formData.get(value);
+            if (data) {
+                scopes.push(value);
+            }
+        }
+        return await locals.admin.applicationGroups.create(id, scopes)
     }
 };
