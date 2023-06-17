@@ -16,7 +16,7 @@ use serde::Serialize;
 use tokio::task::JoinError;
 use tracing_error::SpanTrace;
 
-use crate::auth::AuthError;
+use crate::{auth::AuthError, routes::oauth::OAuthError};
 
 pub struct Error {
     kind: ErrorKind,
@@ -78,7 +78,8 @@ impl<'a> Display for WrappedTrace<'a> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Display)]
+#[display("{status} '{message}'")]
 pub struct ApiError {
     status: StatusCode,
     message: String,
@@ -97,14 +98,12 @@ impl ApiError {
 pub enum ErrorKind {
     #[display("Status: {}", _0)]
     Status(#[error(not(source))] StatusCode),
-    #[display("Api")]
+    #[display("Api: {}", _0)]
     Api(#[error(not(source))] ApiError),
     #[display("Deadpool: {}", _0)]
     PoolError(PoolError),
     #[display("Postgres: {}", _0)]
     PostgresError(tokio_postgres::Error),
-    #[display("Invalid Authorization header")]
-    InvalidAuthorizationHeader,
     #[display("{}", _0)]
     Auth(#[error(not(source))] AuthError),
     #[display("JWT: {}", _0)]
@@ -113,13 +112,21 @@ pub enum ErrorKind {
     Argon(#[error(not(source))] ArgonError),
     #[display("Header '{header_name}' contains non ascii chars")]
     HeaderNotAscii { header_name: &'static str },
-    #[display("Join failed")]
+    #[display("Tokio failed to join task")]
     TokioJoin(JoinError),
+    #[display("OAuth: {}", _0)]
+    Oauth(#[error(not(source))] OAuthError),
 }
 
 impl ErrorKind {
+    pub fn not_found() -> Self {
+        Self::Status(StatusCode::NOT_FOUND)
+    }
     pub fn forbidden() -> Self {
         Self::Status(StatusCode::FORBIDDEN)
+    }
+    pub fn internal() -> Self {
+        Self::Status(StatusCode::INTERNAL_SERVER_ERROR)
     }
 }
 
@@ -142,6 +149,16 @@ impl<T: Into<ErrorKind>> From<T> for Error {
                 trace: None,
             }
         }
+    }
+}
+
+pub trait IntoError {
+    fn into_error(self) -> Error;
+}
+
+impl<T: Into<ErrorKind>> IntoError for T {
+    fn into_error(self) -> Error {
+        Error::from(self)
     }
 }
 
@@ -248,9 +265,6 @@ impl ErrorKind {
                 format!("Header '{header_name}' contains non-ascii chars"),
             )
                 .into(),
-            ErrorKind::InvalidAuthorizationHeader => {
-                (StatusCode::UNAUTHORIZED, "Invalid Authorization header").into()
-            }
             ErrorKind::Auth(auth) => {
                 let status = StatusCode::UNAUTHORIZED;
                 match auth {
@@ -263,6 +277,7 @@ impl ErrorKind {
                 }
             }
             ErrorKind::Api(err) => (err.status, err.message.clone()).into(),
+            ErrorKind::Oauth(_) => todo!(),
         }
     }
 }

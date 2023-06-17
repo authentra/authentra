@@ -9,7 +9,7 @@ use axum_extra::extract::{
     cookie::{Cookie, SameSite},
     CookieJar,
 };
-use deadpool_postgres::{GenericClient, Object};
+use deadpool_postgres::GenericClient;
 use rand::{
     distributions::{Alphanumeric, DistString},
     thread_rng,
@@ -60,12 +60,12 @@ async fn handle_login(
     payload: LoginPayload,
 ) -> AppResult<ApiResponse<String>> {
     let stmt = conn
-        .prepare_cached("select uid,password from users where name = $1")
+        .prepare_cached("select id,password from users where name = $1")
         .await?;
     let row = conn.query_opt(&stmt, &[&payload.user]).await?;
     match row {
         Some(row) => {
-            let uid: Uuid = row.get("uid");
+            let uid: Uuid = row.get("id");
             let Some(password): Option<String> = row.get("password") else { return failed() };
             let passed = tokio::task::spawn_blocking(move || {
                 handle_result(verify_password(
@@ -135,7 +135,9 @@ async fn register(
         .start()
         .await?;
     let stmt = tx
-        .prepare_cached("insert into users(name,password) values($1, $2) on conflict do nothing")
+        .prepare_cached(
+            "insert into users(name,password,customer) values($1, $2, true) on conflict do nothing",
+        )
         .await?;
     let _modified = tx.execute(&stmt, &[&payload.user, &hashed]).await?;
     tx.commit().await?;
@@ -165,7 +167,7 @@ async fn refresh(
 ) -> AppResult<ApiResponse<String>> {
     let conn = state.conn().await?;
     let stmt = conn
-        .prepare_cached("select roles from users where uid = $1")
+        .prepare_cached("select roles from users where id = $1")
         .await?;
     let row = conn.query_one(&stmt, &[&info.user]).await?;
     let authust = AuthustClaims {

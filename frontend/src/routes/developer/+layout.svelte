@@ -7,10 +7,10 @@
     <svelte:fragment slot="nav">
         <ul class="list-none">
             <li>
-                <NavEntry target="/admin">Home</NavEntry>
+                <NavEntry target="/developer">Home</NavEntry>
             </li>
             <li>
-                <NavEntry target="/admin/application-groups">Application Groups</NavEntry>
+                <NavEntry target="/developer/applications">Applications</NavEntry>
             </li>
         </ul>
     </svelte:fragment>

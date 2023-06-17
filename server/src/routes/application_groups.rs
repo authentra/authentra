@@ -4,27 +4,20 @@ use axum::{
     routing::MethodRouter,
     Json, Router,
 };
-use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 
-use crate::{auth::ApiAuth, error::ErrorKind, ApiResponse, AppResult, AppState};
+use crate::{
+    auth::{ApiAuth, UserRole},
+    error::ErrorKind,
+    routes::InternalScope,
+    ApiResponse, AppResult, AppState,
+};
 
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/", MethodRouter::new().get(get).post(create))
         .route("/:id", MethodRouter::new().put(replace).delete(delete))
         .route("/:id/usages", MethodRouter::new().get(usages))
-}
-
-#[derive(Debug, Serialize, Deserialize, FromSql, ToSql)]
-#[postgres(name = "internal_scopes")]
-pub enum InternalScope {
-    #[postgres(name = "profile:read")]
-    #[serde(rename = "profile:read")]
-    ProfileRead,
-    #[postgres(name = "profile:write")]
-    #[serde(rename = "profile:write")]
-    ProfileWrite,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -67,11 +60,15 @@ async fn get(
     State(state): State<AppState>,
     ApiAuth(auth): ApiAuth,
 ) -> AppResult<ApiResponse<Vec<EncodedApplicationGroup>>> {
-    auth.check_admin()?;
+    auth.check_developer()?;
     let conn = state.conn().await?;
-    let stmt = conn
-        .prepare_cached("select id,scopes from application_groups")
-        .await?;
+    let stmt = if auth.has_role(UserRole::Admin) {
+        conn.prepare_cached("select id,scopes from application_groups")
+            .await?
+    } else {
+        conn.prepare_cached("select id,scopes from application_groups where id in (select id from developer_allowed_groups)")
+            .await?
+    };
     let rows = conn.query(&stmt, &[]).await?;
     Ok(ApiResponse(
         rows.into_iter()

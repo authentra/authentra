@@ -3,7 +3,7 @@
     import IconEdit from "virtual:icons/lucide/edit";
     import IconDelete from "virtual:icons/lucide/trash-2";
     import type { PageData } from "./$types";
-    import { ApplicationKinds, type Application } from "$lib/api/admin";
+    import { ApplicationKinds, type Application } from "$lib/api/developer";
     import UrlList from "$lib/components/UrlList.svelte";
     import { redirect } from "@sveltejs/kit";
 
@@ -47,7 +47,7 @@
 </script>
 
 <svelte:head>
-    <title>Admin Panel</title>
+    <title>Developer Panel</title>
     <meta name="robots" content="noindex" />
 </svelte:head>
 
@@ -67,6 +67,10 @@
             <label>
                 <span>Application Group</span>
                 <input bind:value={edit.application_group} readonly />
+            </label>
+            <label>
+                <span>Client Id</span>
+                <input bind:value={edit.client_id} readonly />
             </label>
             <label>
                 <span>Kind</span>

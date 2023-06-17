@@ -1,6 +1,7 @@
 import { Api } from '$lib/api';
 import { AdminApi } from '$lib/api/admin';
-import { INTERNAL_API_URL, checkAdmin, checkAuth } from '$lib/server/utils';
+import { ApplicationApi, ApplicationGroupApi } from '$lib/api/developer';
+import { INTERNAL_API_URL, checkAdmin, checkAuth, checkDeveloper } from '$lib/server/utils';
 import { API_URL } from '$lib/utils';
 
 if (!INTERNAL_API_URL || !API_URL) {
@@ -32,13 +33,19 @@ export async function handle({ event, resolve }) {
     event.locals.user = null
   }
   event.locals.api = api;
-  event.locals.admin = new AdminApi(api);
+  event.locals.apis = { applications: new ApplicationApi(api), application_groups: new ApplicationGroupApi(api) };
 
   if (event.url.pathname.startsWith('/dash')) {
     checkAuth(event.url, event.locals)
   }
 
   if (event.url.pathname.startsWith('/admin')) {
+    checkAdmin(event.url, event.locals)
+  }
+  if (event.url.pathname.startsWith('/developer')) {
+    checkDeveloper(event.url, event.locals)
+  }
+  if (event.url.pathname.startsWith('/oauth/authorize')) {
     checkAdmin(event.url, event.locals)
   }
   const response = await resolve(event, {

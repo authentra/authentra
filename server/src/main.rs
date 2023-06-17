@@ -29,6 +29,8 @@ mod embedded {
 
 pub type AppResult<T, E = error::Error> = Result<T, E>;
 
+pub const PAGE_LIMIT: u16 = 100;
+
 async fn main_tokio() {
     let configuration = AuthustConfiguration::load().unwrap();
     telemetry::setup_tracing();

@@ -1,6 +1,6 @@
 <script lang="ts">
     import { enhance } from "$app/forms";
-    import { InternalScopes, type ApplicationGroup } from "$lib/api/admin";
+    import { InternalScopes, type ApplicationGroup } from "$lib/api/developer";
     import type { PageData } from "./$types";
     import IconEdit from "virtual:icons/lucide/edit";
     import IconDelete from "virtual:icons/lucide/trash-2";

@@ -5,10 +5,10 @@ use axum_extra::extract::CookieJar;
 use derive_more::Display;
 use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header, TokenData, Validation};
 use once_cell::sync::Lazy;
-use postgres_types::FromSql;
+use postgres_types::{FromSql, ToSql};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
-use tracing::instrument;
+use tracing::{instrument, Span};
 use uuid::Uuid;
 
 use crate::{
@@ -57,13 +57,18 @@ impl AuthState {
         &self.decoding
     }
 }
-#[derive(Deserialize, Serialize, FromSql, PartialEq, Eq)]
+#[derive(Debug, Display, Deserialize, Serialize, ToSql, FromSql, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 #[postgres(name = "user_roles")]
 pub enum UserRole {
     #[postgres(name = "logs")]
+    #[display("logs")]
     Logs,
+    #[postgres(name = "developer")]
+    #[display("developer")]
+    Developer,
     #[postgres(name = "admin")]
+    #[display("admin")]
     Admin,
 }
 
@@ -129,13 +134,33 @@ impl SessionInfo {
     pub fn check_admin(&self) -> AppResult<()> {
         self.check_role(UserRole::Admin)
     }
+    pub fn check_developer(&self) -> AppResult<()> {
+        self.check_role(UserRole::Developer)
+    }
     #[inline(always)]
-    pub fn check_role(&self, role: UserRole) -> AppResult<()> {
+    pub fn has_role(&self, role: UserRole) -> bool {
         if let Some(claims) = &self.claims {
-            if claims.authust.roles.contains(&role) {
+            if claims.authust.roles.contains(&role)
+                || claims.authust.roles.contains(&UserRole::Admin)
+            {
+                return true;
+            }
+        }
+        false
+    }
+    #[inline(always)]
+    #[instrument(skip_all, fields(roles,required = %role))]
+    pub fn check_role(&self, role: UserRole) -> AppResult<()> {
+        let current = Span::current();
+        if let Some(claims) = &self.claims {
+            current.record("roles", format!("{:?}", claims.authust.roles));
+            if claims.authust.roles.contains(&role)
+                || claims.authust.roles.contains(&UserRole::Admin)
+            {
                 return Ok(());
             }
         }
+        tracing::warn!("Forbidden");
         Err(ErrorKind::forbidden().into())
     }
 }

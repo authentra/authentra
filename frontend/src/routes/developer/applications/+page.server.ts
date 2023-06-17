@@ -3,8 +3,8 @@ import type { Actions, PageServerLoad } from "./$types";
 
 export const load: PageServerLoad = async ({locals}) => {
     return {
-        applications: await locals.admin.application.all(),
-        groups: (await locals.admin.applicationGroups.allGroups()).map(v => v.id),
+        applications: await locals.apis.applications.all(),
+        groups: (await locals.apis.application_groups.all()).map(v => v.id),
         meta: createMeta(locals)
     }
 };
@@ -25,7 +25,7 @@ export const actions: Actions = {
         const id = formData.get("id") as string;
         const name = formData.get(("name")) as string;
         const uris = read_uris(formData.entries());
-        return await locals.admin.application.replace(id, name, uris)
+        return await locals.apis.applications.replace(id, name, uris)
     },
     create: async ({locals, request}) => {
         const formData = await request.formData();
@@ -34,12 +34,12 @@ export const actions: Actions = {
         const application_group = formData.get(("application_group")) as string;
         const kind = formData.get(("kind")) as string;
         const uris = read_uris(formData.entries());
-        return await locals.admin.application.create(name, application_group, kind, uris)
+        return await locals.apis.applications.create(name, application_group, kind, uris)
     },
     delete: async ({locals, request}) => {
         const formData = await request.formData();
         const id = formData.get("id") as string;
-        return await locals.admin.application.delete(id)
+        return await locals.apis.applications.delete(id)
     },
     
 };

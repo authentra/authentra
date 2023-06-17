@@ -3,7 +3,8 @@ import type { UserRole } from "./types";
 
 export interface User {
     name: string,
-    roles: UserRole[]
+    roles: UserRole[],
+    require_password_reset: boolean,
 }
 
 export class UserApi {
@@ -15,7 +16,7 @@ export class UserApi {
 
     async me(): Promise<User | null> {
         try {
-            const res = await this.api.get('/user/@me');
+            const res = await this.api.get('/users/@me');
             if (res.api && res.api.success) {
                 return res.api.response
             } else {

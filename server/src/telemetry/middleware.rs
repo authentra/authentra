@@ -1,7 +1,7 @@
 use std::{borrow::Cow, time::Duration};
 
 use axum::{
-    extract::MatchedPath,
+    extract::{MatchedPath, OriginalUri},
     http::{header, uri::Scheme, Method, Request, Response, Version},
 };
 use opentelemetry::sdk::trace::{IdGenerator, RandomIdGenerator};
@@ -49,10 +49,12 @@ impl<B> MakeSpan<B> for OtelMakeSpan {
             .extensions()
             .get::<MatchedPath>()
             .map(|path| path.as_str());
-        let target = request
-            .uri()
-            .path_and_query()
-            .map_or("", |target| target.as_str());
+        let uri = request
+            .extensions()
+            .get::<OriginalUri>()
+            .map(|v| v.0.clone())
+            .unwrap_or_else(|| request.uri().clone());
+        let target = uri.path_and_query().map_or("", |target| target.as_str());
         let method = http_method(request.method());
         let flavor = http_flavor(request.version());
         let name = if let Some(route) = route {

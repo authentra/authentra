@@ -6,6 +6,7 @@
 import type { Api } from "$lib/api";
 import type { AdminApi } from "$lib/api/admin";
 import type { User } from "$lib/api/user";
+import type { Apis } from "$lib/server/apis";
 
 // for information about these interfaces
 declare global {
@@ -14,6 +15,7 @@ declare global {
 		interface Locals {
 			api: Api,
 			admin: AdminApi,
+			apis: Apis,
 			user: User | null,
 		}
 		// interface PageData {}
