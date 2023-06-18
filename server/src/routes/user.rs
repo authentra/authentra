@@ -154,9 +154,12 @@ async fn user(
     }
 }
 
+#[instrument(skip_all name = "is_last_admin")]
 async fn is_last_admin(client: &impl GenericClient, id: &Uuid) -> AppResult<bool> {
     let stmt = client
-        .prepare_cached("select exists (select id from users where exists (select id from users where 'admin' = any (roles) and id = $1) and 'admin' = any (roles) and active and not id = $1)")
+        .prepare_cached(
+            "select exists (select id from users where id != $1 and 'admin' = any (roles) and active)",
+        )
         .await?;
     let row = client.query_one(&stmt, &[id]).await?;
     let is_last_admin: bool = !row.get::<_, bool>(0);
@@ -187,7 +190,7 @@ async fn delete(
     }
 }
 
-#[instrument(skip_all, name = "user_list")]
+#[instrument(skip_all name = "user_list")]
 async fn list(
     State(state): State<AppState>,
     ApiAuth(info): ApiAuth,
@@ -210,7 +213,7 @@ async fn list(
     Ok(ApiResponse(rows.into_iter().map(admin_from_row).collect()))
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 struct ReplacePayload {
     name: String,
     email: Option<String>,
@@ -220,6 +223,7 @@ struct ReplacePayload {
     require_password_reset: bool,
 }
 
+#[instrument(skip_all name = "edit_user")]
 async fn replace(
     State(state): State<AppState>,
     ApiAuth(auth): ApiAuth,
@@ -228,7 +232,9 @@ async fn replace(
 ) -> AppResult<ApiResponse<()>> {
     auth.check_admin()?;
     let conn = state.conn().await?;
-    if !payload.active && is_last_admin(&conn, &id).await? {
+    if (!payload.active || !payload.roles.contains(&UserRole::Admin))
+        && is_last_admin(&conn, &id).await?
+    {
         return Err(ErrorKind::forbidden().into());
     }
     let stmt = conn.prepare_cached("update users set name = $2, email = $3, active = $4, roles = $5, customer = $6, require_password_reset = $7 where id = $1").await?;

@@ -23,7 +23,10 @@ export const actions: Actions = {
         const formData = await request.formData();
         const id = formData.get('id') as string;
         const name = formData.get('name') as string;
-        const email = formData.get('email') as string | null;
+        let email = formData.get('email') as string | null;
+        if (email == "") {
+            email = null;
+        }
         const active = formData.has('active');
         const roles = getRoles(formData);
         const customer = formData.has('customer');
