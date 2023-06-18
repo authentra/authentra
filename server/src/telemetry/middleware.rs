@@ -135,7 +135,6 @@ pub struct OtelOnResponse;
 impl<B> OnResponse<B> for OtelOnResponse {
     fn on_response(self, response: &Response<B>, _latency: Duration, span: &Span) {
         span.record("http.status_code", response.status().as_u16());
-        span.record("otel.status_code", "OK");
         if let Some(error) = response.extensions().get::<Error>() {
             span.record("exception.message", format!("{}", error.kind()));
             if let Some(trace) = error.format_trace() {

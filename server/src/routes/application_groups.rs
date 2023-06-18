@@ -2,7 +2,7 @@ use axum::{
     extract::{Path, State},
     http::StatusCode,
     routing::MethodRouter,
-    Json, Router,
+    Router,
 };
 use serde::{Deserialize, Serialize};
 
@@ -10,7 +10,7 @@ use crate::{
     auth::{ApiAuth, UserRole},
     error::ErrorKind,
     routes::InternalScope,
-    ApiResponse, AppResult, AppState,
+    ApiJson, ApiResponse, AppResult, AppState,
 };
 
 pub fn router() -> Router<AppState> {
@@ -89,7 +89,7 @@ async fn replace(
     State(state): State<AppState>,
     ApiAuth(auth): ApiAuth,
     Path(id): Path<String>,
-    Json(payload): Json<ReplacePayload>,
+    ApiJson(payload): ApiJson<ReplacePayload>,
 ) -> AppResult<ApiResponse<EncodedApplicationGroup>> {
     auth.check_admin()?;
     let conn = state.conn().await?;
@@ -113,7 +113,7 @@ async fn replace(
 async fn create(
     State(state): State<AppState>,
     ApiAuth(auth): ApiAuth,
-    Json(payload): Json<EncodedApplicationGroup>,
+    ApiJson(payload): ApiJson<EncodedApplicationGroup>,
 ) -> AppResult<ApiResponse<EncodedApplicationGroup>> {
     auth.check_admin()?;
     let conn = state.conn().await?;

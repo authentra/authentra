@@ -5,6 +5,7 @@ use std::{
 
 use argon2::password_hash::Error as ArgonError;
 use axum::{
+    extract::rejection::{JsonRejection, QueryRejection},
     http::StatusCode,
     response::{IntoResponse, Response},
     Json,
@@ -116,6 +117,10 @@ pub enum ErrorKind {
     TokioJoin(JoinError),
     #[display("OAuth: {}", _0)]
     Oauth(#[error(not(source))] OAuthError),
+    #[display("Json: {}", _0)]
+    Json(JsonRejection),
+    #[display("Query: {}", _0)]
+    Query(QueryRejection),
 }
 
 impl ErrorKind {
@@ -278,6 +283,8 @@ impl ErrorKind {
             }
             ErrorKind::Api(err) => (err.status, err.message.clone()).into(),
             ErrorKind::Oauth(_) => todo!(),
+            ErrorKind::Json(json) => (json.status(), json.body_text()).into(),
+            ErrorKind::Query(query) => (query.status(), query.body_text()).into(),
         }
     }
 }

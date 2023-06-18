@@ -1,7 +1,7 @@
 import { get, writable } from "svelte/store";
-import { UserApi } from "./user";
 import { error, type Cookies } from "@sveltejs/kit";
 import { dev } from "$app/environment";
+import type { User } from "./types";
 
 export type FetchType = (input: RequestInfo | URL, init?: RequestInit | undefined) => Promise<Response>;
 
@@ -48,8 +48,6 @@ export class Api {
     readonly tokenStore = writable<string | null>(null);
     private refreshPromise = writable<Promise<false | string> | null>(null);
 
-    readonly user: UserApi
-
     makeLoc(path: string): string {
         return this.baseUrl + path;
     }
@@ -58,8 +56,6 @@ export class Api {
         this.baseUrl = baseUrl;
         this.svelteFetch = fetch;
         this.svelteCookies = cookies;
-
-        this.user = new UserApi(this)
     }
 
     private updateInit(init: RequestInit): RequestInit {
@@ -174,5 +170,18 @@ export class Api {
             }
         }
         return res
+    }
+
+    async me(): Promise<User | null> {
+        try {
+            const res = await this.get('/users/@me');
+            if (res.api && res.api.success) {
+                return res.api.response
+            } else {
+                return null
+            }
+        } catch (err) {
+            return null;
+        }
     }
 }

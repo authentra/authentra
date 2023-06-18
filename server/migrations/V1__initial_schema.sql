@@ -19,7 +19,7 @@ create table users(
 
 create table sessions(
     id uuid not null primary key default gen_random_uuid(),
-    user_id uuid not null references users,
+    user_id uuid not null references users on delete cascade,
     token varchar(255) not null unique,
     address inet,
     creation_time timestamp default now()
@@ -43,7 +43,7 @@ create table developer_allowed_groups(
 create table applications(
     id uuid not null primary key default gen_random_uuid(),
     name varchar(32) not null,
-    owner uuid not null references users,
+    owner uuid not null references users on delete cascade,
     system_application boolean not null default false,
     application_group varchar(32) not null references application_groups,
     kind application_kind not null,
@@ -55,7 +55,7 @@ create table applications(
 
 create table oauth_sessions(
     id uuid not null primary key default gen_random_uuid(),
-    user_id uuid not null references users,
+    user_id uuid not null references users on delete cascade,
     application uuid not null references applications on delete cascade
 );
 
@@ -72,8 +72,8 @@ create table access_token(
 );
 
 create table consents(
-    user_id uuid not null references users,
-    application uuid not null references applications,
+    user_id uuid not null references users on delete cascade,
+    application uuid not null references applications on delete cascade,
     given boolean not null default false,
     implicit boolean not null default false,
     primary key(user_id, application)

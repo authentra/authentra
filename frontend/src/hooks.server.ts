@@ -1,6 +1,6 @@
 import { Api } from '$lib/api';
-import { AdminApi } from '$lib/api/admin';
 import { ApplicationApi, ApplicationGroupApi } from '$lib/api/developer';
+import { UserApi } from '$lib/server/apis/user';
 import { INTERNAL_API_URL, checkAdmin, checkAuth, checkDeveloper } from '$lib/server/utils';
 import { API_URL } from '$lib/utils';
 
@@ -9,6 +9,10 @@ if (!INTERNAL_API_URL || !API_URL) {
 }
 
 export async function handleFetch({ event, request, fetch }) {
+  const user_agent = event.request.headers.get('user-agent');
+  if (user_agent) {
+    request.headers.set('user-agent', user_agent);
+  }
   if (request.url.startsWith(INTERNAL_API_URL)) {
     const cookie = event.request.headers.get('cookie');
     if (cookie) {
@@ -28,12 +32,12 @@ export async function handle({ event, resolve }) {
     } else {
       await api.refreshToken();
     }
-    event.locals.user = await api.user.me();
+    event.locals.user = await api.me();
   } else {
     event.locals.user = null
   }
   event.locals.api = api;
-  event.locals.apis = { applications: new ApplicationApi(api), application_groups: new ApplicationGroupApi(api) };
+  event.locals.apis = { applications: new ApplicationApi(api), application_groups: new ApplicationGroupApi(api), users: new UserApi(api) };
 
   if (event.url.pathname.startsWith('/dash')) {
     checkAuth(event.url, event.locals)

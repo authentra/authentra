@@ -86,7 +86,7 @@
                     edit_url_field = "";
                 }}
             >
-                <input name="uri" bind:value={edit_url_field} />
+                <input name="uri" type="url" bind:value={edit_url_field} />
                 <button type="submit">Add</button>
             </form>
             <UrlList
@@ -137,7 +137,7 @@
                     create_url_field = "";
                 }}
             >
-                <input name="uri" bind:value={create_url_field} />
+                <input name="uri" type="url" bind:value={create_url_field} />
                 <button type="submit">Add</button>
             </form>
             <UrlList
@@ -155,6 +155,7 @@
         <tr>
             <th>Id</th>
             <th>Name</th>
+            <th> </th>
         </tr>
     </thead>
     <tbody>

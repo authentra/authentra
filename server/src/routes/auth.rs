@@ -3,7 +3,7 @@ use axum::{
     http::request::Parts,
     response::{IntoResponse, Response},
     routing::{delete, get, post},
-    Json, Router,
+    Router,
 };
 use axum_extra::extract::{
     cookie::{Cookie, SameSite},
@@ -22,7 +22,7 @@ use uuid::Uuid;
 use crate::{
     auth::{jwt_header, AuthError, AuthustClaims, Claims, CookieAuth, SESSION_COOKIE},
     utils::password::{handle_result, hash_password, verify_password},
-    ApiResponse, AppResult, AppState,
+    ApiJson, ApiResponse, AppResult, AppState,
 };
 
 pub fn router() -> Router<AppState> {
@@ -95,7 +95,7 @@ async fn handle_login(
 #[instrument(skip_all, name = "api_login_request_handler")]
 async fn api_login(
     State(state): State<AppState>,
-    Json(payload): Json<LoginPayload>,
+    ApiJson(payload): ApiJson<LoginPayload>,
 ) -> AppResult<ApiResponse<String>> {
     let conn = state.conn().await?;
     handle_login(&conn, payload).await
@@ -104,7 +104,7 @@ async fn api_login(
 #[instrument(skip_all, name = "browser_login_request_handler")]
 async fn browser_login(
     State(state): State<AppState>,
-    Json(payload): Json<LoginPayload>,
+    ApiJson(payload): ApiJson<LoginPayload>,
 ) -> AppResult<Response> {
     let conn = state.conn().await?;
     let v = handle_login(&conn, payload).await?;
@@ -124,7 +124,7 @@ fn make_cookies(token: String) -> CookieJar {
 #[instrument(skip_all, name = "register_request_handler")]
 async fn register(
     State(state): State<AppState>,
-    Json(payload): Json<RegisterPayload>,
+    ApiJson(payload): ApiJson<RegisterPayload>,
 ) -> AppResult<ApiResponse<()>> {
     let hashed =
         tokio::task::spawn_blocking(move || hash_password(payload.password.as_bytes())).await??;

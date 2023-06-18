@@ -1,8 +1,14 @@
 use std::{net::SocketAddr, ops::DerefMut, process::exit};
 
-use axum::{response::IntoResponse, Json, Server};
+use axum::{
+    extract::{rejection::JsonRejection, FromRequest, FromRequestParts, Query},
+    http::request::Parts,
+    response::IntoResponse,
+    Json, Server,
+};
 use deadpool_postgres::{Config, Object, Pool};
-use serde::Serialize;
+use error::Error;
+use serde::{de::DeserializeOwned, Serialize};
 use tokio::signal;
 use tracing::info;
 
@@ -30,6 +36,42 @@ mod embedded {
 pub type AppResult<T, E = error::Error> = Result<T, E>;
 
 pub const PAGE_LIMIT: u16 = 100;
+
+macro_rules! api_extractor {
+    ($name:ident, $error:ty, $ty:tt) => {
+        pub struct $name<T>(T);
+
+        #[axum::async_trait]
+        impl<T, S, B> FromRequest<S, B> for $name<T>
+        where
+            $ty<T>: FromRequest<S, B, Rejection = $error>,
+            S: Send + Sync,
+            B: Send + 'static,
+        {
+            type Rejection = Error;
+            async fn from_request(
+                req: axum::http::Request<B>,
+                state: &S,
+            ) -> Result<Self, Self::Rejection> {
+                let extractor = $ty::from_request(req, state).await?;
+                Ok(Self(extractor.0))
+            }
+        }
+    };
+}
+
+pub struct ApiQuery<T>(T);
+
+#[axum::async_trait]
+impl<T: DeserializeOwned, S: Send + Sync> FromRequestParts<S> for ApiQuery<T> {
+    type Rejection = Error;
+    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
+        let extractor = Query::from_request_parts(parts, state).await?;
+        Ok(Self(extractor.0))
+    }
+}
+
+api_extractor!(ApiJson, JsonRejection, Json);
 
 async fn main_tokio() {
     let configuration = AuthustConfiguration::load().unwrap();

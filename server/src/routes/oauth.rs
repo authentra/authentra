@@ -1,16 +1,11 @@
 //TODO: Disable CORS for oauth2
 
-use axum::{
-    extract::{Query, State},
-    http::Method,
-    routing::get,
-    Router,
-};
+use axum::{extract::State, http::Method, routing::get, Router};
 use derive_more::Display;
 use serde::{Deserialize, Serialize};
 use serde_with::{formats::SpaceSeparator, serde_as, StringWithSeparator};
 
-use crate::{auth::ApiAuth, error::IntoError, AppResult, AppState};
+use crate::{auth::ApiAuth, error::IntoError, ApiQuery, AppResult, AppState};
 
 use super::InternalScope;
 
@@ -52,11 +47,12 @@ pub enum OAuthError {
     InvalidClientSecret,
 }
 
+#[axum::debug_handler]
 async fn authorize_check(
     State(state): State<AppState>,
     ApiAuth(auth): ApiAuth,
     method: Method,
-    Query(parameters): Query<OAuthParameters>,
+    ApiQuery(parameters): ApiQuery<OAuthParameters>,
 ) -> AppResult<()> {
     let conn = state.conn().await?;
     let stmt = conn

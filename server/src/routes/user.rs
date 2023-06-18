@@ -1,9 +1,10 @@
 use axum::{
-    extract::{rejection::QueryRejection, FromRequestParts, Query, State},
+    extract::{FromRequestParts, Path, Query, State},
     http::{request::Parts, StatusCode},
     routing::get,
-    Json, Router,
+    Router,
 };
+use deadpool_postgres::GenericClient;
 use serde::{Deserialize, Serialize};
 use tokio_postgres::Row;
 use tracing::instrument;
@@ -11,15 +12,16 @@ use uuid::Uuid;
 
 use crate::{
     auth::{ApiAuth, UserRole},
-    error::ErrorKind,
+    error::{Error, ErrorKind},
     utils::password::hash_password,
-    ApiResponse, AppResult, AppState, PAGE_LIMIT,
+    ApiJson, ApiResponse, AppResult, AppState, PAGE_LIMIT,
 };
 
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/@me", get(me))
         .route("/", get(list).post(create))
+        .route("/:id", get(user).delete(delete).put(replace))
 }
 
 #[derive(Serialize)]
@@ -57,7 +59,7 @@ impl Pagination {
 
 #[axum::async_trait]
 impl<S: Send + Sync> FromRequestParts<S> for Pagination {
-    type Rejection = QueryRejection;
+    type Rejection = Error;
     async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
         let query: Pagination = Query::from_request_parts(parts, state).await?.0;
         Ok(query)
@@ -114,7 +116,7 @@ struct CreatePayload {
 async fn create(
     State(state): State<AppState>,
     ApiAuth(info): ApiAuth,
-    Json(payload): Json<CreatePayload>,
+    ApiJson(payload): ApiJson<CreatePayload>,
 ) -> AppResult<ApiResponse<()>> {
     info.check_admin()?;
     let conn = state.conn().await?;
@@ -125,6 +127,56 @@ async fn create(
     let rows = conn
         .execute(&stmt, &[&payload.name, &hashed, &payload.roles])
         .await?;
+    match rows {
+        1 => Ok(ApiResponse(())),
+        0 => Err(ErrorKind::Status(StatusCode::CONFLICT).into()),
+        i => {
+            tracing::error!("Modified rows is not 1 or 0. Modified {i} rows!");
+            return Err(ErrorKind::internal().into());
+        }
+    }
+}
+
+async fn user(
+    State(state): State<AppState>,
+    ApiAuth(info): ApiAuth,
+    Path(id): Path<Uuid>,
+) -> AppResult<ApiResponse<AdminUser>> {
+    info.check_admin()?;
+    let conn = state.conn().await?;
+    let stmt = conn
+        .prepare_cached("select * from users where id = $1")
+        .await?;
+    let row = conn.query_opt(&stmt, &[&id]).await?;
+    match row {
+        Some(row) => Ok(ApiResponse(admin_from_row(row))),
+        None => Err(ErrorKind::not_found().into()),
+    }
+}
+
+async fn is_last_admin(client: &impl GenericClient, id: &Uuid) -> AppResult<bool> {
+    let stmt = client
+        .prepare_cached("select exists (select id from users where exists (select id from users where 'admin' = any (roles) and id = $1) and 'admin' = any (roles) and active and not id = $1)")
+        .await?;
+    let row = client.query_one(&stmt, &[id]).await?;
+    let is_last_admin: bool = !row.get::<_, bool>(0);
+    Ok(is_last_admin)
+}
+
+async fn delete(
+    State(state): State<AppState>,
+    ApiAuth(info): ApiAuth,
+    Path(id): Path<Uuid>,
+) -> AppResult<ApiResponse<()>> {
+    info.check_admin()?;
+    let conn = state.conn().await?;
+    if is_last_admin(&conn, &id).await? {
+        return Err(ErrorKind::forbidden().into());
+    }
+    let stmt = conn
+        .prepare_cached("delete from users where id = $1")
+        .await?;
+    let rows = conn.execute(&stmt, &[&id]).await?;
     match rows {
         1 => Ok(ApiResponse(())),
         0 => Err(ErrorKind::Status(StatusCode::CONFLICT).into()),
@@ -156,4 +208,50 @@ async fn list(
         )
         .await?;
     Ok(ApiResponse(rows.into_iter().map(admin_from_row).collect()))
+}
+
+#[derive(Deserialize)]
+struct ReplacePayload {
+    name: String,
+    email: Option<String>,
+    active: bool,
+    roles: Vec<UserRole>,
+    customer: bool,
+    require_password_reset: bool,
+}
+
+async fn replace(
+    State(state): State<AppState>,
+    ApiAuth(auth): ApiAuth,
+    Path(id): Path<Uuid>,
+    ApiJson(payload): ApiJson<ReplacePayload>,
+) -> AppResult<ApiResponse<()>> {
+    auth.check_admin()?;
+    let conn = state.conn().await?;
+    if !payload.active && is_last_admin(&conn, &id).await? {
+        return Err(ErrorKind::forbidden().into());
+    }
+    let stmt = conn.prepare_cached("update users set name = $2, email = $3, active = $4, roles = $5, customer = $6, require_password_reset = $7 where id = $1").await?;
+    let rows = conn
+        .execute(
+            &stmt,
+            &[
+                &id,
+                &payload.name,
+                &payload.email,
+                &payload.active,
+                &payload.roles,
+                &payload.customer,
+                &payload.require_password_reset,
+            ],
+        )
+        .await?;
+    match rows {
+        1 => Ok(ApiResponse(())),
+        0 => Err(ErrorKind::Status(StatusCode::CONFLICT).into()),
+        i => {
+            tracing::error!("Modified rows is not 1 or 0. Modified {i} rows!");
+            return Err(ErrorKind::internal().into());
+        }
+    }
 }

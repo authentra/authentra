@@ -10,6 +10,9 @@
                 <NavEntry target="/admin">Home</NavEntry>
             </li>
             <li>
+                <NavEntry target="/admin/users">Users</NavEntry>
+            </li>
+            <li>
                 <NavEntry target="/admin/application-groups">Application Groups</NavEntry>
             </li>
         </ul>

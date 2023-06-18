@@ -2,7 +2,7 @@ use axum::{
     extract::{Path, State},
     http::StatusCode,
     routing::MethodRouter,
-    Json, Router,
+    Router,
 };
 use deadpool_postgres::GenericClient;
 use serde::{Deserialize, Serialize};
@@ -13,7 +13,7 @@ use crate::{
     auth::{ApiAuth, SessionInfo, UserRole},
     error::{ApiError, Error, ErrorKind},
     routes::ApplicationKind,
-    ApiResponse, AppResult, AppState,
+    ApiJson, ApiResponse, AppResult, AppState,
 };
 
 pub fn router() -> Router<AppState> {
@@ -139,7 +139,7 @@ async fn replace(
     State(state): State<AppState>,
     ApiAuth(auth): ApiAuth,
     Path(id): Path<Uuid>,
-    Json(payload): Json<ReplacePayload>,
+    ApiJson(payload): ApiJson<ReplacePayload>,
 ) -> AppResult<ApiResponse<EncodedApplication>> {
     auth.check_admin()?;
     let conn = state.conn().await?;
@@ -187,7 +187,7 @@ struct CreatePayload {
 async fn create(
     State(state): State<AppState>,
     ApiAuth(auth): ApiAuth,
-    Json(payload): Json<CreatePayload>,
+    ApiJson(payload): ApiJson<CreatePayload>,
 ) -> AppResult<ApiResponse<EncodedApplication>> {
     if payload.system_application {
         auth.check_admin()?;
