@@ -27,7 +27,8 @@
         create = {
             id: "",
             name: "",
-            application_group: "",
+            system_application: false,
+            application_group: data.groups.length == 1 ? data.groups[0] : "",
             kind: "",
             client_id: "",
             redirect_uri: [],
@@ -64,18 +65,43 @@
                 <span>Name</span>
                 <input name="name" bind:value={edit.name} />
             </label>
-            <label>
-                <span>Application Group</span>
-                <input bind:value={edit.application_group} readonly />
-            </label>
+            {#if data.groups.length > 1 && data.is_admin}
+                <label>
+                    <span>Application Group</span>
+                    <select bind:value={edit.application_group} disabled>
+                        <option value={edit.application_group}
+                            >{edit.application_group}</option
+                        >
+                    </select>
+                </label>
+            {:else}
+                <input
+                    name="application_group"
+                    bind:value={edit.application_group}
+                    hidden
+                    readonly
+                />
+            {/if}
             <label>
                 <span>Client Id</span>
                 <input bind:value={edit.client_id} readonly />
             </label>
             <label>
                 <span>Kind</span>
-                <input bind:value={edit.kind} readonly />
+                <select bind:value={edit.kind} disabled>
+                    <option value={edit.kind}>{edit.kind}</option>
+                </select>
             </label>
+            {#if data.is_admin}
+                <label>
+                    <input
+                        type="checkbox"
+                        bind:checked={edit.system_application}
+                        disabled
+                    />
+                    <span>System Application</span>
+                </label>
+            {/if}
             {#each edit.redirect_uri as uri, i}
                 <input name="uri={i}" value={uri} hidden readonly />
             {/each}
@@ -93,7 +119,7 @@
                 bind:value={edit.redirect_uri}
                 on:change={(e) => (edit.redirect_uri = e.detail)}
             />
-            <button on:click={() => edit_dialog.close()}>Cancel</button>
+            <button type="button" on:click={() => edit_dialog.close()}>Cancel</button>
             <button type="submit">Submit</button>
         </form>
     {/if}
@@ -109,16 +135,30 @@
         >
             <label>
                 <span>Name</span>
-                <input name="name" bind:value={create.name} required/>
+                <input name="name" bind:value={create.name} required />
             </label>
-            <label>
-                <span>Application Group</span>
-                <select name="application_group" bind:value={create.application_group} required>
-                    {#each data.groups as group}
-                        <option value={group}>{group}</option>
-                    {/each}
-                </select>
-            </label>
+            {#if data.groups.length > 1 && data.is_admin}
+                <label>
+                    <span>Application Group</span>
+                    <select
+                        name="application_group"
+                        bind:value={create.application_group}
+                        required
+                    >
+                        {#each data.groups as group}
+                            <option value={group}>{group}</option>
+                        {/each}
+                    </select>
+                </label>
+            {:else}
+                <input
+                    name="application_group"
+                    bind:value={create.application_group}
+                    hidden
+                    readonly
+                />
+            {/if}
+
             <label>
                 <span>Kind</span>
                 <select name="kind" bind:value={create.kind} required>
@@ -127,6 +167,15 @@
                     {/each}
                 </select>
             </label>
+            {#if data.is_admin}
+                <label>
+                    <input
+                        type="checkbox"
+                        bind:checked={create.system_application}
+                    />
+                    <span>System Application</span>
+                </label>
+            {/if}
             {#each create.redirect_uri as uri, i}
                 <input name="uri={i}" bind:value={uri} hidden />
             {/each}
@@ -144,7 +193,7 @@
                 bind:value={create.redirect_uri}
                 on:change={(e) => (create.redirect_uri = e.detail)}
             />
-            <button on:click={() => create_dialog.close()}>Cancel</button>
+            <button type="button" on:click={() => create_dialog.close()}>Cancel</button>
             <button type="submit">Submit</button>
         </form>
     {/if}
@@ -155,7 +204,7 @@
         <tr>
             <th>Id</th>
             <th>Name</th>
-            <th> </th>
+            <th />
         </tr>
     </thead>
     <tbody>

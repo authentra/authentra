@@ -5,7 +5,7 @@
 
 import type { Api } from "$lib/api";
 import type { AdminApi } from "$lib/api/admin";
-import type { User } from "$lib/api/user";
+import type { User } from "$lib/api/types";
 import type { Apis } from "$lib/server/apis";
 
 // for information about these interfaces

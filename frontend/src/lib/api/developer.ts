@@ -10,6 +10,7 @@ export type ApplicationKind = typeof ApplicationKinds[number];
 export interface Application {
     id: string,
     name: string,
+    system_application: boolean,
     application_group: string,
     kind: ApplicationKind,
     client_id: string,

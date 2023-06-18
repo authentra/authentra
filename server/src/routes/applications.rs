@@ -32,6 +32,7 @@ struct EncodedApplication {
     redirect_uri: Vec<String>,
 }
 
+#[derive(Debug)]
 pub struct AppInfo {
     pub owner: Uuid,
     pub system: bool,
@@ -141,7 +142,7 @@ async fn replace(
     Path(id): Path<Uuid>,
     ApiJson(payload): ApiJson<ReplacePayload>,
 ) -> AppResult<ApiResponse<EncodedApplication>> {
-    auth.check_admin()?;
+    auth.check_developer()?;
     let conn = state.conn().await?;
     AppInfo::check_by_id(&conn, &auth, &id).await?;
     let stmt = conn

@@ -57,6 +57,7 @@
                 <span>{scope}</span>
             </label>
         {/each}
+        <button type="button" on:click={() => dialog.close()}>Cancel</button>
         <button type="submit">Submit</button>
         <form />
     </form>
@@ -86,6 +87,7 @@
                 <span>{scope}</span>
             </label>
         {/each}
+        <button type="button" on:click={() => create_dialog.close()}>Cancel</button>
         <button type="submit">Submit</button>
         <form />
     </form>

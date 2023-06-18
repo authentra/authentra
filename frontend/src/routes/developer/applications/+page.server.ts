@@ -3,6 +3,7 @@ import type { Actions, PageServerLoad } from "./$types";
 
 export const load: PageServerLoad = async ({locals}) => {
     return {
+        is_admin: locals.user?.roles?.includes('admin') ?? false,
         applications: await locals.apis.applications.all(),
         groups: (await locals.apis.application_groups.all()).map(v => v.id),
         meta: createMeta(locals)
