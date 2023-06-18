@@ -1,3 +1,4 @@
+import { getRolesFromForm } from "$lib/server/utils";
 import type { Actions, PageServerLoad } from "./$types";
 
 export const load: PageServerLoad = async ({locals}) => {
@@ -7,9 +8,12 @@ export const load: PageServerLoad = async ({locals}) => {
 };
 
 export const actions: Actions = {
-    delete: async ({request, locals}) => {
+    create: async ({request, locals}) => {
         const formData = await request.formData();
-        const id = formData.get('id') as string;
-        await locals.apis.users.delete(id);
-    }
+        const name = formData.get('name') as string;
+        const password = formData.get('password') as string;
+        const customer = formData.has('customer');
+        const roles = getRolesFromForm(formData);
+        return await locals.apis.users.create(name, password, customer, roles);
+    },
 };

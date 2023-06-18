@@ -1,5 +1,5 @@
 import { env } from "$env/dynamic/private";
-import type { UserRole } from "$lib/api/types";
+import { UserRoles, type UserRole } from "$lib/api/types";
 import { redirectUrl, type Meta } from "$lib/utils";
 import { error } from "@sveltejs/kit";
 import { get } from "svelte/store";
@@ -37,6 +37,17 @@ function hasRole(roles: UserRole[], role: UserRole): boolean {
     } else {
         return false
     }
+}
+
+export function getRolesFromForm(formData: FormData): UserRole[] {
+    const roles = [];
+    for (const [index, value] of UserRoles.entries()) {
+        const data = formData.has('role:'+value);
+        if (data) {
+            roles.push(value);
+        }
+    }
+    return roles
 }
 
 export const INTERNAL_API_URL = env.INTERNAL_API_URL as string;

@@ -110,6 +110,8 @@ async fn me(
 struct CreatePayload {
     name: String,
     password: String,
+    #[serde(default)]
+    customer: bool,
     roles: Vec<UserRole>,
 }
 
@@ -123,9 +125,12 @@ async fn create(
     let hashed =
         tokio::task::spawn_blocking(move || hash_password(payload.password.as_bytes())).await??;
     let stmt = conn
-        .prepare_cached("insert into users(name,password,require_password_reset,roles,customer) values($1,$2,true,$3,false) on conflict do nothing").await?;
+        .prepare_cached("insert into users(name,password,require_password_reset,roles,customer) values($1,$2,true,$3,$4) on conflict do nothing").await?;
     let rows = conn
-        .execute(&stmt, &[&payload.name, &hashed, &payload.roles])
+        .execute(
+            &stmt,
+            &[&payload.name, &hashed, &payload.roles, &payload.customer],
+        )
         .await?;
     match rows {
         1 => Ok(ApiResponse(())),

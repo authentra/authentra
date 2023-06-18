@@ -1,4 +1,6 @@
 import { UserRoles, type UserRole } from "$lib/api/types";
+import { getRolesFromForm } from "$lib/server/utils";
+import { redirect } from "@sveltejs/kit";
 import type { Actions, PageServerLoad } from "./$types";
 
 export const load: PageServerLoad = async ({params, locals}) => {
@@ -6,17 +8,6 @@ export const load: PageServerLoad = async ({params, locals}) => {
         user: locals.apis.users.get(params.id)
     }
 };
-
-function getRoles(formData: FormData): UserRole[] {
-    const roles = [];
-    for (const [index, value] of UserRoles.entries()) {
-        const data = formData.has('role:'+value);
-        if (data) {
-            roles.push(value);
-        }
-    }
-    return roles
-}
 
 export const actions: Actions = {
     edit: async ({request, locals}) => {
@@ -28,14 +19,14 @@ export const actions: Actions = {
             email = null;
         }
         const active = formData.has('active');
-        const roles = getRoles(formData);
+        const roles = getRolesFromForm(formData);
         const customer = formData.has('customer');
         const require_password_reset = formData.has('require_password_reset');
         return await locals.apis.users.edit(id, name, email, active, roles, customer, require_password_reset);
     },
-    delete: async ({request,locals}) => {
-        const formData = await request.formData();
-        const id = formData.get('id') as string;
-        return await locals.apis.users.delete(id)
-    }
+    delete: async ({params, locals}) => {
+        console.log("DEleting" +params.id)
+        await locals.apis.users.delete(params.id)
+        throw redirect(307, '/admin/users')
+    },
 };

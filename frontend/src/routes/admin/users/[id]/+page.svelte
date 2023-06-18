@@ -7,6 +7,7 @@
 
     export let data: PageData;
     const selected_roles: boolean[] = Array(UserRoles.length).fill(false);
+    let delete_dialog: HTMLDialogElement;
     let params = $page.params;
     let initial: AdminUser;
     let user: AdminUser;
@@ -22,6 +23,14 @@
     assignUser(data.user);
     $: assignUser(data.user)
 </script>
+
+<dialog bind:this={delete_dialog}>
+    <form method="post" action="?/delete" use:enhance>
+        <h3>Do you really want to delete this user?</h3>
+        <button on:click={() => delete_dialog.close()}>Cancel</button>
+        <button type="submit">Delete</button>
+    </form>
+</dialog>
 
 <form class="flex flex-col" method="post" action="?/edit" use:enhance>
     <label>
@@ -60,6 +69,7 @@
         </div>
     </div>
     <div>
+        <button on:click={() => delete_dialog.showModal()}>Delete</button>
         <button type="submit">Save</button>
     </div>
 </form>

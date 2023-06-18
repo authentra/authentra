@@ -2,7 +2,6 @@
     import ThemeToggle from "./ThemeToggle.svelte";
     import IconUser from "virtual:icons/lucide/user";
     import IconMenu from "virtual:icons/lucide/menu";
-    import NavEntry from "./NavEntry.svelte";
 
     let open = false;
 </script>

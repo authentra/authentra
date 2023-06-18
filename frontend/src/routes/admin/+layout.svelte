@@ -10,7 +10,7 @@
                 <NavEntry target="/admin">Home</NavEntry>
             </li>
             <li>
-                <NavEntry target="/admin/users">Users</NavEntry>
+                <NavEntry target="/admin/users" routeMatch={(route, _) => route?.startsWith("/admin/users")}>Users</NavEntry>
             </li>
             <li>
                 <NavEntry target="/admin/application-groups">Application Groups</NavEntry>

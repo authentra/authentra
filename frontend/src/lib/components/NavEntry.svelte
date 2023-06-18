@@ -1,7 +1,7 @@
 <script lang="ts">
     import { page } from "$app/stores";
 
-    type RouteMatcher = (routeId: string | null, url: URL) => boolean;
+    type RouteMatcher = (routeId: string | null, url: URL) => boolean | null | undefined;
 
     export let routeMatch: RouteMatcher | "page" = "page";
     export let target: string;

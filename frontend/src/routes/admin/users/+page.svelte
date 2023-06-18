@@ -7,59 +7,64 @@
     import { UserRoles } from "$lib/api/types";
 
     export let data: PageData;
-    let edit_dialog: HTMLDialogElement;
-    let edit: AdminUser | null;
-    const selected_roles: boolean[] = Array(UserRoles.length).fill(
-        false
-    );
+    let create_dialog: HTMLDialogElement;
+    let create: { name: string; password: string; customer: boolean } = {
+        name: "",
+        password: "",
+        customer: false,
+    };
+    const selected_roles: boolean[] = Array(UserRoles.length).fill(false);
 
-    function editRow(user: AdminUser) {
-        edit = structuredClone(user);
-        for (const [index, value] of UserRoles.entries()) {
-            selected_roles[index] = edit.roles.includes(value);
-        }
-        edit_dialog.showModal();
+    function createRow() {
+        create = { name: "", password: "", customer: false };
+        selected_roles.fill(false);
+        create_dialog.showModal();
     }
 </script>
 
-<dialog bind:this={edit_dialog}>
-    {#if edit}
-        <form>
-            <label>
-                <span>Id</span>
-                <input name="id" bind:value={edit.name} readonly />
-            </label>
-            <label>
-                <span>Name</span>
-                <input name="name" bind:value={edit.name} />
-            </label>
-            <label>
-                <span>Email</span>
-                <input name="name" type="email" bind:value={edit.email} />
-            </label>
-            <label>
-                <input name="name" type="checkbox" bind:checked={edit.active} />
-                <span>Active</span>
-            </label>
+<dialog bind:this={create_dialog}>
+    <form method="post" action="?/create" use:enhance on:submit={() => create_dialog.close()}>
+        <label>
+            <span>Name</span>
+            <input name="name" bind:value={create.name} required />
+        </label>
+        <label>
+            <span>Password</span>
+            <input
+                name="password"
+                type="password"
+                bind:value={create.password}
+                required
+            />
+        </label>
+        <label>
+            <input
+                name="customer"
+                type="checkbox"
+                bind:checked={create.customer}
+            />
+            <span>Customer</span>
+        </label>
+        <div>
+            <span>Roles</span>
             <div>
-                <span>Roles</span>
-                <div>
-                    {#each UserRoles as role,i}
+                {#each UserRoles as role, i}
                     <label>
-                        <input type="checkbox" bind:checked={selected_roles[i]}/>
+                        <input
+                            type="checkbox"
+                            name="role:{role}"
+                            bind:checked={selected_roles[i]}
+                        />
                         <span>{role}</span>
                     </label>
-                        
-                    {/each}
-                </div>
+                {/each}
             </div>
-            <div>
-                <button on:click={() => edit_dialog.close()}>Cancel</button>
-                <button type="submit">Submit</button>
-            </div>
-
-        </form>
-    {/if}
+        </div>
+        <div>
+            <button on:click={() => create_dialog.close()}>Cancel</button>
+            <button type="submit">Submit</button>
+        </div>
+    </form>
 </dialog>
 
 <table class="w-full">
@@ -82,16 +87,11 @@
                             href="/admin/users/{user.id}"
                         >
                             <IconEdit />
-                    </a>
-                        <form method="post" action="?/delete" use:enhance>
-                            <input name="id" value={user.id} hidden />
-                            <button class="button-transparent-danger">
-                                <IconDelete />
-                            </button>
-                        </form>
+                        </a>
                     </div>
                 </td>
             </tr>
         {/each}
     </tbody>
 </table>
+<button on:click={() => createRow()}>Create</button>
