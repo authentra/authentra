@@ -12,7 +12,7 @@ use serde::{de::DeserializeOwned, Serialize};
 use tokio::signal;
 use tracing::info;
 
-use crate::{auth::AuthState, config::AuthustConfiguration};
+use crate::{auth::AuthState, config::AuthentraConfiguration};
 
 pub mod auth;
 mod config;
@@ -74,7 +74,7 @@ impl<T: DeserializeOwned, S: Send + Sync> FromRequestParts<S> for ApiQuery<T> {
 api_extractor!(ApiJson, JsonRejection, Json);
 
 async fn main_tokio() {
-    let configuration = AuthustConfiguration::load().unwrap();
+    let configuration = AuthentraConfiguration::load().unwrap();
     telemetry::setup_tracing();
 
     let pool = create_database_pool(configuration.postgres.clone());

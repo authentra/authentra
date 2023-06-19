@@ -19,7 +19,7 @@ use crate::{
 pub const SESSION_COOKIE: &str = "session_token";
 pub const REFRESH_COOKIE: &str = "refresh_token";
 
-pub const ISSUER: &str = "authust";
+pub const ISSUER: &str = "authentra";
 static EXPIRATION_DURATION: Duration = Duration::from_secs(2 * 60);
 
 static JWT_ALGO: Algorithm = Algorithm::HS256;
@@ -80,16 +80,16 @@ pub struct Claims {
     pub sub: Uuid,
     pub sid: Uuid,
     pub aal: u8,
-    pub authust: AuthustClaims,
+    pub authentra: AuthentraClaims,
 }
 
 #[derive(Serialize, Deserialize)]
-pub struct AuthustClaims {
+pub struct AuthentraClaims {
     pub roles: Vec<UserRole>,
 }
 
 impl Claims {
-    pub fn new(user: Uuid, session: Uuid, authust: AuthustClaims) -> Self {
+    pub fn new(user: Uuid, session: Uuid, authentra: AuthentraClaims) -> Self {
         Self {
             iss: ISSUER.into(),
             exp: (SystemTime::now() + EXPIRATION_DURATION)
@@ -103,7 +103,7 @@ impl Claims {
             sub: user,
             sid: session,
             aal: 0,
-            authust,
+            authentra,
         }
     }
 }
@@ -140,8 +140,8 @@ impl SessionInfo {
     #[inline(always)]
     pub fn has_role(&self, role: UserRole) -> bool {
         if let Some(claims) = &self.claims {
-            if claims.authust.roles.contains(&role)
-                || claims.authust.roles.contains(&UserRole::Admin)
+            if claims.authentra.roles.contains(&role)
+                || claims.authentra.roles.contains(&UserRole::Admin)
             {
                 return true;
             }
@@ -153,9 +153,9 @@ impl SessionInfo {
     pub fn check_role(&self, role: UserRole) -> AppResult<()> {
         let current = Span::current();
         if let Some(claims) = &self.claims {
-            current.record("roles", format!("{:?}", claims.authust.roles));
-            if claims.authust.roles.contains(&role)
-                || claims.authust.roles.contains(&UserRole::Admin)
+            current.record("roles", format!("{:?}", claims.authentra.roles));
+            if claims.authentra.roles.contains(&role)
+                || claims.authentra.roles.contains(&UserRole::Admin)
             {
                 return Ok(());
             }

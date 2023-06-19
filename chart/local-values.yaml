@@ -1,10 +1,10 @@
 image:
-  repository: harbor.dseelp.one/library/authust
+  repository: harbor.dseelp.one/library/authentra
   tag: "latest"
 ingress:
   enabled: true
   hosts:
-    - host: authust.dseelp.one
+    - host: authentra.dseelp.one
       paths:
         - path: /
           pathType: ImplementationSpecific

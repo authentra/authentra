@@ -7,7 +7,7 @@ replicaCount: 1
 
 
 image:
-  repository: authust
+  repository: authentra
   pullPolicy: IfNotPresent
   # Overrides the image tag whose default is the chart appVersion.
   tag: ""
@@ -19,9 +19,9 @@ fullnameOverride: ""
 postgresql:
   enabled: true
   auth:
-    username: authust
-    existingSecret: authust
-    database: authust
+    username: authentra
+    existingSecret: authentra
+    database: authentra
 
 serviceAccount:
   # Specifies whether a service account should be created

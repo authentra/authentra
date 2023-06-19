@@ -4,7 +4,7 @@ use config::{Config, ConfigError, Environment};
 use serde::Deserialize;
 
 #[derive(Debug, Clone, Deserialize)]
-pub struct AuthustConfiguration {
+pub struct AuthentraConfiguration {
     pub listen: ListenConfiguration,
     pub postgres: deadpool_postgres::Config,
     pub secret: String,
@@ -26,7 +26,7 @@ impl Default for ListenConfiguration {
     }
 }
 
-impl AuthustConfiguration {
+impl AuthentraConfiguration {
     pub fn load() -> Result<Self, ConfigError> {
         let default_listen = ListenConfiguration::default();
         let loaded = Config::builder()

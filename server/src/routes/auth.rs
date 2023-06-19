@@ -20,7 +20,7 @@ use tracing::instrument;
 use uuid::Uuid;
 
 use crate::{
-    auth::{jwt_header, AuthError, AuthustClaims, Claims, CookieAuth, SESSION_COOKIE},
+    auth::{jwt_header, AuthError, AuthentraClaims, Claims, CookieAuth, SESSION_COOKIE},
     utils::password::{handle_result, hash_password, verify_password},
     ApiJson, ApiResponse, AppResult, AppState,
 };
@@ -170,10 +170,10 @@ async fn refresh(
         .prepare_cached("select roles from users where id = $1")
         .await?;
     let row = conn.query_one(&stmt, &[&info.user]).await?;
-    let authust = AuthustClaims {
+    let authentra = AuthentraClaims {
         roles: row.get("roles"),
     };
-    let claims = Claims::new(info.user, info.id, authust);
+    let claims = Claims::new(info.user, info.id, authentra);
     let token = jsonwebtoken::encode(&jwt_header(), &claims, state.auth().encoding())?;
     Ok(ApiResponse(token))
 }

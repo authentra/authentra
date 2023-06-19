@@ -45,12 +45,12 @@ spec:
             - name: AUTHUST_POSTGRES__PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: authust
+                  name: authentra
                   key: password
             - name: AUTHUST_SECRET
               valueFrom:
                 secretKeyRef:
-                  name: authust
+                  name: authentra
                   key: secret
           ports:
             - name: http
