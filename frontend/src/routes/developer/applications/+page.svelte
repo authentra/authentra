@@ -5,7 +5,6 @@
     import type { PageData } from "./$types";
     import { ApplicationKinds, type Application } from "$lib/api/developer";
     import UrlList from "$lib/components/UrlList.svelte";
-    import { redirect } from "@sveltejs/kit";
 
     export let data: PageData;
     let edit_dialog: HTMLDialogElement;

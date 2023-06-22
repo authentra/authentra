@@ -30,6 +30,7 @@ refinery = { workspace = true, features = ["tokio-postgres"] }
 regex = "1.7.3"
 serde.workspace = true
 serde_json.workspace = true
+serde_urlencoded = "0.7.1"
 serde_with = "3.0.0"
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "signal", "tracing", "socket2"] }
 tokio-postgres = { workspace = true, features = ["with-uuid-1"] }
@@ -39,4 +40,5 @@ tracing.workspace = true
 tracing-error = "0.2.0"
 tracing-opentelemetry.workspace = true
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
+url = "2.4.0"
 uuid = { workspace = true, features = ["serde"] }

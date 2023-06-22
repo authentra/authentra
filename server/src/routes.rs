@@ -15,7 +15,20 @@ mod auth;
 pub mod oauth;
 mod user;
 
-#[derive(Debug, Display, Serialize, Deserialize, FromSql, ToSql, PartialEq, Eq)]
+#[derive(
+    Debug,
+    Clone,
+    Display,
+    Serialize,
+    Deserialize,
+    FromSql,
+    ToSql,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+)]
 #[postgres(name = "internal_scopes")]
 pub enum InternalScope {
     #[postgres(name = "profile:read")]
@@ -26,6 +39,22 @@ pub enum InternalScope {
     #[serde(rename = "profile:write")]
     #[display("profile:write")]
     ProfileWrite,
+}
+
+impl InternalScope {
+    pub const fn values() -> [InternalScope; 2] {
+        [InternalScope::ProfileRead, InternalScope::ProfileWrite]
+    }
+    pub const fn string_values() -> [&'static str; 2] {
+        ["profile:read", "profile:write"]
+    }
+    pub fn from_str(s: &str) -> Option<Self> {
+        match s {
+            "profile:read" => Some(Self::ProfileRead),
+            "profile:write" => Some(Self::ProfileWrite),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize, FromSql, ToSql)]
@@ -66,12 +95,12 @@ impl FromStr for InternalScope {
 pub fn setup_router() -> Router<AppState> {
     let middlewares = ServiceBuilder::new().layer(crate::telemetry::middleware::new());
     Router::new()
-        .nest("/api/auth", auth::router())
-        .nest("/api/users", user::router())
-        .nest("/api/admin", admin::router())
-        .nest("/oauth/authorize", oauth::router())
-        .nest("/api/applications", applications::router())
-        .nest("/api/application-groups", application_groups::router())
+        .nest("/api/v1/auth", auth::router())
+        .nest("/api/v1/users", user::router())
+        .nest("/api/v1/admin", admin::router())
+        .nest("/api/internal/oauth", oauth::router())
+        .nest("/api/v1/applications", applications::router())
+        .nest("/api/v1/application-groups", application_groups::router())
         .layer(middlewares)
 }
 #[instrument]

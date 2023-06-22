@@ -1,5 +1,6 @@
 import { Api } from '$lib/api';
 import { ApplicationApi, ApplicationGroupApi } from '$lib/api/developer';
+import { OAuthApi } from '$lib/server/apis/oauth';
 import { UserApi } from '$lib/server/apis/user';
 import { INTERNAL_API_URL, checkAdmin, checkAuth, checkDeveloper } from '$lib/server/utils';
 import { API_URL } from '$lib/utils';
@@ -37,6 +38,7 @@ export async function handle({ event, resolve }) {
     event.locals.user = null
   }
   event.locals.api = api;
+  //@ts-expect-error
   event.locals.apis = { applications: new ApplicationApi(api), application_groups: new ApplicationGroupApi(api), users: new UserApi(api) };
 
   if (event.url.pathname.startsWith('/dash')) {
@@ -50,6 +52,7 @@ export async function handle({ event, resolve }) {
     checkDeveloper(event.url, event.locals)
   }
   if (event.url.pathname.startsWith('/oauth/authorize')) {
+    event.locals.apis.oauth = new OAuthApi(api)
     checkAdmin(event.url, event.locals)
   }
   const response = await resolve(event, {

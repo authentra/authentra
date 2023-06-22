@@ -73,13 +73,67 @@ pub enum UserRole {
 }
 
 #[derive(Serialize, Deserialize)]
-pub struct Claims {
+pub struct BaseClaims<T> {
     pub iss: String,
     pub exp: u64,
     pub nbf: u64,
+    pub iat: u64,
     pub sub: Uuid,
-    pub sid: Uuid,
+    pub sid: T,
     pub aal: u8,
+}
+
+impl<T> BaseClaims<T> {
+    pub fn new(user: Uuid, session: T) -> Self {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("Failed to get time since epoch")
+            .as_secs();
+        Self {
+            iss: ISSUER.into(),
+            exp: (SystemTime::now() + EXPIRATION_DURATION)
+                .duration_since(UNIX_EPOCH)
+                .expect("Failed to get time since epoch")
+                .as_secs(),
+            nbf: now,
+            iat: now,
+            sub: user,
+            sid: session,
+            aal: 0,
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct OAuthClaims {
+    #[serde(flatten)]
+    pub base: BaseClaims<String>,
+    pub azp: String,
+    pub scope: String,
+    pub authentra: AuthentraClaims,
+}
+
+impl OAuthClaims {
+    pub fn new(
+        user: Uuid,
+        session: String,
+        application: String,
+        scope: String,
+        authentra: AuthentraClaims,
+    ) -> Self {
+        Self {
+            base: BaseClaims::new(user, session),
+            azp: application,
+            scope,
+            authentra,
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct Claims {
+    #[serde(flatten)]
+    pub base: BaseClaims<Uuid>,
     pub authentra: AuthentraClaims,
 }
 
@@ -91,18 +145,7 @@ pub struct AuthentraClaims {
 impl Claims {
     pub fn new(user: Uuid, session: Uuid, authentra: AuthentraClaims) -> Self {
         Self {
-            iss: ISSUER.into(),
-            exp: (SystemTime::now() + EXPIRATION_DURATION)
-                .duration_since(UNIX_EPOCH)
-                .expect("Failed to get time since epoch")
-                .as_secs(),
-            nbf: SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .expect("Failed to get time since epoch")
-                .as_secs(),
-            sub: user,
-            sid: session,
-            aal: 0,
+            base: BaseClaims::new(user, session),
             authentra,
         }
     }
@@ -222,8 +265,8 @@ async fn api_auth(parts: &Parts, state: &AppState) -> Result<SessionInfo, Error>
     let token: TokenData<Claims> =
         jsonwebtoken::decode(token, &state.auth().decoding(), &VALIDATION)?;
     Ok(SessionInfo {
-        id: token.claims.sid,
-        user: token.claims.sub,
+        id: token.claims.base.sid,
+        user: token.claims.base.sub,
         claims: Some(token.claims),
     })
 }

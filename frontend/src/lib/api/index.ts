@@ -29,6 +29,9 @@ export function checkResponse<T>(res: Promise<ExtendedResponse<T>>): Promise<Suc
         if (!res.api) {
             console.log("Start")
             console.log(res.status)
+            if (res.status >= 300 && res.status <= 399) {
+                console.log("Target: " + res.headers.get('location'));
+            }
             res.clone().text().then(res => { console.log(res) });
             console.log("End")
             throw error(500, { message: "Api responded with unexpected content" });
@@ -49,7 +52,10 @@ export class Api {
     private refreshPromise = writable<Promise<false | string> | null>(null);
 
     makeLoc(path: string): string {
-        return this.baseUrl + path;
+        return this.baseUrl + "/v1" + path;
+    }
+    makeInternalLoc(path: string): string {
+        return this.baseUrl + "/internal" + path;
     }
 
     constructor(baseUrl: string, fetch: FetchType, cookies: Cookies | null) {
@@ -69,8 +75,8 @@ export class Api {
         return init
     }
 
-    makeRequest<T = any>(input: string, init?: RequestInit): Promise<ExtendedResponse<T>> {
-        const loc = this.makeLoc(input);
+    makeRequest<T = any>(input: string, init?: RequestInit, internal: boolean = false): Promise<ExtendedResponse<T>> {
+        const loc = internal ? this.makeInternalLoc(input) : this.makeLoc(input);
         return this.internalRequest({
             input: loc,
             init,
@@ -78,30 +84,18 @@ export class Api {
         })
     }
 
-    get<T = any>(input: string, init?: RequestInit): Promise<ExtendedResponse<T>> {
-        return this.makeRequest(input, {
-            method: 'get',
-            ...init
-        })
+    get<T = any>(input: string, init?: RequestInit, internal: boolean = false): Promise<ExtendedResponse<T>> {
+        return this.makeRequest(input, {method: 'get', ...init}, internal)
     }
 
-    post<T = any>(input: string, init?: RequestInit): Promise<ExtendedResponse<T>> {
-        return this.makeRequest(input, {
-            method: 'post',
-            ...init
-        })
+    post<T = any>(input: string, init?: RequestInit, internal: boolean = false): Promise<ExtendedResponse<T>> {
+        return this.makeRequest(input, {method: 'post', ...init}, internal)
     }
-    put<T = any>(input: string, init?: RequestInit): Promise<ExtendedResponse<T>> {
-        return this.makeRequest(input, {
-            method: 'put',
-            ...init
-        })
+    put<T = any>(input: string, init?: RequestInit, internal: boolean = false): Promise<ExtendedResponse<T>> {
+        return this.makeRequest(input, {method: 'put', ...init}, internal)
     }
-    delete<T = any>(input: string, init?: RequestInit): Promise<ExtendedResponse<T>> {
-        return this.makeRequest(input, {
-            method: 'delete',
-            ...init
-        })
+    delete<T = any>(input: string, init?: RequestInit, internal: boolean = false): Promise<ExtendedResponse<T>> {
+        return this.makeRequest(input, {method: 'delete', ...init}, internal)
     }
 
     refreshToken(): Promise<false | string> {
@@ -151,8 +145,8 @@ export class Api {
     }
 
     private async internalRequest<T>(config: RequestConfig): Promise<ExtendedResponse<T>> {
-        console.debug('Request to: ' + config.input);
         const finalInit = this.updateInit(config.init ? config.init : {});
+        console.debug('Request to: ' + (config.init?.method ?? 'GET') + ' ' + config.input);
         const res = await this._extendResponse<T>(await this.svelteFetch(config.input, finalInit));
 
 

@@ -59,6 +59,15 @@ create table oauth_sessions(
     application uuid not null references applications on delete cascade
 );
 
+create table authorization_codes(
+    code varchar(8) default encode(gen_random_bytes(4), 'hex') primary key not null,
+    user_id uuid not null references users on delete cascade,
+    application uuid not null references applications on delete cascade,
+    scope varchar(256) not null,
+    redirect_uri varchar(256) not null,
+    generated_at timestamp default now() not null
+);
+
 create table refresh_tokens(
     id varchar(96) default encode(gen_random_bytes(48), 'hex') primary key not null,
     session uuid not null references oauth_sessions on delete cascade,
