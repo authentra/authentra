@@ -1,9 +1,19 @@
 import { redirect } from "@sveltejs/kit";
 import type { Actions, PageServerLoad } from "./$types";
 
-export const load: PageServerLoad = async ({url, locals}) => {
+export const load: PageServerLoad = async ({url, locals, setHeaders}) => {
+    setHeaders({
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Credentials': 'true',
+        'Access-Control-Allow-Methods': 'GET'
+    })
+    const data = await locals.apis.oauth.check(url.searchParams);
+    if (data.success == 'redirect') {
+        data.makeRedirect()
+    }
+    console.log(data)
     return {
-        check: await locals.apis.oauth.check(url.searchParams)
+        check: data
     }
 };
 
@@ -14,10 +24,11 @@ export const actions: Actions = {
         for (const entry of formData.entries()) {
             searchParams.append(entry[0], entry[1] as string);
         }
-        const res = await locals.api.post('/oauth/authorize?'+searchParams.toString(), {redirect: 'manual'}, true);
-        if (res.status >= 300 && res.status <= 399) {
-            //@ts-expect-error
-            throw redirect(res.status, res.headers.get('location'));
+        const res = await locals.apis.oauth.post(searchParams);
+        if (res.success == 'redirect') {
+            res.makeRedirect()
+        } else {
+            return res
         }
     },
     deny: async ({request, locals}) => {
@@ -27,10 +38,11 @@ export const actions: Actions = {
             searchParams.append(entry[0], entry[1] as string);
         }
         searchParams.append('denied', 'on');
-        const res = await locals.api.post('/oauth/authorize?'+searchParams.toString(), {redirect: 'manual'}, true);
-        if (res.status >= 300 && res.status <= 399) {
-            //@ts-expect-error
-            throw redirect(res.status, res.headers.get('location'));
+        const res = await locals.apis.oauth.post(searchParams);
+        if (res.success == 'redirect') {
+            res.makeRedirect()
+        } else {
+            return res
         }
     }
 };

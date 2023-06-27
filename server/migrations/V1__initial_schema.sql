@@ -1,7 +1,7 @@
 create extension if not exists pgcrypto;
 
 create type user_roles as enum ('logs', 'developer', 'admin');
-create type internal_scopes as enum ('profile:read', 'profile:write');
+create type internal_scopes as enum ('email', 'profile:read', 'profile:write');
 create type application_kind as enum ('web-server', 'spa');
 create type consent_mode as enum ('explicit', 'implicit');
 
@@ -50,6 +50,7 @@ create table applications(
     client_id varchar(64) default encode(gen_random_bytes(32), 'hex') not null,
     redirect_uri varchar(256)[] default array[]::varchar(256)[],
     consent_mode consent_mode not null,
+    require_email boolean not null default false,
     client_secret varchar(48)
 );
 

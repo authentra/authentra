@@ -23,7 +23,7 @@ export const actions: Actions = {
         cookies.set('session_token', res.api.response, {
             httpOnly: true,
             path: '/',
-            sameSite: 'strict',
+            sameSite: 'lax',
             secure: !dev
         })
         throw redirect(303, extractRedirect(url.searchParams))

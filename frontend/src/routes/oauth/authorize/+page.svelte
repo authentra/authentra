@@ -5,6 +5,7 @@
     import IconDisabled from "virtual:icons/lucide/circle";
     import { page } from "$app/stores";
     import { enhance } from "$app/forms";
+    import { json } from "@sveltejs/kit";
 
     export let data: PageData;
     $: {
@@ -23,6 +24,18 @@
     <meta name="robots" content="noindex">
 </svelte:head>
 
+{#if data.check.success == false}
+<div class="flex flex-col">
+    <span>
+        {data.check.error}
+    </span>
+    <span>
+        {data.check.error_description}
+    </span>
+</div>
+
+{/if}
+{#if data.check.success == true}
 <main class="flex flex-col">
     <span>Authorize Application</span>
     <span>{data.check.app_name}</span>
@@ -31,7 +44,7 @@
             {#each Array.from($page.url.searchParams.entries()) as [name, value], i}
             <input name={name} bind:value={value} hidden readonly/>
             {/each}
-            {#each data.check.scopes as scope, i}
+            {#each data.check.scopes as scope}
                 <!-- svelte-ignore a11y-click-events-have-key-events -->
                 <label>
                     <input
@@ -63,7 +76,10 @@
             </div>
         </form>
     </div>
-</main>
+</main> 
+{/if}
+
+
 
 <style>
     :global(.scope-box:checked + .selected) {

@@ -17,7 +17,10 @@ use serde::Serialize;
 use tokio::task::JoinError;
 use tracing_error::SpanTrace;
 
-use crate::{auth::AuthError, routes::oauth::OAuthError};
+use crate::{
+    auth::AuthError,
+    routes::oauth::{NewError, OAuthError},
+};
 
 pub struct Error {
     kind: ErrorKind,
@@ -122,7 +125,7 @@ pub enum ErrorKind {
     #[display("Tokio failed to join task")]
     TokioJoin(JoinError),
     #[display("OAuth: {}", _0)]
-    Oauth(#[error(not(source))] OAuthError),
+    OAuth(#[error(not(source))] NewError),
     #[display("Json: {}", _0)]
     Json(JsonRejection),
     #[display("Query: {}", _0)]
@@ -288,7 +291,7 @@ impl ErrorKind {
                 }
             }
             ErrorKind::Api(err) => (err.status, err.message.clone()).into(),
-            ErrorKind::Oauth(_) => todo!(),
+            ErrorKind::OAuth(err) => (err.kind.status(), "OAuth Error").into(),
             ErrorKind::Json(json) => (json.status(), json.body_text()).into(),
             ErrorKind::Query(query) => (query.status(), query.body_text()).into(),
         }
@@ -297,7 +300,12 @@ impl ErrorKind {
 
 impl IntoResponse for Error {
     fn into_response(self) -> Response {
-        let mut response = self.response_error.clone().into_response();
+        let mut response = if let ErrorKind::OAuth(err) = &self.kind {
+            let err = err.clone();
+            err.into_response()
+        } else {
+            self.response_error.clone().into_response()
+        };
         response.extensions_mut().insert(self);
         response
     }

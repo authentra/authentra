@@ -1,7 +1,7 @@
 import { jsonBody } from "$lib/utils";
 import { checkResponse, type Api } from ".";
 
-export const InternalScopes = ['profile:read', 'profile:write'] as const;
+export const InternalScopes = ['email', 'profile:read', 'profile:write'] as const;
 export type InternalScope = typeof InternalScopes[number];
 
 export const ApplicationKinds = ['web-server', 'spa'];

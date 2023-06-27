@@ -31,6 +31,10 @@ mod user;
 )]
 #[postgres(name = "internal_scopes")]
 pub enum InternalScope {
+    #[postgres(name = "email")]
+    #[serde(rename = "email")]
+    #[display("email")]
+    Email,
     #[postgres(name = "profile:read")]
     #[serde(rename = "profile:read")]
     #[display("profile:read")]

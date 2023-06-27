@@ -67,6 +67,7 @@ export class Api {
     private updateInit(init: RequestInit): RequestInit {
         const token = get(this.tokenStore)
         if (!token) {
+            console.log("No TOken")
             return init
         }
         const updatedHeaders = new Headers(init?.headers);

@@ -29,12 +29,14 @@ export async function handle({ event, resolve }) {
   if (cookie) {
     const jwt_cookie = event.cookies.get('jwt');
     if (jwt_cookie) {
+      console.log('Setting store')
       api.tokenStore.set(jwt_cookie)
     } else {
       await api.refreshToken();
     }
     event.locals.user = await api.me();
   } else {
+    console.log("No cookie")
     event.locals.user = null
   }
   event.locals.api = api;
@@ -53,7 +55,7 @@ export async function handle({ event, resolve }) {
   }
   if (event.url.pathname.startsWith('/oauth/authorize')) {
     event.locals.apis.oauth = new OAuthApi(api)
-    checkAdmin(event.url, event.locals)
+    checkAuth(event.url, event.locals)
   }
   const response = await resolve(event, {
     transformPageChunk: ({ html }) => html.replace('%unocss-svelte-scoped.global%', 'unocss_svelte_scoped_global_styles'),
