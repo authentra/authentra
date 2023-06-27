@@ -17,10 +17,7 @@ use serde::Serialize;
 use tokio::task::JoinError;
 use tracing_error::SpanTrace;
 
-use crate::{
-    auth::AuthError,
-    routes::oauth::{NewError, OAuthError},
-};
+use crate::{auth::AuthError, routes::oauth::NewError};
 
 pub struct Error {
     kind: ErrorKind,
