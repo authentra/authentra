@@ -24,4 +24,5 @@ RUN strip target/x86_64-unknown-linux-musl/release/authentra
 FROM scratch
 COPY --from=builder /app/target/x86_64-unknown-linux-musl/release/authentra /authentra/server
 WORKDIR /authentra
+EXPOSE 8080
 CMD [ "./server" ]
