@@ -543,25 +543,6 @@ fn encode_query<T: Serialize>(t: T) -> AppResult<String> {
     }
 }
 
-fn make_oauth_error(
-    kind: OAuthErrorKind,
-    description: Option<String>,
-    state: Option<String>,
-    mut redirect_uri: Url,
-) -> Response {
-    let query = serde_urlencoded::to_string(OAuthErrorData {
-        kind,
-        description,
-        state,
-    });
-    let query = match query {
-        Ok(v) => v,
-        Err(_) => return ErrorKind::internal().into_error().into_response(),
-    };
-    redirect_uri.set_query(Some(&query));
-    Redirect::temporary(redirect_uri.as_str()).into_response()
-}
-
 #[derive(Debug, Serialize)]
 #[serde(untagged)]
 pub enum OAuthResponse {

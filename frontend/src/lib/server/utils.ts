@@ -1,3 +1,4 @@
+import { building } from "$app/environment";
 import { env } from "$env/dynamic/private";
 import { UserRoles, type UserRole } from "$lib/api/types";
 import { redirectUrl, type Meta } from "$lib/utils";
@@ -51,6 +52,6 @@ export function getRolesFromForm(formData: FormData): UserRole[] {
 }
 
 export const INTERNAL_API_URL = env.INTERNAL_API_URL as string;
-if (!INTERNAL_API_URL) {
+if (!INTERNAL_API_URL && !building) {
     throw Error("INTERNAL_API_URL not set")
 }

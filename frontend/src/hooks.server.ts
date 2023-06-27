@@ -1,3 +1,4 @@
+import { building } from '$app/environment';
 import { Api } from '$lib/api';
 import { ApplicationApi, ApplicationGroupApi } from '$lib/api/developer';
 import { OAuthApi } from '$lib/server/apis/oauth';
@@ -5,7 +6,7 @@ import { UserApi } from '$lib/server/apis/user';
 import { INTERNAL_API_URL, checkAdmin, checkAuth, checkDeveloper } from '$lib/server/utils';
 import { API_URL } from '$lib/utils';
 
-if (!INTERNAL_API_URL || !API_URL) {
+if ((!INTERNAL_API_URL || !API_URL) && !building) {
   throw Error()
 }
 

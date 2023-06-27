@@ -2,6 +2,7 @@ import { env } from "$env/dynamic/public";
 import { getContext, setContext } from "svelte";
 import { Api } from "./api";
 import { redirect } from "@sveltejs/kit";
+import { building } from "$app/environment";
 
 export interface Meta {
     api_token: string | null
@@ -45,7 +46,7 @@ export function handleMeta(meta: Meta): ClientMeta {
 }
 
 export const API_URL: string = env.PUBLIC_API_URL as string
-if (!env.PUBLIC_API_URL) {
+if (!env.PUBLIC_API_URL && !building) {
     throw Error("PUBLIC_API_URL not set")
 }
 
