@@ -9,7 +9,6 @@ use axum::{
 use deadpool_postgres::{Config, Object, Pool};
 use error::Error;
 use serde::{de::DeserializeOwned, Serialize};
-use tokio::signal;
 use tracing::info;
 
 use crate::{auth::AuthState, config::AuthentraConfiguration};
@@ -73,6 +72,22 @@ impl<T: DeserializeOwned, S: Send + Sync> FromRequestParts<S> for ApiQuery<T> {
 
 api_extractor!(ApiJson, JsonRejection, Json);
 
+#[cfg(not(unix))]
+async fn shutdown_future() {
+    signal::ctrl_c().await.unwrap()
+}
+#[cfg(unix)]
+async fn shutdown_future() {
+    use tokio::signal::unix::{signal, SignalKind};
+
+    let mut term = signal(SignalKind::terminate()).unwrap();
+    let mut int = signal(SignalKind::interrupt()).unwrap();
+    tokio::select! {
+        _ = term.recv() => {}
+        _ = int.recv() => {}
+    };
+}
+
 async fn main_tokio() {
     let configuration = AuthentraConfiguration::load().unwrap();
     telemetry::setup_tracing();
@@ -87,10 +102,9 @@ async fn main_tokio() {
     let state = AppState::new(pool, auth_state);
 
     let router = routes::setup_router().with_state(state);
-    let shutdown_future = async { signal::ctrl_c().await.unwrap() };
     Server::bind(&configuration.listen.http)
         .serve(router.into_make_service_with_connect_info::<SocketAddr>())
-        .with_graceful_shutdown(shutdown_future)
+        .with_graceful_shutdown(shutdown_future())
         .await
         .expect("Server crashed");
     info!("Server shutdown");
