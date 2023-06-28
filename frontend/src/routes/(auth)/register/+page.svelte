@@ -24,7 +24,7 @@
         <form method="post" class="flex flex-col gap-6" use:enhance>
             <label class="field">
                 <span>Username or Email</span>
-                <input required name="user" autocomplete="username"/>
+                <input required name="user" autocomplete="username" autofocus/>
             </label>
             <label class="field">
                 <span>Password</span>
