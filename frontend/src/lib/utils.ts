@@ -13,7 +13,11 @@ export interface ClientMeta {
 }
 
 export function extractRedirect(params: URLSearchParams): string {
-    return params.get('redirect') ?? '/'
+    const redirect = params.get('redirect')
+    if (!redirect) {
+        return '/'
+    }
+    return `/${redirect.slice(1)}`
 }
 
 export function jsonBody(body: any): RequestInit {

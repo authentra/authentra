@@ -8,6 +8,7 @@ services:
       POSTGRES_USER: authentra
       POSTGRES_PASSWORD: authentra
       SECRET: really_secret
+      BACKEND_SECRET: abc_backend_secret_keep_secret
       ALLOWED_ORIGINS: "http://localhost:5173 http://127.0.0.1:8080 http://127.0.0.1:5173 http://192.168.178.70:5173"
       OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4317
     healthcheck:
