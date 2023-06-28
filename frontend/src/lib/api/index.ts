@@ -147,7 +147,6 @@ export class Api {
 
     private async internalRequest<T>(config: RequestConfig): Promise<ExtendedResponse<T>> {
         const finalInit = this.updateInit(config.init ? config.init : {});
-        console.debug('Request to: ' + (config.init?.method ?? 'GET') + ' ' + config.input);
         const res = await this._extendResponse<T>(await this.svelteFetch(config.input, finalInit));
 
 

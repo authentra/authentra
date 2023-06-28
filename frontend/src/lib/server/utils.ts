@@ -43,7 +43,7 @@ function hasRole(roles: UserRole[], role: UserRole): boolean {
 export function getRolesFromForm(formData: FormData): UserRole[] {
     const roles = [];
     for (const [index, value] of UserRoles.entries()) {
-        const data = formData.has('role:'+value);
+        const data = formData.has('role:' + value);
         if (data) {
             roles.push(value);
         }

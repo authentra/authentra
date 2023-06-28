@@ -5,10 +5,22 @@ import { OAuthApi } from '$lib/server/apis/oauth';
 import { UserApi } from '$lib/server/apis/user';
 import { INTERNAL_API_URL, checkAdmin, checkAuth, checkDeveloper } from '$lib/server/utils';
 import { API_URL } from '$lib/utils';
+import { error } from '@sveltejs/kit';
+import { get, writable, type Writable } from 'svelte/store';
 
 if ((!INTERNAL_API_URL || !API_URL) && !building) {
   throw Error()
 }
+
+export interface ApiStatus {
+  online: boolean | undefined,
+  last_check: number
+}
+
+const api_status_store = writable<ApiStatus>({
+  online: undefined,
+  last_check: Date.now()
+});
 
 export async function handleFetch({ event, request, fetch }) {
   const user_agent = event.request.headers.get('user-agent');
@@ -25,6 +37,11 @@ export async function handleFetch({ event, request, fetch }) {
 }
 
 export async function handle({ event, resolve }) {
+  await check_api(api_status_store);
+  const status = get(api_status_store);
+  if (!status.online) {
+    throw error(502, {message: "Can't connect to backend"})
+  }
   const api = new Api(INTERNAL_API_URL, event.fetch, event.cookies);
   const cookie = event.cookies.get('session_token');
   if (cookie) {
@@ -62,4 +79,29 @@ export async function handle({ event, resolve }) {
     transformPageChunk: ({ html }) => html.replace('%unocss-svelte-scoped.global%', 'unocss_svelte_scoped_global_styles'),
   })
   return response
+}
+
+async function check_api(store: Writable<ApiStatus>) {
+  const now = Date.now()
+  const status = get(store);
+  if (now - status.last_check > 5000 || status.online === undefined) {
+    const res = await check_api_internal();
+    store.set({
+      online: res.online,
+      last_check: now + res.took
+    })
+  }
+}
+async function check_api_internal(): Promise<{
+  online: boolean,
+  took: number,
+}> {
+  const date = Date.now()
+  console.log("Checking backend")
+  try {
+    const res = await fetch(INTERNAL_API_URL + '/internal/health');
+    return { online: res.status == 200, took: Date.now()-date }
+  } catch (e) {
+    return { online: false, took: Date.now()-date }
+  }
 }
