@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use axum::Router;
+use axum::{routing::get, Router};
 use derive_more::Display;
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
@@ -105,9 +105,9 @@ pub fn setup_router() -> Router<AppState> {
         .nest("/api/internal/oauth", oauth::router())
         .nest("/api/v1/applications", applications::router())
         .nest("/api/v1/application-groups", application_groups::router())
+        .route("/api/internal/health", get(health))
         .layer(middlewares)
 }
-#[instrument]
-async fn hello_world() -> &'static str {
-    "Hello, World!"
+async fn health() -> &'static str {
+    ""
 }

@@ -9,6 +9,13 @@ services:
       POSTGRES_PASSWORD: authentra
       SECRET: really_secret
       ALLOWED_ORIGINS: "http://localhost:5173 http://127.0.0.1:8080 http://127.0.0.1:5173 http://192.168.178.70:5173"
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4317
+    healthcheck:
+      test: wget --no-verbose --tries=1 --spider http://backend:8080/health || exit 1
+      interval: 2s
+      retries: 60
+      start_period: 10s
+      timeout: 10s
     depends_on:
       db:
         condition: service_healthy
@@ -23,6 +30,8 @@ services:
     environment:
       PUBLIC_API_URL: /api
       INTERNAL_API_URL: http://backend:8080/api
+      PORT: 5173
+      ORIGIN: http://127.0.0.1:5173
     depends_on:
       db:
         condition: service_healthy
@@ -31,7 +40,7 @@ services:
     links:
       - db
     ports:
-      - "5173:3000"
+      - "5173:5173"
   db:
     image: postgres:alpine
     restart: always
@@ -44,6 +53,8 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    ports:
+      - "5433:5432"
   jaeger:
     image: jaegertracing/all-in-one
     environment:
@@ -56,5 +67,5 @@ services:
       timeout: 10s
     ports:
       - "16686:16686"
-      - "6831:6831/udp"
-      - "6832:6832/udp"
+      - "4317:4317"
+      - "4318:4318"
