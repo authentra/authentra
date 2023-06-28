@@ -1,10 +1,17 @@
-import { checkResponse, type Api, type ExtendedResponse } from "$lib/api";
+import type { Api, ExtendedResponse } from "$lib/api";
+import { InternalScopeObj, type InternalScope, type InternalScopeName } from "$lib/api/developer";
 import { redirect } from "@sveltejs/kit";
+
+export interface EarlyOAuthCheck {
+    app_name: string,
+    invalid_scopes: string[],
+    scopes: InternalScopeName[]
+}
 
 export interface OAuthCheck {
     app_name: string,
     invalid_scopes: string[],
-    scopes: string[]
+    scopes: InternalScope[]
 }
 
 type OAuthErrorKindCommon = 'invalid_request' | 'unauthorized_client' | 'invalid_scope';
@@ -19,7 +26,7 @@ export interface OAuthError {
     error_uri: string | undefined
 }
 
-export type OAuthResponse<T> = ({success: true } & T) | ({ success: false  } & OAuthError) | {success: 'redirect', code: number, location: string, makeRedirect: () => never }
+export type OAuthResponse<T> = ({ success: true } & T) | ({ success: false } & OAuthError) | { success: 'redirect', code: number, location: string, makeRedirect: () => never }
 
 export class OAuthApi {
     private api: Api;
@@ -35,11 +42,11 @@ export class OAuthApi {
                 const api = response.api as OAuthResponse;
                 if (response.status == 200) {
                     api.success = true;
-                }else {
+                } else {
                     api.success = false;
                 }
                 if (api.success == true) {
-                    return Promise.resolve(Object.assign({success: true}, api.response));
+                    return Promise.resolve(Object.assign({ success: true }, api.response));
                 } else {
                     return Promise.resolve(api)
                 }
@@ -56,19 +63,28 @@ export class OAuthApi {
                     }
                 })
             } else {
-                response.clone().text().then(text => console.log("Status: " + response.status +" Text: " + text));
+                response.clone().text().then(text => console.log("Status: " + response.status + " Text: " + text));
                 return Promise.reject("Malformed response")
             }
         })
     }
 
-    check(parameters: URLSearchParams): Promise<OAuthResponse<OAuthCheck>> {
-        return this.makeOAuthResponse(this.api.get('/oauth/authorize?'+parameters.toString(), {
+    async check(parameters: URLSearchParams): Promise<OAuthResponse<OAuthCheck>> {
+        const res: OAuthResponse<EarlyOAuthCheck> = await this.makeOAuthResponse(this.api.get('/oauth/authorize?' + parameters.toString(), {
             redirect: 'manual'
         }, true));
+        if (res.success === true) {
+            const test = res.scopes.map(scope => { return { name: scope, description: InternalScopeObj[scope] } });
+            //@ts-expect-error
+            res.scopes = test;
+            //@ts-expect-error
+            return res as OAuthResponse<OAuthCheck>
+        } else {
+            return res
+        }
     }
     post(parameters: URLSearchParams): Promise<OAuthResponse<void>> {
-        return this.makeOAuthResponse(this.api.post('/oauth/authorize?'+parameters.toString(), {
+        return this.makeOAuthResponse(this.api.post('/oauth/authorize?' + parameters.toString(), {
             redirect: 'manual'
         }, true));
     }

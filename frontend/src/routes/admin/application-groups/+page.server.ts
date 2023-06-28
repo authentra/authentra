@@ -1,4 +1,4 @@
-import { InternalScopes, type InternalScope } from "$lib/api/developer";
+import { InternalScopes, type InternalScopeName } from "$lib/api/developer";
 import { createMeta } from "$lib/server/utils";
 import type { Actions, PageServerLoad } from "./$types";
 
@@ -13,7 +13,7 @@ export const actions: Actions = {
     replace: async ({locals, request}) => {
         const formData = await request.formData();
         const id = formData.get('id') as string;
-        const scopes: InternalScope[] = [];
+        const scopes: InternalScopeName[] = [];
         for (const [index, value] of InternalScopes.entries()) {
             const data = formData.get(value);
             if (data) {
@@ -35,7 +35,7 @@ export const actions: Actions = {
     create: async ({locals, request}) => {
         const formData = await request.formData();
         const id = formData.get('id') as string;
-        const scopes: InternalScope[] = [];
+        const scopes: InternalScopeName[] = [];
         for (const [index, value] of InternalScopes.entries()) {
             const data = formData.get(value);
             if (data) {
